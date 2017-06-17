@@ -1033,8 +1033,22 @@ namespace BPUtil.SimpleHttp
 			lock (certCreateLock)
 			{
 				X509Certificate2 ssl_certificate;
-				string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-				FileInfo fiExe = new FileInfo(exePath);
+				FileInfo fiExe;
+				try
+				{
+					fiExe = new FileInfo(System.Reflection.Assembly.GetExecutingAssembly().Location);
+				}
+				catch
+				{
+					try
+					{
+						fiExe = new FileInfo(System.Windows.Forms.Application.ExecutablePath);
+					}
+					catch
+					{
+						fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
+					}
+				}
 				FileInfo fiCert = new FileInfo(fiExe.Directory.FullName + "\\SimpleHttpServer-SslCert.pfx");
 				if (fiCert.Exists)
 					ssl_certificate = new X509Certificate2(fiCert.FullName, "N0t_V3ry-S3cure#lol");

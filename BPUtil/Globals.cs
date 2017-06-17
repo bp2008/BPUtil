@@ -18,7 +18,7 @@ namespace BPUtil
 			{
 				Initialize(System.Reflection.Assembly.GetExecutingAssembly().Location);
 			}
-			catch (Exception) { }
+			catch { }
 		}
 		/// <summary>
 		/// Call this to initialize global static variables.
@@ -30,7 +30,15 @@ namespace BPUtil
 			ServicePointManager.Expect100Continue = false;
 			ServicePointManager.DefaultConnectionLimit = int.MaxValue;
 			executablePath = exePath.Replace('\\', '/');
-			FileInfo fiExe = new FileInfo(executablePath);
+			FileInfo fiExe;
+			try
+			{
+				fiExe = new FileInfo(executablePath);
+			}
+			catch
+			{
+				fiExe = new FileInfo(System.Windows.Forms.Application.ExecutablePath);
+			}
 			executableNameWithExtension = fiExe.Name.Replace('\\', '/');
 			executableNameWithoutExtension = executableNameWithExtension.Substring(0, executableNameWithExtension.Length - fiExe.Extension.Length);
 			applicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
