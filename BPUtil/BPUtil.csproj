@@ -61,7 +61,7 @@
     <Compile Include="SimpleHttp\Crypto\SignatureKey.cs" />
     <Compile Include="SimpleHttp\Crypto\Win32ErrorHelper.cs" />
     <Compile Include="SimpleHttp\Crypto\Win32Native.cs" />
-    <Compile Include="SimpleHttp\SimpleThreadPool.cs" />
+    <Compile Include="SimpleThreadPool.cs" />
     <Compile Include="SimpleHttp\GlobalThrottledStream.cs" />
     <Compile Include="SimpleHttp\Mime.cs" />
     <Compile Include="SimpleHttp\SimpleHttpServer.cs" />

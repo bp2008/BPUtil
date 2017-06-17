@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 
-namespace BPUtil.SimpleHttp
+namespace BPUtil
 {
 	class PoolThread
 	{
