@@ -8,4 +8,6 @@ Includes:
 * A base class for simple configuration files
 * Hexidecimal > byte[] and byte[] > Hexidecimal conversion
 * "Try" class with static methods to enable one-line try
-* ...
+* Generic object pool
+* Simple code timing class
+* more ...
