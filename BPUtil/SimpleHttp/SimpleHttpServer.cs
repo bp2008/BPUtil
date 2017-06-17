@@ -129,7 +129,7 @@ namespace BPUtil.SimpleHttp
 
 		private int isLanConnection = -1;
 		/// <summary>
-		/// Returns true if the remote client's ipv4 address is in the same class C range as any of the server's ipv4 addresses.
+		/// Returns true if the remote client's ipv4 address is in the same subnet as any of the server's ipv4 addresses.
 		/// </summary>
 		public bool IsLanConnection
 		{
@@ -140,31 +140,35 @@ namespace BPUtil.SimpleHttp
 					byte[] remoteBytes = RemoteIPAddressBytes;
 					if (remoteBytes == null || remoteBytes.Length != 4)
 						isLanConnection = 0;
-					else if (remoteBytes[0] == 127 && remoteBytes[1] == 0 && remoteBytes[2] == 0 && remoteBytes[3] == 1)
-						isLanConnection = 1;
 					else
 					{
-						// If the first 3 bytes of any local address matches the first 3 bytes of the local address, then the remote address is in the same class C range as this address.
-						foreach (byte[] localBytes in srv.localIPv4Addresses)
-						{
-							bool addressIsMatch = true;
-							for (int i = 0; i < 3; i++)
-								if (localBytes[i] != remoteBytes[i])
-								{
-									addressIsMatch = false;
-									break;
-								}
-							if (addressIsMatch)
-							{
-								isLanConnection = 1;
-								break;
-							}
-						}
-						if (isLanConnection != 1)
-							isLanConnection = 0;
+						NetworkAddressInfo addressInfo = srv.GetAddressInfo();
+						isLanConnection = addressInfo.IsSameLAN(remoteBytes) ? 1 : 0;
 					}
 				}
 				return isLanConnection == 1;
+			}
+		}
+		private int isLocalConnection = -1;
+		/// <summary>
+		/// Returns true if the remote client's ipv4 address is an exact match with any of the server's ipv4 addresses.
+		/// </summary>
+		public bool IsLocalConnection
+		{
+			get
+			{
+				if (isLocalConnection == -1)
+				{
+					byte[] remoteBytes = RemoteIPAddressBytes;
+					if (remoteBytes == null || remoteBytes.Length != 4)
+						isLocalConnection = 0;
+					else
+					{
+						NetworkAddressInfo addressInfo = srv.GetAddressInfo();
+						isLocalConnection = addressInfo.IsSameMachine(remoteBytes) ? 1 : 0;
+					}
+				}
+				return isLocalConnection == 1;
 			}
 		}
 		private byte[] remoteIPAddressBytes = null;
@@ -893,7 +897,7 @@ namespace BPUtil.SimpleHttp
 		}
 	}
 
-	public abstract class HttpServer
+	public abstract class HttpServer : IDisposable
 	{
 		/// <summary>
 		/// If > -1, the server was told to listen for http connections on this port.  Port 0 causes the socket library to choose its own port.
@@ -932,7 +936,16 @@ namespace BPUtil.SimpleHttp
 		private TcpListener unsecureListener = null;
 		private TcpListener secureListener = null;
 
-		internal List<byte[]> localIPv4Addresses = new List<byte[]>();
+		private NetworkAddressInfo addressInfo = new NetworkAddressInfo();
+		/// <summary>
+		/// Gets information about the current network interfaces.
+		/// You should work with a local reference to the returned object, because this method is not guaranteed to always return the same instance.
+		/// </summary>
+		/// <returns></returns>
+		internal NetworkAddressInfo GetAddressInfo()
+		{
+			return addressInfo;
+		}
 
 		public SimpleThreadPool pool;
 		/// <summary>
@@ -955,6 +968,7 @@ namespace BPUtil.SimpleHttp
 			if (this.port > -1)
 			{
 				thrHttp = new Thread(listen);
+				thrHttp.IsBackground = true;
 				thrHttp.Name = "HttpServer Thread";
 			}
 
@@ -963,18 +977,53 @@ namespace BPUtil.SimpleHttp
 				if (ssl_certificate == null)
 					ssl_certificate = HttpServer.GetSelfSignedCertificate();
 				thrHttps = new Thread(listen);
+				thrHttps.IsBackground = true;
 				thrHttps.Name = "HttpsServer Thread";
 			}
-			//TODO: Populate localIPv4Addresses dynamically otherwise this list can become stale.
-			foreach (IPAddress addr in Dns.GetHostEntry(Dns.GetHostName()).AddressList)
+			NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAvailabilityChanged;
+			NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
+		}
+
+		#region IDisposable Support
+		private bool disposedValue = false;
+
+		protected virtual void Dispose(bool disposing)
+		{
+			if (!disposedValue)
 			{
-				if (addr.AddressFamily == AddressFamily.InterNetwork)
+				if (disposing)
 				{
-					byte[] bytes = addr.GetAddressBytes();
-					if (bytes != null && bytes.Length == 4)
-						localIPv4Addresses.Add(bytes);
+					// Dispose managed objects
+					Stop();
 				}
+
+				// Dispose unmanaged objects
+				// Set large fields = null
+
+				disposedValue = true;
 			}
+		}
+
+		public void Dispose()
+		{
+			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+			Dispose(true);
+		}
+		#endregion
+
+		private void NetworkChange_NetworkAddressChanged(object sender, EventArgs e)
+		{
+			UpdateNetworkAddresses();
+		}
+
+		private void NetworkChange_NetworkAvailabilityChanged(object sender, NetworkAvailabilityEventArgs e)
+		{
+			UpdateNetworkAddresses();
+		}
+
+		private void UpdateNetworkAddresses()
+		{
+			addressInfo = new NetworkAddressInfo(NetworkInterface.GetAllNetworkInterfaces());
 		}
 
 		private static object certCreateLock = new object();
@@ -1152,74 +1201,33 @@ namespace BPUtil.SimpleHttp
 			if (stopRequested)
 				return;
 			stopRequested = true;
+
 			try
 			{
-				pool.Stop();
+				NetworkChange.NetworkAvailabilityChanged -= NetworkChange_NetworkAvailabilityChanged;
+				NetworkChange.NetworkAddressChanged -= NetworkChange_NetworkAddressChanged;
 			}
-			catch (Exception ex)
-			{
-				SimpleHttpLogger.Log(ex);
-			}
+			catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+			try { pool.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			if (unsecureListener != null)
-				try
-				{
-					unsecureListener.Stop();
-				}
-				catch (Exception ex)
-				{
-					SimpleHttpLogger.Log(ex);
-				}
+				try { unsecureListener.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			if (secureListener != null)
-				try
-				{
-					secureListener.Stop();
-				}
-				catch (Exception ex)
-				{
-					SimpleHttpLogger.Log(ex);
-				}
+				try { secureListener.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			if (thrHttp != null)
-				try
-				{
-					thrHttp.Abort();
-				}
-				catch (Exception ex)
-				{
-					SimpleHttpLogger.Log(ex);
-				}
+				try { thrHttp.Abort(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			if (thrHttps != null)
-				try
-				{
-					thrHttps.Abort();
-				}
-				catch (Exception ex)
-				{
-					SimpleHttpLogger.Log(ex);
-				}
-			try
-			{
-				stopServer();
-			}
-			catch (Exception ex)
-			{
-				SimpleHttpLogger.Log(ex);
-			}
-			try
-			{
-				GlobalThrottledStream.ThrottlingManager.Shutdown();
-			}
-			catch (Exception ex)
-			{
-				SimpleHttpLogger.Log(ex);
-			}
+				try { thrHttps.Abort(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+			try { stopServer(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+			try { GlobalThrottledStream.ThrottlingManager.Shutdown(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 		}
 
 		/// <summary>
 		/// Blocks the calling thread until the http listening threads finish or the timeout expires.  Call this after calling Stop() if you need to wait for the listener to clean up, such as if you intend to start another instance of the server using the same port(s).
 		/// </summary>
 		/// <param name="timeout_milliseconds">Maximum number of milliseconds to wait for the HttpServer Threads to stop.</param>
-		public void Join(int timeout_milliseconds = 2000)
+		public bool Join(int timeout_milliseconds = 2000)
 		{
+			bool success = true;
 			System.Diagnostics.Stopwatch stopwatch = new System.Diagnostics.Stopwatch();
 			int timeToWait = timeout_milliseconds;
 			stopwatch.Start();
@@ -1228,7 +1236,7 @@ namespace BPUtil.SimpleHttp
 				try
 				{
 					if (thrHttp != null && thrHttp.IsAlive)
-						thrHttp.Join(timeToWait);
+						success = success && thrHttp.Join(timeToWait);
 				}
 				catch (Exception ex)
 				{
@@ -1242,13 +1250,14 @@ namespace BPUtil.SimpleHttp
 				try
 				{
 					if (thrHttps != null && thrHttps.IsAlive)
-						thrHttps.Join(timeToWait);
+						success = success && thrHttps.Join(timeToWait);
 				}
 				catch (Exception ex)
 				{
 					SimpleHttpLogger.Log(ex);
 				}
 			}
+			return success;
 		}
 
 		/// <summary>

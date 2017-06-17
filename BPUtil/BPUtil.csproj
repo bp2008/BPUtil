@@ -47,6 +47,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BasicEventTimer.cs" />
+    <Compile Include="ByteUtil.cs" />
     <Compile Include="Globals.cs" />
     <Compile Include="Hash.cs" />
     <Compile Include="Hex.cs" />
@@ -64,6 +65,7 @@
     <Compile Include="SimpleHttp\Crypto\SignatureKey.cs" />
     <Compile Include="SimpleHttp\Crypto\Win32ErrorHelper.cs" />
     <Compile Include="SimpleHttp\Crypto\Win32Native.cs" />
+    <Compile Include="SimpleHttp\NetworkAddressInfo.cs" />
     <Compile Include="SimpleThreadPool.cs" />
     <Compile Include="SimpleHttp\GlobalThrottledStream.cs" />
     <Compile Include="SimpleHttp\Mime.cs" />
