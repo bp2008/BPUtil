@@ -982,6 +982,7 @@ namespace BPUtil.SimpleHttp
 			}
 			NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAvailabilityChanged;
 			NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
+			UpdateNetworkAddresses();
 		}
 
 		#region IDisposable Support
