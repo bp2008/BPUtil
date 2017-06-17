@@ -73,10 +73,7 @@ namespace BPUtil
 						while ((line = inputFile.ReadLine()) != null)
 							AddLogLine(line);
 					}
-					catch (ThreadAbortException ex)
-					{
-						throw ex;
-					}
+					catch (ThreadAbortException) { throw; }
 					catch (Exception ex)
 					{
 						Logger.Debug(ex);
@@ -84,9 +81,7 @@ namespace BPUtil
 					}
 				}
 			}
-			catch (ThreadAbortException)
-			{
-			}
+			catch (ThreadAbortException) { }
 			catch (Exception ex)
 			{
 				Logger.Debug(ex);

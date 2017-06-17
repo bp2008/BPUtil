@@ -1441,6 +1441,7 @@ namespace BPUtil.SimpleHttp
 				if (logger != null)
 					logger.Log(ex, additionalInformation);
 			}
+			catch (ThreadAbortException) { throw; }
 			catch { }
 		}
 		internal static void Log(string str)
@@ -1450,6 +1451,7 @@ namespace BPUtil.SimpleHttp
 				if (logger != null)
 					logger.Log(str);
 			}
+			catch (ThreadAbortException) { throw; }
 			catch { }
 		}
 
@@ -1472,6 +1474,7 @@ namespace BPUtil.SimpleHttp
 				{
 					logger.LogRequest(time, time.ToString("yyyy-MM-dd hh:mm:ss tt") + ":\t" + remoteHost + "\t" + requestMethod + "\t" + requestedUrl);
 				}
+				catch (ThreadAbortException) { throw; }
 				catch { }
 		}
 	}

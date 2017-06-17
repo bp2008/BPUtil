@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using BPUtil.SimpleHttp;
 
 namespace BPUtil
 {
@@ -90,6 +91,7 @@ namespace BPUtil
 				Interlocked.Exchange(ref _currentMinThreads, value);
 			}
 		}
+		private Action<Exception, string> logErrorAction = SimpleHttpLogger.Log;
 		/// <summary>
 		/// 
 		/// </summary>
@@ -98,7 +100,8 @@ namespace BPUtil
 		/// <param name="maxThreads">The largest number of threads this pool should attempt to have alive at any given time.  It is possible for there to be temporarily more threads than this if certain race conditions are met.</param>
 		/// <param name="threadTimeoutMilliseconds"></param>
 		/// <param name="useBackgroundThreads">If true, the application will be able to exit without waiting for this thread pool.  Background threads do not prevent a process from terminating. Once all foreground threads belonging to a process have terminated, the common language runtime ends the process. Any remaining background threads are stopped and do not complete.</param>
-		public SimpleThreadPool(string poolName, int minThreads = 6, int maxThreads = 32, int threadTimeoutMilliseconds = 60000, bool useBackgroundThreads = true)
+		/// <param name="logErrorAction">A method to use for logging exceptions.  If null, SimpleHttpLogger.Log will be used.</param>
+		public SimpleThreadPool(string poolName, int minThreads = 6, int maxThreads = 32, int threadTimeoutMilliseconds = 60000, bool useBackgroundThreads = true, Action<Exception, string> logErrorAction = null)
 		{
 			this.poolName = poolName;
 			this.threadTimeoutMilliseconds = threadTimeoutMilliseconds;
@@ -109,6 +112,8 @@ namespace BPUtil
 			this._currentMinThreads = minThreads;
 			this._currentMaxThreads = maxThreads;
 			this.threadsAreBackgroundThreads = useBackgroundThreads;
+			if (logErrorAction != null)
+				this.logErrorAction = logErrorAction;
 			SpawnNewIdleThreads(minThreads);
 		}
 		/// <summary>
@@ -163,6 +168,7 @@ namespace BPUtil
 					{
 						pt.thread.Abort();
 					}
+					catch (ThreadAbortException) { throw; }
 					catch (Exception ex)
 					{
 						SimpleHttpLogger.Log(ex);
@@ -241,13 +247,10 @@ namespace BPUtil
 							{
 								action();
 							}
-							catch (ThreadAbortException ex)
-							{
-								throw ex;
-							}
+							catch (ThreadAbortException) { throw; }
 							catch (Exception ex)
 							{
-								SimpleHttpLogger.Log(ex, "Error on " + Thread.CurrentThread.Name);
+								logErrorAction(ex, "Error on " + Thread.CurrentThread.Name);
 							}
 						}
 					}
@@ -266,7 +269,7 @@ namespace BPUtil
 			catch (ThreadAbortException) { }
 			catch (Exception ex)
 			{
-				SimpleHttpLogger.Log(ex, "Fatal error on \"" + Thread.CurrentThread.Name + "\" indicating a programming error.");
+				logErrorAction(ex, "Fatal error on \"" + Thread.CurrentThread.Name + "\" indicating a programming error.");
 			}
 			lock (threadLock)
 			{

@@ -73,7 +73,8 @@ namespace BPUtil
 							File.AppendAllText(Globals.ErrorFilePath, debugMessage.ToString(), Encoding.UTF8);
 							attempts = 10;
 						}
-						catch (Exception)
+						catch (ThreadAbortException) { throw; }
+						catch
 						{
 							attempts++;
 						}
@@ -109,7 +110,8 @@ namespace BPUtil
 							File.AppendAllText(Globals.ErrorFilePath, DateTime.Now.ToString() + '\t' + message + Environment.NewLine, Encoding.UTF8);
 							attempts = 10;
 						}
-						catch (Exception)
+						catch (ThreadAbortException) { throw; }
+						catch
 						{
 							attempts++;
 						}
@@ -179,19 +181,14 @@ namespace BPUtil
 						}
 						Thread.Sleep(100);
 					}
-					catch (ThreadAbortException ex)
-					{
-						throw ex;
-					}
+					catch (ThreadAbortException) { throw; }
 					catch (Exception ex)
 					{
 						Logger.Debug(ex);
 					}
 				}
 			}
-			catch (ThreadAbortException)
-			{
-			}
+			catch (ThreadAbortException) { }
 			catch (Exception ex)
 			{
 				Logger.Debug(ex);
@@ -204,7 +201,8 @@ namespace BPUtil
 				if (loggingThread != null)
 					loggingThread.Abort();
 			}
-			catch (Exception) { }
+			catch (ThreadAbortException) { throw; }
+			catch { }
 		}
 
 		public void StartLoggingThreads()
