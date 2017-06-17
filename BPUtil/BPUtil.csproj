@@ -52,6 +52,7 @@
     <Compile Include="Hex.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="LogReader.cs" />
+    <Compile Include="ObjectPool.cs" />
     <Compile Include="PrivateAccessor.cs" />
     <Compile Include="SerializableObjectBase.cs" />
     <Compile Include="SimpleHttp\Crypto\CertProperties.cs" />
