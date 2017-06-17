@@ -35,7 +35,7 @@ namespace BPUtil
 			executableNameWithoutExtension = executableNameWithExtension.Substring(0, executableNameWithExtension.Length - fiExe.Extension.Length);
 			applicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
 			applicationDirectoryBase = applicationRoot + "/";
-			writableDirectoryBase = applicationDirectoryBase + writablePath.Replace('\\', '/');
+			writableDirectoryBase = applicationDirectoryBase + writablePath.TrimStart('\\', '/').Replace('\\', '/');
 			configFilePath = writableDirectoryBase + "Config.cfg";
 			errorFilePath = writableDirectoryBase + executableNameWithoutExtension + "Errors.txt";
 		}
