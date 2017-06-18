@@ -108,6 +108,11 @@ namespace BPUtil
 			byte[] result = md5.ComputeHash(data);
 			return result;
 		}
+		/// <summary>
+		/// Performs MD5 hashing and returns a hex-encoded string using lower-case letters.
+		/// </summary>
+		/// <param name="s"></param>
+		/// <returns></returns>
 		public static string GetMD5Hex(string s)
 		{
 			return BitConverter.ToString(GetMD5Bytes(s)).Replace("-", "").ToLower();
