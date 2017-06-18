@@ -10,6 +10,7 @@ namespace BPUtil
 	/// A Cookie-aware WebClient that will store authentication cookie information and persist it through subsequent requests.
 	/// From: https://github.com/rionmonster/CookieAwareWebClient
 	/// </summary>
+	[System.ComponentModel.DesignerCategory("Code")]
 	public class CookieAwareWebClient : WebClient
 	{
 		//Properties to handle implementing a timeout
