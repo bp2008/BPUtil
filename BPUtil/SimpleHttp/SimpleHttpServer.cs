@@ -294,7 +294,7 @@ namespace BPUtil.SimpleHttp
 					try
 					{
 						tcpStream = new System.Net.Security.SslStream(tcpStream, false, null, null);
-						((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(ssl_certificate);
+						((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(ssl_certificate, false, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
 					}
 					catch (Exception ex)
 					{
@@ -387,7 +387,8 @@ namespace BPUtil.SimpleHttp
 				{
 					if (ex.InnerException.Message.Contains("An established connection was aborted by the software in your host machine")
 						|| ex.InnerException.Message.Contains("An existing connection was forcibly closed by the remote host")
-						|| ex.InnerException.Message.Contains("The socket has been shut down") /* Mono/Linux */)
+						|| ex.InnerException.Message.Contains("The socket has been shut down") /* Mono/Linux */
+						|| ex.InnerException.Message.Contains("Connection reset by peer") /* Mono/Linux */)
 						return true; // Connection aborted.  This happens often enough that reporting it can be excessive.
 				}
 			}
@@ -1126,15 +1127,9 @@ namespace BPUtil.SimpleHttp
 								//		outputStream.WriteLineRN("");
 								//		outputStream.WriteLineRN("Server too busy");
 								//	}
-								//	catch (ThreadAbortException ex)
-								//	{
-								//		throw ex;
-								//	}
+								//	catch (ThreadAbortException) { throw; }
 							}
-							catch (ThreadAbortException ex)
-							{
-								throw ex;
-							}
+							catch (ThreadAbortException) { throw; }
 							catch (Exception ex)
 							{
 								if (ex.Message == "A blocking operation was interrupted by a call to WSACancelBlockingCall")
