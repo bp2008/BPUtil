@@ -109,6 +109,6 @@ namespace BPUtil
 		/// <summary>
 		/// The BPUtil version number, not to be confused with the version number of the application this is included in.
 		/// </summary>
-		public static string Version = "0.3";
+		public static string Version = "0.4";
 	}
 }

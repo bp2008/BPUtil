@@ -936,6 +936,7 @@ namespace BPUtil.SimpleHttp
 		private Thread thrHttps;
 		private TcpListener unsecureListener = null;
 		private TcpListener secureListener = null;
+		public event EventHandler<string> SocketBound = delegate { };
 
 		private NetworkAddressInfo addressInfo = new NetworkAddressInfo();
 		/// <summary>
@@ -1103,9 +1104,16 @@ namespace BPUtil.SimpleHttp
 							unsecureListener = listener;
 						listener.Start();
 						if (isSecureListener)
+						{
 							actual_port_https = ((IPEndPoint)listener.LocalEndpoint).Port;
+							SocketBound(this, "Web Server listening on port " + actual_port_https + " (https)");
+						}
 						else
+						{
 							actual_port_http = ((IPEndPoint)listener.LocalEndpoint).Port;
+							SocketBound(this, "Web Server listening on port " + actual_port_http + " (http)");
+						}
+
 						while (!stopRequested)
 						{
 							int innerErrorCount = 0;
