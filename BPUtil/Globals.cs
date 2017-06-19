@@ -14,6 +14,9 @@ namespace BPUtil
 		public static string jQueryUICssPath = "//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/themes/smoothness/jquery-ui.css";
 		static Globals()
 		{
+			ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+			ServicePointManager.Expect100Continue = false;
+			ServicePointManager.DefaultConnectionLimit = int.MaxValue;
 			try
 			{
 				Initialize(System.Reflection.Assembly.GetExecutingAssembly().Location);
@@ -27,8 +30,6 @@ namespace BPUtil
 		/// <param name="writablePath">A string to be appended to ApplicationDirectoryBase to create WritableDirectoryBase.  Example: "" or "writable/" or "somedir/writable/"</param>
 		public static void Initialize(string exePath, string writablePath = "")
 		{
-			ServicePointManager.Expect100Continue = false;
-			ServicePointManager.DefaultConnectionLimit = int.MaxValue;
 			executablePath = exePath.Replace('\\', '/');
 			FileInfo fiExe;
 			try
