@@ -931,12 +931,21 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 		protected volatile bool stopRequested = false;
-		private X509Certificate2 ssl_certificate;
+		protected X509Certificate2 ssl_certificate;
 		private Thread thrHttp;
 		private Thread thrHttps;
 		private TcpListener unsecureListener = null;
 		private TcpListener secureListener = null;
+		/// <summary>
+		/// Raised when a listening socket is bound to a port.  The Event Handler passes along a string which can be printed to the console, announcing this event.
+		/// </summary>
 		public event EventHandler<string> SocketBound = delegate { };
+		/// <summary>
+		/// Raised when an SSL connection is made using a certificate that will expire within the next 14 days.  This event will not be raised more than once in a 60 minute period (assuming the same HttpServer instance is used).
+		/// The TimeSpan argument indicates the time to expiration, which may be less than or equal to TimeSpan.Zero if the certificate is expired.
+		/// </summary>
+		public event EventHandler<TimeSpan> CertificateExpirationWarning = delegate { };
+		private DateTime timeOfNextCertificateExpirationWarning = DateTime.MinValue;
 
 		private NetworkAddressInfo addressInfo = new NetworkAddressInfo();
 		/// <summary>
@@ -1028,6 +1037,34 @@ namespace BPUtil.SimpleHttp
 		{
 			addressInfo = new NetworkAddressInfo(NetworkInterface.GetAllNetworkInterfaces());
 		}
+		/// <summary>
+		/// Sets a new SSL certificate to be used for all future connections;
+		/// </summary>
+		/// <param name="newCertificate"></param>
+		public void SetCertificate(X509Certificate2 newCertificate)
+		{
+			ssl_certificate = newCertificate;
+		}
+		/// <summary>
+		/// Returns the date in local time after which the certificate is no longer valid.  If the certificate is null, returns DateTime.MaxValue.
+		/// </summary>
+		/// <returns></returns>
+		public DateTime GetCertificateExpiration()
+		{
+			if (ssl_certificate != null)
+				return ssl_certificate.NotAfter;
+			return DateTime.MaxValue;
+		}
+		/// <summary>
+		/// Returns the date in local time after which the certificate is no longer valid.  If the certificate is null, returns DateTime.MaxValue.
+		/// </summary>
+		/// <returns></returns>
+		public string GetCertificateFriendlyName()
+		{
+			if (ssl_certificate != null)
+				return ssl_certificate.FriendlyName;
+			return null;
+		}
 
 		private static object certCreateLock = new object();
 		public static X509Certificate2 GetSelfSignedCertificate()
@@ -1104,20 +1141,23 @@ namespace BPUtil.SimpleHttp
 							unsecureListener = listener;
 						listener.Start();
 						if (isSecureListener)
-						{
 							actual_port_https = ((IPEndPoint)listener.LocalEndpoint).Port;
-							SocketBound(this, "Web Server listening on port " + actual_port_https + " (https)");
-						}
 						else
-						{
 							actual_port_http = ((IPEndPoint)listener.LocalEndpoint).Port;
-							SocketBound(this, "Web Server listening on port " + actual_port_http + " (http)");
+						try
+						{
+							SocketBound(this, "Web Server listening on port " + (isSecureListener ? (actual_port_https + " (https)") : (actual_port_http + " (http)")));
+						}
+						catch (ThreadAbortException) { throw; }
+						catch (Exception ex)
+						{
+							SimpleHttpLogger.Log(ex);
 						}
 
+						DateTime innerLastError = DateTime.Now;
+						int innerErrorCount = 0;
 						while (!stopRequested)
 						{
-							int innerErrorCount = 0;
-							DateTime innerLastError = DateTime.Now;
 							try
 							{
 								TcpClient s = listener.AcceptTcpClient();
@@ -1125,7 +1165,22 @@ namespace BPUtil.SimpleHttp
 									s.ReceiveTimeout = 10000;
 								if (s.SendTimeout < 10000 && s.SendTimeout != 0)
 									s.SendTimeout = 10000;
-								HttpProcessor processor = new HttpProcessor(s, this, isSecureListener ? ssl_certificate : null);
+								X509Certificate2 cert = isSecureListener ? ssl_certificate : null;
+								DateTime now = DateTime.Now;
+								if (cert != null && now.AddDays(14) > cert.NotAfter && timeOfNextCertificateExpirationWarning < now)
+								{
+									timeOfNextCertificateExpirationWarning = now.AddHours(1);
+									try
+									{
+										CertificateExpirationWarning(this, now - cert.NotAfter);
+									}
+									catch (ThreadAbortException) { throw; }
+									catch (Exception ex)
+									{
+										SimpleHttpLogger.Log(ex);
+									}
+								}
+								HttpProcessor processor = new HttpProcessor(s, this, cert);
 								pool.Enqueue(processor.process);
 								//	try
 								//	{
