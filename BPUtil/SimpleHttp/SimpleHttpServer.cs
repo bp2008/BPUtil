@@ -10,6 +10,7 @@ using System.Text;
 using System.Security.Cryptography.X509Certificates;
 using System.Net.NetworkInformation;
 using System.Security.Cryptography;
+using System.IO.Compression;
 
 // This file has been modified continuously since Nov 10, 2012 by Brian Pearce.
 // Based on http://www.codeproject.com/Articles/137979/Simple-HTTP-Server-in-C
@@ -242,6 +243,10 @@ namespace BPUtil.SimpleHttp
 		}
 		public readonly bool secure_https;
 		private X509Certificate2 ssl_certificate;
+		/// <summary>
+		/// The type of compression that will be used for the response stream.
+		/// </summary>
+		public CompressionType compressionType { get; private set; } = CompressionType.None;
 		#endregion
 
 		public HttpProcessor(TcpClient s, HttpServer srv, X509Certificate2 ssl_certificate = null)
@@ -355,6 +360,17 @@ namespace BPUtil.SimpleHttp
 				}
 				outputStream.Flush();
 				rawOutputStream.Flush();
+				// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
+				try
+				{
+					outputStream.Dispose();
+				}
+				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+				try
+				{
+					rawOutputStream.Dispose();
+				}
+				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 				inputStream = null; outputStream = null; rawOutputStream = null;
 			}
 			catch (Exception ex)
@@ -536,7 +552,46 @@ namespace BPUtil.SimpleHttp
 				}
 			}
 		}
-
+		#region Response Compression
+		/// <summary>
+		/// Automatically compresses the response body using gzip encoding, if the client requested it.
+		/// Must be called BEFORE writeSuccess().
+		/// Note that the Content-Length header, if provided, should be the COMPRESSED length, so you likely won't know what value to use.  Omit the header instead.
+		/// Returns true if the response will be compressed, and sets this.compressionType.
+		/// </summary>
+		/// <returns></returns>
+		public virtual bool CompressResponseIfCompatible()
+		{
+			if (responseWritten)
+				return false;
+			string acceptEncoding = GetHeaderValue("Accept-Encoding");
+			string[] types = acceptEncoding.Split(',');
+			foreach (string type in types)
+				if (type.Trim().ToLower() == "gzip")
+				{
+					compressionType = CompressionType.GZip;
+					return true;
+				}
+			return false;
+		}
+		/// <summary>
+		/// Called automatically by writeSuccess method; flushes the existing output streams and wraps them in a gzipstream if gzip compression is to be used.
+		/// </summary>
+		public void EnableCompressionIfSet()
+		{
+			if (!responseWritten)
+				return;
+			if (compressionType == CompressionType.GZip)
+			{
+				if (rawOutputStream is GZipStream)
+					return;
+				outputStream.Flush();
+				rawOutputStream.Flush();
+				rawOutputStream = new GZipStream(rawOutputStream, CompressionLevel.Optimal, false);
+				outputStream = new StreamWriter(rawOutputStream);
+			}
+		}
+		#endregion
 		/// <summary>
 		/// Writes the response headers for a successful response.  Call this one time before writing your response, after you have determined that the request is valid.
 		/// </summary>
@@ -552,6 +607,8 @@ namespace BPUtil.SimpleHttp
 				outputStream.WriteLineRN("Content-Type: " + contentType);
 			if (contentLength > -1)
 				outputStream.WriteLineRN("Content-Length: " + contentLength);
+			if (compressionType == CompressionType.GZip)
+				outputStream.WriteLineRN("Content-Encoding: gzip");
 			string cookieStr = responseCookies.ToString();
 			if (!string.IsNullOrEmpty(cookieStr))
 				outputStream.WriteLineRN(cookieStr);
@@ -562,6 +619,7 @@ namespace BPUtil.SimpleHttp
 			outputStream.WriteLineRN("");
 			//if (contentLength > 1500)
 			tcpClient.NoDelay = true;
+			EnableCompressionIfSet();
 		}
 
 		/// <summary>
@@ -1355,6 +1413,11 @@ namespace BPUtil.SimpleHttp
 		}
 	}
 	#region Helper Classes
+	public enum CompressionType
+	{
+		None,
+		GZip
+	}
 	public class Cookie
 	{
 		public string name;

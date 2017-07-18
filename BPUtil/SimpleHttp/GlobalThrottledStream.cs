@@ -13,8 +13,15 @@ namespace BPUtil.SimpleHttp
 	/// <summary>
 	/// A stream that throttles read and write operations.  The throttled speed varies depending on the number of other competing streams, in order to meet application-wide speed limits.
 	/// </summary>
-	public class GlobalThrottledStream : Stream
+	public class GlobalThrottledStream : Stream, IDisposable
 	{
+		/// <summary>
+		/// Gets a reference to the underlying stream.
+		/// </summary>
+		public Stream BaseStream
+		{
+			get { return originalStream; }
+		}
 		private Stream originalStream;
 		private int ruleSetId;
 		private uint remoteIpAddress;
@@ -146,7 +153,7 @@ namespace BPUtil.SimpleHttp
 		}
 		#endregion
 
-		#region Methods Flush/Seek/SetLength
+		#region Methods Flush/Seek/SetLength/Close
 		/// <summary>
 		/// Clears all buffers for this stream and causes any buffered data to be written to the underlying device.
 		/// </summary>
@@ -183,7 +190,41 @@ namespace BPUtil.SimpleHttp
 		{
 			originalStream.SetLength(value);
 		}
+		public override void Close()
+		{
+			originalStream.Close();
+		}
 		#endregion
+		#endregion
+
+		#region IDisposable Support
+		private bool gts_disposedValue = false; // To detect redundant calls
+
+		protected virtual void Dispose(bool disposing)
+		{
+			if (!gts_disposedValue)
+			{
+				if (disposing)
+				{
+					try
+					{
+						if (originalStream != null)
+							originalStream.Dispose();
+					}
+					catch (ThreadAbortException) { throw; }
+					catch { }
+				}
+
+				gts_disposedValue = true;
+			}
+		}
+
+		// This code added to correctly implement the disposable pattern.
+		public void Dispose()
+		{
+			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+			Dispose(true);
+		}
 		#endregion
 
 		public static class ThrottlingManager
