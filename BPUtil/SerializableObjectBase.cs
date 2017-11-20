@@ -103,7 +103,7 @@ namespace BPUtil
 			lock (lockObj)
 			{
 				if (!File.Exists(filePath))
-					Save();
+					Save(filePath);
 			}
 		}
 	}

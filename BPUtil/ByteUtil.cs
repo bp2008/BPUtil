@@ -67,6 +67,64 @@ namespace BPUtil
 			return result;
 		}
 		/// <summary>
+		/// Computes the "bitwise and" of the values in each array, and returns a new array containing the results.
+		/// e.g. [0,1,1] &amp; [1,0,1] = [0,0,1]
+		/// </summary>
+		/// <param name="a">An array.</param>
+		/// <param name="b">An array.</param>
+		/// <returns></returns>
+		public static byte[] BitwiseAnd(byte[] a, byte[] b)
+		{
+			if (a.Length != b.Length)
+				throw new ArgumentException("Array lengths do not match! (" + a.Length + ", " + b.Length + ")");
+			byte[] result = new byte[a.Length];
+			for (int i = 0; i < result.Length; i++)
+				result[i] = (byte)(a[i] & b[i]);
+			return result;
+		}
+		/// <summary>
+		/// Computes the "bitwise or" of the values in each array, and returns a new array containing the results.
+		/// e.g. [0,1,1] | [1,0,1] = [1,1,1]
+		/// </summary>
+		/// <param name="a">An array.</param>
+		/// <param name="b">An array.</param>
+		/// <returns></returns>
+		public static byte[] BitwiseOr(byte[] a, byte[] b)
+		{
+			if (a.Length != b.Length)
+				throw new ArgumentException("Array lengths do not match! (" + a.Length + ", " + b.Length + ")");
+			byte[] result = new byte[a.Length];
+			for (int i = 0; i < result.Length; i++)
+				result[i] = (byte)(a[i] | b[i]);
+			return result;
+		}
+		/// <summary>
+		/// Inverts every byte in the array. e.g. [0001] => [1110]
+		/// </summary>
+		/// <param name="a">An array.</param>
+		/// <returns></returns>
+		public static void InvertBits(byte[] a)
+		{
+			if (a == null)
+				return;
+			for (int i = 0; i < a.Length; i++)
+				a[i] = (byte)~(a[i]);
+		}
+		/// <summary>
+		/// Returns a new byte array containing the inverse of the values of the source array. e.g. [0001] => [1110]
+		/// </summary>
+		/// <param name="a">An array.</param>
+		/// <returns></returns>
+		public static byte[] GetInverse(byte[] a)
+		{
+			if (a == null)
+				return null;
+			byte[] result = new byte[a.Length];
+			for (int i = 0; i < result.Length; i++)
+				result[i] = (byte)~(a[i]);
+			return result;
+		}
+		/// <summary>
 		/// Generates a byte array of the specified length, filled with cryptographically strong random values.
 		/// </summary>
 		/// <param name="numBytes"></param>

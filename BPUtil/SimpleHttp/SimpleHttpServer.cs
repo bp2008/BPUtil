@@ -548,7 +548,7 @@ namespace BPUtil.SimpleHttp
 				}
 				else
 				{
-					srv.handlePOSTRequest(this, new StreamReader(ms));
+					srv.handlePOSTRequest(this, new StreamReader(ms, Encoding.UTF8));
 				}
 			}
 		}
