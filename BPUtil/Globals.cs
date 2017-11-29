@@ -19,7 +19,7 @@ namespace BPUtil
 			ServicePointManager.DefaultConnectionLimit = int.MaxValue;
 			try
 			{
-				Initialize(System.Reflection.Assembly.GetExecutingAssembly().Location);
+				Initialize(System.Reflection.Assembly.GetEntryAssembly().Location);
 			}
 			catch { }
 		}

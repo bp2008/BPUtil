@@ -263,7 +263,7 @@ namespace BPUtil.SimpleHttp
 			this.secure_https = secure_https;
 		}
 
-		private string streamReadLine(Stream inputStream)
+		private string streamReadLine(Stream inputStream, int maxLength = 32768)
 		{
 			int next_char;
 			bool endOfStream = false;
@@ -278,13 +278,18 @@ namespace BPUtil.SimpleHttp
 					endOfStream = true;
 					break;
 				};
+				if (data.Length >= maxLength)
+					throw new HttpProcessorException("413 Entity Too Large");
 				data.Append(Convert.ToChar(next_char));
 			}
 			if (endOfStream && data.Length == 0)
 				return null;
 			return data.ToString();
 		}
-
+		private class HttpProcessorException : Exception
+		{
+			public HttpProcessorException(string message) : base(message) { }
+		}
 		/// <summary>
 		/// Processes the request.
 		/// </summary>
@@ -293,6 +298,7 @@ namespace BPUtil.SimpleHttp
 			Stream tcpStream = null;
 			try
 			{
+				tcpClient.SendBufferSize = 65536;
 				tcpStream = tcpClient.GetStream();
 				if (this.secure_https)
 				{
@@ -318,6 +324,12 @@ namespace BPUtil.SimpleHttp
 				{
 					parseRequest();
 					readHeaders();
+					if (srv.XRealIPHeader)
+					{
+						string headerValue = GetHeaderValue("x-real-ip");
+						if (!string.IsNullOrWhiteSpace(headerValue))
+							remoteIPAddress = headerValue;
+					}
 					RawQueryString = ParseQueryStringArguments(this.request_url.Query, preserveKeyCharacterCase: true);
 					QueryString = ParseQueryStringArguments(this.request_url.Query);
 					requestCookies = Cookies.FromString(GetHeaderValue("Cookie", ""));
@@ -348,6 +360,14 @@ namespace BPUtil.SimpleHttp
 						if (!responseWritten)
 							this.writeFailure();
 					}
+				}
+				catch (HttpProcessorException e)
+				{
+					SimpleHttpLogger.LogVerbose(e);
+					if (shouldLogRequestsToFile())
+						SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddress, "FAIL", request_url.OriginalString);
+					if (!responseWritten)
+						this.writeFailure(e.Message);
 				}
 				catch (Exception e)
 				{
@@ -401,11 +421,11 @@ namespace BPUtil.SimpleHttp
 			{
 				if (ex.InnerException != null && ex.InnerException is SocketException)
 				{
-					if (ex.InnerException.Message.Contains("An established connection was aborted by the software in your host machine")
-						|| ex.InnerException.Message.Contains("An existing connection was forcibly closed by the remote host")
-						|| ex.InnerException.Message.Contains("The socket has been shut down") /* Mono/Linux */
-						|| ex.InnerException.Message.Contains("Connection reset by peer") /* Mono/Linux */)
-						return true; // Connection aborted.  This happens often enough that reporting it can be excessive.
+					//if (ex.InnerException.Message.Contains("An established connection was aborted by the software in your host machine")
+					//	|| ex.InnerException.Message.Contains("An existing connection was forcibly closed by the remote host")
+					//	|| ex.InnerException.Message.Contains("The socket has been shut down") /* Mono/Linux */
+					//	|| ex.InnerException.Message.Contains("Connection reset by peer") /* Mono/Linux */)
+					return true; // Connection aborted.  This happens often enough that reporting it can be excessive.
 				}
 			}
 			return false;
@@ -502,8 +522,8 @@ namespace BPUtil.SimpleHttp
 					{
 						if (content_len > MAX_POST_SIZE)
 						{
-							this.writeFailure("413 Request Entity Too Large", "Request Too Large");
 							SimpleHttpLogger.LogVerbose("POST Content-Length(" + content_len + ") too big for this simple server.  Server can handle up to " + MAX_POST_SIZE);
+							this.writeFailure("413 Request Entity Too Large", "Request Too Large");
 							return;
 						}
 						byte[] buf = new byte[BUF_SIZE];
@@ -988,6 +1008,9 @@ namespace BPUtil.SimpleHttp
 				return actual_port_https;
 			}
 		}
+		public int? SendBufferSize = null;
+		public int? ReceiveBufferSize = null;
+		public bool XRealIPHeader = false;
 		protected volatile bool stopRequested = false;
 		protected X509Certificate2 ssl_certificate;
 		private Thread thrHttp;
@@ -1223,6 +1246,10 @@ namespace BPUtil.SimpleHttp
 									s.ReceiveTimeout = 10000;
 								if (s.SendTimeout < 10000 && s.SendTimeout != 0)
 									s.SendTimeout = 10000;
+								if (ReceiveBufferSize != null)
+									s.ReceiveBufferSize = ReceiveBufferSize.Value;
+								if (SendBufferSize != null)
+									s.SendBufferSize = SendBufferSize.Value;
 								X509Certificate2 cert = isSecureListener ? ssl_certificate : null;
 								DateTime now = DateTime.Now;
 								if (cert != null && now.AddDays(14) > cert.NotAfter && timeOfNextCertificateExpirationWarning < now)
