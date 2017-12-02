@@ -129,7 +129,7 @@ namespace BPUtil
 			else
 				return n;
 		}
-		public static T Clamp<T>(T n, T max, T min) where T : IComparable<T>
+		public static T Clamp<T>(T n, T min, T max) where T : IComparable<T>
 		{
 			T result = n;
 			if (n.CompareTo(max) > 0)
