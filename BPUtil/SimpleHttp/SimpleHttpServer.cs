@@ -188,6 +188,8 @@ namespace BPUtil.SimpleHttp
 							remoteIPAddressBytes = remoteAddress.GetAddressBytes();
 					}
 				}
+				catch (ThreadAbortException) { throw; }
+				catch (SocketException) { throw; }
 				catch (Exception ex)
 				{
 					SimpleHttpLogger.Log(ex);
@@ -210,6 +212,8 @@ namespace BPUtil.SimpleHttp
 					if (tcpClient != null)
 						remoteIPAddress = tcpClient.Client.RemoteEndPoint.ToString().Split(':')[0];
 				}
+				catch (ThreadAbortException) { throw; }
+				catch (SocketException) { throw; }
 				catch (Exception ex)
 				{
 					SimpleHttpLogger.Log(ex);
@@ -234,6 +238,8 @@ namespace BPUtil.SimpleHttp
 					if (bytes != null && bytes.Length == 4)
 						remoteIPAddressInt = BitConverter.ToUInt32(bytes, 0);
 				}
+				catch (ThreadAbortException) { throw; }
+				catch (SocketException) { throw; }
 				catch (Exception ex)
 				{
 					SimpleHttpLogger.Log(ex);
@@ -307,6 +313,8 @@ namespace BPUtil.SimpleHttp
 						tcpStream = new System.Net.Security.SslStream(tcpStream, false, null, null);
 						((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(ssl_certificate, false, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
 					}
+					catch (ThreadAbortException) { throw; }
+					catch (SocketException) { throw; }
 					catch (Exception ex)
 					{
 						SimpleHttpLogger.LogVerbose(ex);
@@ -348,6 +356,7 @@ namespace BPUtil.SimpleHttp
 							handlePOSTRequest();
 						}
 					}
+					catch (ThreadAbortException) { throw; }
 					catch (Exception e)
 					{
 						if (!isOrdinaryDisconnectException(e))
@@ -361,6 +370,7 @@ namespace BPUtil.SimpleHttp
 							this.writeFailure();
 					}
 				}
+				catch (ThreadAbortException) { throw; }
 				catch (HttpProcessorException e)
 				{
 					SimpleHttpLogger.LogVerbose(e);
@@ -393,6 +403,7 @@ namespace BPUtil.SimpleHttp
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 				inputStream = null; outputStream = null; rawOutputStream = null;
 			}
+			catch (ThreadAbortException) { throw; }
 			catch (Exception ex)
 			{
 				if (!isOrdinaryDisconnectException(ex))
@@ -424,7 +435,9 @@ namespace BPUtil.SimpleHttp
 					//if (ex.InnerException.Message.Contains("An established connection was aborted by the software in your host machine")
 					//	|| ex.InnerException.Message.Contains("An existing connection was forcibly closed by the remote host")
 					//	|| ex.InnerException.Message.Contains("The socket has been shut down") /* Mono/Linux */
-					//	|| ex.InnerException.Message.Contains("Connection reset by peer") /* Mono/Linux */)
+					//	|| ex.InnerException.Message.Contains("Connection reset by peer") /* Mono/Linux */
+					//	|| ex.InnerException.Message.Contains("The socket is not connected") /* Mono/Linux */
+					//	)
 					return true; // Connection aborted.  This happens often enough that reporting it can be excessive.
 				}
 			}
@@ -1311,9 +1324,9 @@ namespace BPUtil.SimpleHttp
 								lastError = DateTime.Now;
 								errorCount = 0;
 							}
-							if (++errorCount > 100)
+							if (++errorCount > 200)
 								throw ex;
-							SimpleHttpLogger.Log(ex, "Restarting listener. Error count today: " + errorCount);
+							SimpleHttpLogger.Log(ex, "Restarting listener. Outer Error count today: " + errorCount);
 							threwExceptionOuter = true;
 						}
 					}
@@ -1394,8 +1407,9 @@ namespace BPUtil.SimpleHttp
 				try
 				{
 					if (thrHttp != null && thrHttp.IsAlive)
-						success = success && thrHttp.Join(timeToWait);
+						success = thrHttp.Join(timeToWait) && success;
 				}
+				catch (ThreadAbortException) { throw; }
 				catch (Exception ex)
 				{
 					SimpleHttpLogger.Log(ex);
@@ -1408,8 +1422,9 @@ namespace BPUtil.SimpleHttp
 				try
 				{
 					if (thrHttps != null && thrHttps.IsAlive)
-						success = success && thrHttps.Join(timeToWait);
+						success = thrHttps.Join(timeToWait) && success;
 				}
+				catch (ThreadAbortException) { throw; }
 				catch (Exception ex)
 				{
 					SimpleHttpLogger.Log(ex);
