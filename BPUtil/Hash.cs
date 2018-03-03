@@ -8,6 +8,7 @@ namespace BPUtil
 {
 	public class Hash
 	{
+		private static UTF8Encoding utf8NoBOM = new UTF8Encoding(false);
 		/// <summary>
 		/// Computes the SHA512 hash of the specified binary data, optionally appending a binary salt value.
 		/// </summary>
@@ -35,7 +36,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public static byte[] GetSHA512Bytes(string s, byte[] salt = null)
 		{
-			byte[] data = UTF8Encoding.UTF8.GetBytes(s);
+			byte[] data = utf8NoBOM.GetBytes(s);
 			return GetSHA512Bytes(data, salt);
 		}
 		/// <summary>
@@ -75,7 +76,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public static byte[] GetSHA256Bytes(string s, byte[] salt = null)
 		{
-			byte[] data = UTF8Encoding.UTF8.GetBytes(s);
+			byte[] data = utf8NoBOM.GetBytes(s);
 			return GetSHA256Bytes(data, salt);
 		}
 		/// <summary>
@@ -90,7 +91,7 @@ namespace BPUtil
 		}
 		public static byte[] GetSHA1Bytes(string s, byte[] salt = null)
 		{
-			byte[] data = UTF8Encoding.UTF8.GetBytes(s);
+			byte[] data = utf8NoBOM.GetBytes(s);
 			if (salt != null && salt.Length > 0)
 			{
 				byte[] salted = new byte[data.Length + salt.Length];
@@ -114,7 +115,7 @@ namespace BPUtil
 		}
 		public static byte[] GetMD5Bytes(string s, byte[] salt = null)
 		{
-			byte[] data = UTF8Encoding.UTF8.GetBytes(s);
+			byte[] data = utf8NoBOM.GetBytes(s);
 			if (salt != null && salt.Length > 0)
 			{
 				byte[] salted = new byte[data.Length + salt.Length];

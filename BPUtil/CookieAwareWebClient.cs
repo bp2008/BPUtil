@@ -46,7 +46,8 @@ namespace BPUtil
 		protected override WebRequest GetWebRequest(Uri address)
 		{
 			//Handles the CookieContainer
-			var request = (HttpWebRequest)base.GetWebRequest(address);
+			WebRequest _req = base.GetWebRequest(address);
+			var request = (HttpWebRequest)_req;
 			request.CookieContainer = CookieContainer;
 			//Sets the Timeout if it exists
 			if (_timeout.HasValue)

@@ -10,7 +10,7 @@ namespace BPUtil
 	{
 		private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 		/// <summary>
-		/// Returns a DateTime object based on the specified number of milliseconds since the Unix Epoch (1970/1/1 midnight UTC).
+		/// Returns a DateTime object based on the specified number of milliseconds since the Unix Epoch (1970/1/1 midnight UTC).  The returned object uses the UTC timezone.
 		/// </summary>
 		/// <param name="ms_since_epoch">The number of milliseconds since the Unix Epoch (1970/1/1 midnight UTC).</param>
 		/// <returns></returns>

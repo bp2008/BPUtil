@@ -25,6 +25,8 @@ namespace BPUtil.Forms
 		string ServiceName;
 		ButtonDefinition[] additionalButtons;
 		List<Button> customButtons = new List<Button>();
+		Control customControl = null;
+		int customContentStartY = 0;
 		Timer timer;
 		BackgroundWorker bw = null;
 		string statusStr = "";
@@ -35,13 +37,15 @@ namespace BPUtil.Forms
 		/// <param name="Title">The title of the form (will appear in the title bar).</param>
 		/// <param name="ServiceName">The name of the Windows Service.</param>
 		/// <param name="additionalButtons">An array of buttons to add to the bottom of the form.  May be null.  You may specify the Text and Click handler for each button.  `null` buttons will still take up space, allowing more control over the layout.</param>
-		public ServiceManager(string Title, string ServiceName, ButtonDefinition[] additionalButtons = null)
+		/// <param name="additionalControl">An additional Control to add to the bottom of the form, above any additional buttons.</param>
+		public ServiceManager(string Title, string ServiceName, ButtonDefinition[] additionalButtons = null, Control additionalControl = null)
 		{
 			if (Platform.IsUnix() || Platform.IsRunningOnMono())
 				throw new PlatformNotSupportedException("Service Manager only runs on Windows, using the official .NET runtime.");
 			this.Text = Title;
 			this.ServiceName = ServiceName;
 			this.additionalButtons = additionalButtons;
+			this.customControl = additionalControl;
 
 			Application.EnableVisualStyles();
 			InitializeComponent();
@@ -49,12 +53,27 @@ namespace BPUtil.Forms
 
 		private void ServiceManager_Load(object sender, EventArgs e)
 		{
+			customContentStartY = txtStatus.Top + txtStatus.Height + 6;
+			AddCustomControl();
 			AddCustomButtons();
 			UpdateStatus();
 			timer = new Timer();
 			timer.Tick += Timer_Tick;
 			timer.Interval = 1000;
 			timer.Start();
+		}
+
+		private void AddCustomControl()
+		{
+			if (customControl == null)
+				return;
+			this.SuspendLayout();
+			this.Height += customControl.Height;
+			Controls.Add(customControl);
+			customControl.Bounds = new Rectangle(txtStatus.Left, customContentStartY, txtStatus.Width, customControl.Height);
+			customContentStartY += customControl.Height;
+			this.ResumeLayout(false);
+			this.PerformLayout();
 		}
 
 		private void AddCustomButtons()
@@ -69,7 +88,7 @@ namespace BPUtil.Forms
 			int rightX = btnStart.Left;
 			int rightWidth = btnStart.Width;
 			int newX = leftX;
-			int newY = txtStatus.Top + txtStatus.Height + 6;
+			int newY = customContentStartY;
 			int newWidth = leftWidth;
 			for (int i = 0; i < additionalButtons.Length; i++)
 			{

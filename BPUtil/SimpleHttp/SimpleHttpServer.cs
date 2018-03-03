@@ -26,6 +26,7 @@ namespace BPUtil.SimpleHttp
 {
 	public class HttpProcessor
 	{
+		public static UTF8Encoding Utf8NoBOM = new UTF8Encoding(false);
 		private const int BUF_SIZE = 4096;
 		private static int MAX_POST_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -327,7 +328,7 @@ namespace BPUtil.SimpleHttp
 					inputStreamThrottlingRuleset = outputStreamThrottlingRuleset = 2;
 				inputStream = new BufferedStream(new GlobalThrottledStream(tcpStream, inputStreamThrottlingRuleset, RemoteIPAddressInt));
 				rawOutputStream = new GlobalThrottledStream(tcpStream, outputStreamThrottlingRuleset, RemoteIPAddressInt);
-				outputStream = new StreamWriter(rawOutputStream);
+				outputStream = new StreamWriter(rawOutputStream, Utf8NoBOM);
 				try
 				{
 					parseRequest();
@@ -581,7 +582,7 @@ namespace BPUtil.SimpleHttp
 				}
 				else
 				{
-					srv.handlePOSTRequest(this, new StreamReader(ms, Encoding.UTF8));
+					srv.handlePOSTRequest(this, new StreamReader(ms, Utf8NoBOM));
 				}
 			}
 		}
@@ -688,6 +689,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Writes response headers to finish the WebSocket handshake with the client. No extensions are supported (such as compression) at this time.
 		/// This method is supposed to facilitate linking two WebSocket clients together using this server as a proxy.
+		/// NOTE: This functionality is untested and likely does not work as intended.
 		/// </summary>
 		public virtual void writeWebSocketProxy()
 		{
@@ -701,7 +703,7 @@ namespace BPUtil.SimpleHttp
 		protected static string CreateWebSocketResponseKey(string base64Key)
 		{
 			SHA1 sha1 = new SHA1CryptoServiceProvider();
-			byte[] hashData = sha1.ComputeHash(Encoding.UTF8.GetBytes(base64Key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"));
+			byte[] hashData = sha1.ComputeHash(Utf8NoBOM.GetBytes(base64Key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")); // It may be incorrect to use Utf8NoBOM here.
 			return Convert.ToBase64String(hashData);
 		}
 
@@ -1255,9 +1257,9 @@ namespace BPUtil.SimpleHttp
 							try
 							{
 								TcpClient s = listener.AcceptTcpClient();
-								if (s.ReceiveTimeout < 10000 && s.ReceiveTimeout != 0)
+								if (s.ReceiveTimeout < 10000/* && s.ReceiveTimeout != 0*/) // Timeout of 0 is infinite
 									s.ReceiveTimeout = 10000;
-								if (s.SendTimeout < 10000 && s.SendTimeout != 0)
+								if (s.SendTimeout < 10000/* && s.SendTimeout != 0*/) // Timeout of 0 is infinite
 									s.SendTimeout = 10000;
 								if (ReceiveBufferSize != null)
 									s.ReceiveBufferSize = ReceiveBufferSize.Value;

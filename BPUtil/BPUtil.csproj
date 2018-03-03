@@ -9,13 +9,14 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>BPUtil</RootNamespace>
     <AssemblyName>BPUtil</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SccProjectName>SAK</SccProjectName>
     <SccLocalPath>SAK</SccLocalPath>
     <SccAuxPath>SAK</SccAuxPath>
     <SccProvider>SAK</SccProvider>
-    <TargetFrameworkProfile />
+    <TargetFrameworkProfile>
+    </TargetFrameworkProfile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -55,8 +56,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BasicEventTimer.cs" />
+    <Compile Include="BPMath.cs" />
+    <Compile Include="BPMisc.cs" />
     <Compile Include="ByteUtil.cs" />
+    <Compile Include="ConsoleAppHelper.cs" />
     <Compile Include="CookieAwareWebClient.cs" />
+    <Compile Include="Extensions.cs" />
     <Compile Include="Forms\ServiceManager.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -66,6 +71,8 @@
     <Compile Include="Globals.cs" />
     <Compile Include="Hash.cs" />
     <Compile Include="Hex.cs" />
+    <Compile Include="IO\IDataStream.cs" />
+    <Compile Include="IO\MemoryDataStream.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="LogReader.cs" />
     <Compile Include="NumberUtil.cs" />
@@ -95,6 +102,7 @@
     <Compile Include="Try.cs" />
     <Compile Include="UdpBroadcaster.cs" />
     <Compile Include="WaitProgressivelyLonger.cs" />
+    <Compile Include="WebRequestUtility.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Forms\ServiceManager.resx">

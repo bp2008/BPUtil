@@ -18,5 +18,14 @@ namespace BPUtil
 							 .Select(x => Convert.ToByte(hex.Substring(x, 2), 16))
 							 .ToArray();
 		}
+		/// <summary>
+		/// Converts a prefixed hex string (e.g. "0x185b8ae584") to a long.
+		/// </summary>
+		/// <param name="prefixedHex"></param>
+		/// <returns></returns>
+		public static long PrefixedHexToLong(string prefixedHex)
+		{
+			return Convert.ToInt64(prefixedHex, 16);
+		}
 	}
 }

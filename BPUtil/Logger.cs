@@ -96,9 +96,9 @@ namespace BPUtil
 				if ((logType & LoggingMode.Console) > 0)
 				{
 					Console.ForegroundColor = ConsoleColor.Green;
-					Console.WriteLine(DateTime.Now.ToString());
+					Console.Write(DateTime.Now.ToString());
 					Console.ResetColor();
-					Console.WriteLine(message);
+					Console.WriteLine(": " + message);
 				}
 				if ((logType & LoggingMode.File) > 0)
 				{

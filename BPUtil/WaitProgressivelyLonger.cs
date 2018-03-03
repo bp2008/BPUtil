@@ -14,19 +14,21 @@ namespace BPUtil
 		/// sleepTime increases by this much each time Wait is called.
 		/// </summary>
 		private double sleepTimeModifierMs;
+		private double sleepTime = 1;
 		/// <summary>
 		/// 
 		/// </summary>
-		/// <param name="maxSleepTimeMs">The waiting time will not increase past this value</param>
+		/// <param name="maxSleepTimeMs">The waiting time will not increase beyond this value.</param>
 		/// <param name="sleepTimeModifierMs">The waiting time will increase by this much each time Wait() is called.</param>
-		public WaitProgressivelyLonger(int maxSleepTimeMs = 250, double sleepTimeModifierMs = 1)
+		/// <param name="startSleepTimeMs">The time to sleep the first time Wait() is called.</param>
+		public WaitProgressivelyLonger(int maxSleepTimeMs = 250, double sleepTimeModifierMs = 1, double startSleepTimeMs = 1)
 		{
 			this.sleepTimeCutoff = maxSleepTimeMs - sleepTimeModifierMs;
 			this.sleepTimeModifierMs = Math.Max(0.001, sleepTimeModifierMs);
+			this.sleepTime = startSleepTimeMs;
 		}
 		//private bool doReset = true;
 		//private Stopwatch sw = new Stopwatch();
-		private double sleepTime = 1;
 
 		public void Wait()
 		{
@@ -43,8 +45,12 @@ namespace BPUtil
 			//else
 			//{
 			Thread.Sleep((int)sleepTime);
-			if (sleepTime <= sleepTimeCutoff)
+			if (sleepTime < sleepTimeCutoff)
+			{
 				sleepTime += sleepTimeModifierMs;
+				if (sleepTime > sleepTimeCutoff)
+					sleepTime = sleepTimeCutoff;
+			}
 			//Thread.Sleep(Math.Min(250, timesSlept/50));
 			//}
 		}
