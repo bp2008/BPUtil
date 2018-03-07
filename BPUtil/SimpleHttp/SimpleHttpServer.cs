@@ -119,6 +119,7 @@ namespace BPUtil.SimpleHttp
 		/// The mimetype of the posted content.
 		/// </summary>
 		public string postContentType = "";
+
 		/// <summary>
 		/// The raw posted content as a string, populated only if the mimetype was "application/x-www-form-urlencoded"
 		/// </summary>
@@ -254,6 +255,11 @@ namespace BPUtil.SimpleHttp
 		/// The type of compression that will be used for the response stream.
 		/// </summary>
 		public CompressionType compressionType { get; private set; } = CompressionType.None;
+
+		/// <summary>
+		/// This is a reference to the MemoryStream containing the post body, for internal use only by the ProxyTo method.
+		/// </summary>
+		private MemoryStream _internal_post_body_for_proxy;
 		#endregion
 
 		public HttpProcessor(TcpClient s, HttpServer srv, X509Certificate2 ssl_certificate = null)
@@ -396,11 +402,13 @@ namespace BPUtil.SimpleHttp
 				{
 					outputStream.Dispose();
 				}
+				catch (ThreadAbortException) { throw; }
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 				try
 				{
 					rawOutputStream.Dispose();
 				}
+				catch (ThreadAbortException) { throw; }
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 				inputStream = null; outputStream = null; rawOutputStream = null;
 			}
@@ -417,12 +425,14 @@ namespace BPUtil.SimpleHttp
 					if (tcpClient != null)
 						tcpClient.Close();
 				}
+				catch (ThreadAbortException) { throw; }
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 				try
 				{
 					if (tcpStream != null)
-						tcpStream.Close();
+						tcpStream.Dispose();
 				}
+				catch (ThreadAbortException) { throw; }
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 			}
 		}
@@ -503,9 +513,29 @@ namespace BPUtil.SimpleHttp
 					pos++; // strip any spaces
 
 				string value = line.Substring(pos, line.Length - pos);
-				httpHeaders[name.ToLower()] = value;
-				httpHeadersRaw[name] = value;
+				AddOrUpdateHeaderValue(name, value);
 			}
+		}
+
+		/// <summary>
+		/// Adds or updates the header with the specified value.  If the header already has a value in our map(s), a comma will be appended, then the new value will be appended.
+		/// </summary>
+		/// <param name="headerName"></param>
+		/// <param name="value"></param>
+		private void AddOrUpdateHeaderValue(string headerName, string value)
+		{
+			string lower = headerName.ToLower();
+			string existingValue = "";
+
+			if (httpHeaders.TryGetValue(lower, out existingValue))
+				httpHeaders[lower] = existingValue + "," + value;
+			else
+				httpHeaders[lower] = value;
+
+			if (httpHeadersRaw.TryGetValue(headerName, out existingValue))
+				httpHeadersRaw[headerName] = existingValue + "," + value;
+			else
+				httpHeadersRaw[headerName] = value;
 		}
 
 		/// <summary>
@@ -529,6 +559,7 @@ namespace BPUtil.SimpleHttp
 			int content_len = 0;
 			using (MemoryStream ms = new MemoryStream())
 			{
+				_internal_post_body_for_proxy = ms;
 				string content_length_str = GetHeaderValue("Content-Length");
 				if (!string.IsNullOrWhiteSpace(content_length_str))
 				{
@@ -571,19 +602,26 @@ namespace BPUtil.SimpleHttp
 				postContentType = GetHeaderValue("Content-Type");
 				if (postContentType != null && postContentType.Contains("application/x-www-form-urlencoded"))
 				{
-					StreamReader sr = new StreamReader(ms);
+					StreamReader sr = new StreamReader(ms, Utf8NoBOM);
 					postFormDataRaw = sr.ReadToEnd();
-					sr.Close();
 
 					RawPostParams = ParseQueryStringArguments(postFormDataRaw, false, true, convertPlusToSpace: true);
 					PostParams = ParseQueryStringArguments(postFormDataRaw, false, convertPlusToSpace: true);
 
-					srv.handlePOSTRequest(this, null);
+					try
+					{
+						srv.handlePOSTRequest(this, null);
+					}
+					finally
+					{
+						sr.Dispose();
+					}
 				}
 				else
 				{
 					srv.handlePOSTRequest(this, new StreamReader(ms, Utf8NoBOM));
 				}
+				_internal_post_body_for_proxy = null;
 			}
 		}
 		#region Response Compression
@@ -721,6 +759,134 @@ namespace BPUtil.SimpleHttp
 				value = defaultValue;
 			return value;
 		}
+
+		#region Request Proxy Http(s)
+		/// <summary>
+		/// Acts as a proxy server, sending the request to a different URL.  This method starts a new (and unpooled) thread to handle the response from the remote server.
+		/// The "Host" header is rewritten (or added) and output as the first header.
+		/// </summary>
+		/// <param name="newUrl">The URL to proxy the original request to.</param>
+		/// <param name="networkTimeoutMs">The send and receive timeout to set for both TcpClients, in milliseconds.</param>
+		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
+		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
+		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null)
+		{
+			responseWritten = true;
+			Thread ResponseProxyThread = null;
+			Stream proxyStream = null;
+			try
+			{
+				// Connect to the server we're proxying to.
+				Uri newUri = new Uri(newUrl);
+				TcpClient proxyClient = new TcpClient();
+				proxyClient.Connect(newUri.Host, newUri.Port);
+				proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
+				proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
+				proxyStream = proxyClient.GetStream();
+				if (newUri.Scheme == "https")
+				{
+					try
+					{
+						System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
+						if (acceptAnyCert)
+							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
+						proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
+						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(newUri.Host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+					}
+					catch (ThreadAbortException) { throw; }
+					catch (SocketException) { throw; }
+					catch (Exception ex)
+					{
+						SimpleHttpLogger.LogVerbose(ex);
+						return;
+					}
+				}
+
+				// Begin proxying by sending what we've already read from this.inputStream.
+				// The first line of our HTTP request will be different from the original.
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, http_method + ' ' + newUri.PathAndQuery + ' ' + http_protocol_versionstring + "\r\n", snoopy);
+				// After the first line come the headers.
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + newUri.Host + "\r\n", snoopy);
+				foreach (KeyValuePair<string, string> header in httpHeadersRaw)
+					if (header.Key.ToLower() != "host")
+					{
+						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
+					}
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
+
+				// Write the original POST body if there was one.
+				if (_internal_post_body_for_proxy != null)
+				{
+					long remember_position = _internal_post_body_for_proxy.Position;
+					_internal_post_body_for_proxy.Seek(0, SeekOrigin.Begin);
+					byte[] buf = _internal_post_body_for_proxy.ToArray();
+					_ProxyData(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
+					_internal_post_body_for_proxy.Seek(remember_position, SeekOrigin.Begin);
+				}
+
+				// Start a thread to connect to newUrl and proxy its response to our client.
+				Thread parentThread = Thread.CurrentThread;
+				ResponseProxyThread = new Thread(() =>
+				{
+					try
+					{
+						CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, proxyStream, this.rawOutputStream, snoopy);
+					}
+					catch (ThreadAbortException) { }
+					catch (Exception ex)
+					{
+						if (ex.InnerException is ThreadAbortException)
+							return;
+						SimpleHttpLogger.LogVerbose(ex);
+					}
+				});
+				ResponseProxyThread.IsBackground = true;
+				ResponseProxyThread.Start();
+
+				// The current thread will handle any additional incoming data from our client and proxy it to newUrl.
+				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, this.inputStream, proxyStream, snoopy);
+			}
+			catch (ThreadAbortException) { throw; }
+			catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+		}
+		private void _ProxyString(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy)
+		{
+			ProxyDataItem item = new ProxyDataItem(Direction, str);
+			snoopy?.AddItem(item);
+			//DebugLogStreamWrite(item.ToString());
+			byte[] buf = Utf8NoBOM.GetBytes(str);
+			target.Write(buf, 0, buf.Length);
+		}
+		private void _ProxyData(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy)
+		{
+			if (buf.Length != length)
+				buf = ByteUtil.SubArray(buf, 0, length);
+			ProxyDataItem item = new ProxyDataItem(Direction, buf);
+			snoopy?.AddItem(item);
+			//DebugLogStreamWrite(item.ToString() + "\r\n");
+			target.Write(buf, 0, buf.Length);
+		}
+		//private object DebugWriterLock = new object();
+		//private int rnd = StaticRandom.Next();
+		//private void DebugLogStreamWrite(string content)
+		//{
+		//	lock (DebugWriterLock)
+		//	{
+		//		File.AppendAllText(rnd + ".txt", content);
+		//	}
+		//}
+		private void CopyStreamUntilClosed(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
+		{
+			byte[] buf = new byte[16000];
+			int read = 1;
+			while (read > 0)
+			{
+				read = source.Read(buf, 0, buf.Length);
+				if (read > 0)
+					_ProxyData(Direction, target, buf, read, snoopy);
+			}
+		}
+		#endregion
 
 		#region Parameter parsing
 		/// <summary>

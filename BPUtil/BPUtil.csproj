@@ -92,6 +92,7 @@
     <Compile Include="SimpleHttp\Crypto\Win32Native.cs" />
     <Compile Include="SimpleHttp\HttpCompressionHelper.cs" />
     <Compile Include="SimpleHttp\NetworkAddressInfo.cs" />
+    <Compile Include="SimpleHttp\ProxyDataBuffer.cs" />
     <Compile Include="SimpleThreadPool.cs" />
     <Compile Include="SimpleHttp\GlobalThrottledStream.cs" />
     <Compile Include="SimpleHttp\Mime.cs" />
