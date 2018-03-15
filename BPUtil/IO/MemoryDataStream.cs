@@ -11,14 +11,36 @@ namespace BPUtil
 {
 	public class MemoryDataStream : MemoryStream, IDataStream
 	{
+		/// <summary>
+		/// Initializes a new non-resizable instance of the MemoryDataStream class based on the specified byte array.
+		/// </summary>
+		/// <param name="buffer">The array of unsigned bytes from which to create the current stream.</param>
+		public MemoryDataStream(byte[] buffer) : base(buffer)
+		{
+		}
+
+		/// <summary>
+		/// Initializes a new instance of the MemoryDataStream class with an expandable capacity initialized as specified.
+		/// </summary>
+		/// <param name="capacity">The initial size of the internal array in bytes.</param>
 		public MemoryDataStream(int capacity) : base(capacity)
 		{
 		}
 
+		/// <summary>
+		/// Initializes a new instance of the MemoryDataStream class with an expandable capacity initialized to zero.
+		/// </summary>
 		public MemoryDataStream()
 		{
 		}
-
+		/// <summary>
+		/// Writes a block of bytes to the current stream using data read from a buffer. With this overload, the entire buffer will be written.
+		/// </summary>
+		/// <param name="buffer">The buffer to write data from.</param>
+		public void Write(byte[] buffer)
+		{
+			Write(buffer, 0, buffer.Length);
+		}
 		public void WriteInt16(short num)
 		{
 			ByteUtil.WriteInt16(num, this);

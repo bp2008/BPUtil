@@ -41,20 +41,28 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public HttpServer srv;
 
-		private Stream inputStream;
+		/// <summary>
+		/// This stream is for reading and writing binary data.
+		/// 
+		/// Be careful to flush [tcpStream] or [outputStream] before switching between them!!
+		/// 
+		/// This stream is typically either a NetworkStream or a GzipStream.
+		/// </summary>
+		public Stream tcpStream;
 
 		/// <summary>
-		/// Be careful to flush each output stream before using a different one!!
-		/// 
 		/// This stream is for writing text data.
+		/// Be careful to flush [tcpStream] or [outputStream] before switching between them!!
 		/// </summary>
 		public StreamWriter outputStream;
+
 		/// <summary>
 		/// Be careful to flush each output stream before using a different one!!
 		/// 
 		/// This stream is for writing binary data.
 		/// </summary>
-		public Stream rawOutputStream;
+		[Obsolete("This property is deprecated and may be removed in a future version of BPUtil")]
+		public Stream rawOutputStream { get { return tcpStream; } }
 
 		/// <summary>
 		/// The cookies sent by the remote client.
@@ -130,9 +138,10 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public bool responseWritten = false;
 
+		#region Properties dealing with the IP Address of the remote host
 		private int isLanConnection = -1;
 		/// <summary>
-		/// Returns true if the remote client's ipv4 address is in the same subnet as any of the server's ipv4 addresses.
+		/// Returns true if the remote client's IP address is in the same subnet as any of the server's IP addresses.
 		/// </summary>
 		public bool IsLanConnection
 		{
@@ -140,13 +149,12 @@ namespace BPUtil.SimpleHttp
 			{
 				if (isLanConnection == -1)
 				{
-					byte[] remoteBytes = RemoteIPAddressBytes;
-					if (remoteBytes == null || remoteBytes.Length != 4)
+					if (RemoteIPAddress == null)
 						isLanConnection = 0;
 					else
 					{
 						NetworkAddressInfo addressInfo = srv.GetAddressInfo();
-						isLanConnection = addressInfo.IsSameLAN(remoteBytes) ? 1 : 0;
+						isLanConnection = addressInfo.IsSameLAN(RemoteIPAddress) ? 1 : 0;
 					}
 				}
 				return isLanConnection == 1;
@@ -154,7 +162,7 @@ namespace BPUtil.SimpleHttp
 		}
 		private int isLocalConnection = -1;
 		/// <summary>
-		/// Returns true if the remote client's ipv4 address is an exact match with any of the server's ipv4 addresses.
+		/// Returns true if the remote client's IP address is an exact match with any of the server's IP addresses.
 		/// </summary>
 		public bool IsLocalConnection
 		{
@@ -162,13 +170,12 @@ namespace BPUtil.SimpleHttp
 			{
 				if (isLocalConnection == -1)
 				{
-					byte[] remoteBytes = RemoteIPAddressBytes;
-					if (remoteBytes == null || remoteBytes.Length != 4)
+					if (RemoteIPAddress == null)
 						isLocalConnection = 0;
 					else
 					{
 						NetworkAddressInfo addressInfo = srv.GetAddressInfo();
-						isLocalConnection = addressInfo.IsSameMachine(remoteBytes) ? 1 : 0;
+						isLocalConnection = addressInfo.IsSameMachine(RemoteIPAddress) ? 1 : 0;
 					}
 				}
 				return isLocalConnection == 1;
@@ -183,11 +190,10 @@ namespace BPUtil.SimpleHttp
 					return remoteIPAddressBytes;
 				try
 				{
-					if (tcpClient != null)
+					if (RemoteIPAddress != null)
 					{
-						IPAddress remoteAddress;
-						if (IPAddress.TryParse(RemoteIPAddress, out remoteAddress) && remoteAddress.AddressFamily == AddressFamily.InterNetwork)
-							remoteIPAddressBytes = remoteAddress.GetAddressBytes();
+						if (RemoteIPAddress.AddressFamily == AddressFamily.InterNetwork || RemoteIPAddress.AddressFamily == AddressFamily.InterNetworkV6)
+							remoteIPAddressBytes = RemoteIPAddress.GetAddressBytes();
 					}
 				}
 				catch (ThreadAbortException) { throw; }
@@ -199,20 +205,20 @@ namespace BPUtil.SimpleHttp
 				return remoteIPAddressBytes;
 			}
 		}
-		protected string remoteIPAddress = null;
+		protected string remoteIPAddressStr = null;
 		/// <summary>
-		/// Returns the remote client's IP address, or an empty string if the remote IP address is somehow not available.
+		/// Returns the remote client's IP address as a string, or null if the remote IP address is somehow not available.
 		/// </summary>
-		public string RemoteIPAddress
+		public string RemoteIPAddressStr
 		{
 			get
 			{
-				if (!string.IsNullOrEmpty(remoteIPAddress))
-					return remoteIPAddress;
+				if (!string.IsNullOrEmpty(remoteIPAddressStr))
+					return remoteIPAddressStr;
 				try
 				{
-					if (tcpClient != null)
-						remoteIPAddress = tcpClient.Client.RemoteEndPoint.ToString().Split(':')[0];
+					if (RemoteIPAddress != null)
+						remoteIPAddressStr = RemoteIPAddress.ToString();
 				}
 				catch (ThreadAbortException) { throw; }
 				catch (SocketException) { throw; }
@@ -220,7 +226,35 @@ namespace BPUtil.SimpleHttp
 				{
 					SimpleHttpLogger.Log(ex);
 				}
-				return remoteIPAddress;
+				return remoteIPAddressStr;
+			}
+		}
+		private IPAddress remoteIpAddress = null;
+		/// <summary>
+		/// Returns the remote client's IP address, or null if the remote IP address is somehow not available.
+		/// </summary>
+		public IPAddress RemoteIPAddress
+		{
+			get
+			{
+				if (remoteIpAddress != null)
+					return remoteIpAddress;
+
+				try
+				{
+					if (tcpClient != null && tcpClient.Client.RemoteEndPoint is IPEndPoint)
+					{
+						IPEndPoint ipep = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
+						remoteIpAddress = ipep.Address;
+					}
+				}
+				catch (ThreadAbortException) { throw; }
+				catch (SocketException) { throw; }
+				catch (Exception ex)
+				{
+					SimpleHttpLogger.Log(ex);
+				}
+				return remoteIpAddress;
 			}
 		}
 
@@ -228,6 +262,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Returns the remote client's IPv4 address as a 32 bit unsigned integer.
 		/// </summary>
+		[Obsolete("This method does not support IPv6 addresses")]
 		public uint RemoteIPAddressInt
 		{
 			get
@@ -249,6 +284,8 @@ namespace BPUtil.SimpleHttp
 				return remoteIPAddressInt;
 			}
 		}
+		#endregion
+
 		public readonly bool secure_https;
 		private X509Certificate2 ssl_certificate;
 		/// <summary>
@@ -308,7 +345,6 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		internal void process()
 		{
-			Stream tcpStream = null;
 			try
 			{
 				tcpClient.SendBufferSize = 65536;
@@ -328,13 +364,13 @@ namespace BPUtil.SimpleHttp
 						return;
 					}
 				}
-				int inputStreamThrottlingRuleset = 1;
-				int outputStreamThrottlingRuleset = 0;
-				if (IsLanConnection)
-					inputStreamThrottlingRuleset = outputStreamThrottlingRuleset = 2;
-				inputStream = new BufferedStream(new GlobalThrottledStream(tcpStream, inputStreamThrottlingRuleset, RemoteIPAddressInt));
-				rawOutputStream = new GlobalThrottledStream(tcpStream, outputStreamThrottlingRuleset, RemoteIPAddressInt);
-				outputStream = new StreamWriter(rawOutputStream, Utf8NoBOM);
+				//int inputStreamThrottlingRuleset = 1;
+				//int outputStreamThrottlingRuleset = 0;
+				//if (IsLanConnection)
+				//	inputStreamThrottlingRuleset = outputStreamThrottlingRuleset = 2;
+				//inputStream =  new GlobalThrottledStream(tcpStream, inputStreamThrottlingRuleset, RemoteIPAddressInt);
+				//rawOutputStream = new GlobalThrottledStream(tcpStream, outputStreamThrottlingRuleset, RemoteIPAddressInt);
+				outputStream = new StreamWriter(tcpStream, Utf8NoBOM);
 				try
 				{
 					parseRequest();
@@ -343,7 +379,7 @@ namespace BPUtil.SimpleHttp
 					{
 						string headerValue = GetHeaderValue("x-real-ip");
 						if (!string.IsNullOrWhiteSpace(headerValue))
-							remoteIPAddress = headerValue;
+							remoteIPAddressStr = headerValue;
 					}
 					RawQueryString = ParseQueryStringArguments(this.request_url.Query, preserveKeyCharacterCase: true);
 					QueryString = ParseQueryStringArguments(this.request_url.Query);
@@ -353,13 +389,13 @@ namespace BPUtil.SimpleHttp
 						if (http_method.Equals("GET"))
 						{
 							if (shouldLogRequestsToFile())
-								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddress, "GET", request_url.OriginalString);
+								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "GET", request_url.OriginalString);
 							handleGETRequest();
 						}
 						else if (http_method.Equals("POST"))
 						{
 							if (shouldLogRequestsToFile())
-								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddress, "POST", request_url.OriginalString);
+								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "POST", request_url.OriginalString);
 							handlePOSTRequest();
 						}
 					}
@@ -382,7 +418,7 @@ namespace BPUtil.SimpleHttp
 				{
 					SimpleHttpLogger.LogVerbose(e);
 					if (shouldLogRequestsToFile())
-						SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddress, "FAIL", request_url.OriginalString);
+						SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
 					if (!responseWritten)
 						this.writeFailure(e.Message);
 				}
@@ -391,12 +427,12 @@ namespace BPUtil.SimpleHttp
 					if (!isOrdinaryDisconnectException(e))
 						SimpleHttpLogger.LogVerbose(e);
 					if (shouldLogRequestsToFile())
-						SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddress, "FAIL", request_url.OriginalString);
+						SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
 					if (!responseWritten)
 						this.writeFailure("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
 				}
 				outputStream.Flush();
-				rawOutputStream.Flush();
+				tcpStream.Flush();
 				// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
 				try
 				{
@@ -406,11 +442,12 @@ namespace BPUtil.SimpleHttp
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 				try
 				{
-					rawOutputStream.Dispose();
+					tcpStream.Dispose();
 				}
 				catch (ThreadAbortException) { throw; }
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
-				inputStream = null; outputStream = null; rawOutputStream = null;
+				outputStream = null;
+				tcpStream = null;
 			}
 			catch (ThreadAbortException) { throw; }
 			catch (Exception ex)
@@ -476,7 +513,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		private void parseRequest()
 		{
-			string request = streamReadLine(inputStream);
+			string request = streamReadLine(tcpStream);
 			if (request == null)
 				throw new Exception("End of stream");
 			string[] tokens = request.Split(' ');
@@ -500,7 +537,7 @@ namespace BPUtil.SimpleHttp
 		private void readHeaders()
 		{
 			string line;
-			while ((line = streamReadLine(inputStream)) != "")
+			while ((line = streamReadLine(tcpStream)) != "")
 			{
 				if (line == null)
 					throw new Exception("End of stream");
@@ -575,7 +612,7 @@ namespace BPUtil.SimpleHttp
 						int to_read = content_len;
 						while (to_read > 0)
 						{
-							int numread = this.inputStream.Read(buf, 0, Math.Min(BUF_SIZE, to_read));
+							int numread = this.tcpStream.Read(buf, 0, Math.Min(BUF_SIZE, to_read));
 							if (numread == 0)
 							{
 								if (to_read == 0)
@@ -655,12 +692,12 @@ namespace BPUtil.SimpleHttp
 				return;
 			if (compressionType == CompressionType.GZip)
 			{
-				if (rawOutputStream is GZipStream)
+				if (tcpStream is GZipStream)
 					return;
 				outputStream.Flush();
-				rawOutputStream.Flush();
-				rawOutputStream = new GZipStream(rawOutputStream, CompressionLevel.Optimal, false);
-				outputStream = new StreamWriter(rawOutputStream);
+				tcpStream.Flush();
+				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, false);
+				outputStream = new StreamWriter(tcpStream);
 			}
 		}
 		#endregion
@@ -772,17 +809,15 @@ namespace BPUtil.SimpleHttp
 		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null)
 		{
 			responseWritten = true;
-			Thread ResponseProxyThread = null;
-			Stream proxyStream = null;
 			try
 			{
 				// Connect to the server we're proxying to.
 				Uri newUri = new Uri(newUrl);
 				TcpClient proxyClient = new TcpClient();
-				proxyClient.Connect(newUri.Host, newUri.Port);
 				proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
 				proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
-				proxyStream = proxyClient.GetStream();
+				proxyClient.Connect(newUri.DnsSafeHost, newUri.Port);
+				Stream proxyStream = proxyClient.GetStream();
 				if (newUri.Scheme == "https")
 				{
 					try
@@ -791,7 +826,7 @@ namespace BPUtil.SimpleHttp
 						if (acceptAnyCert)
 							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
 						proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(newUri.Host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(newUri.DnsSafeHost, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (SocketException) { throw; }
@@ -826,11 +861,11 @@ namespace BPUtil.SimpleHttp
 
 				// Start a thread to connect to newUrl and proxy its response to our client.
 				Thread parentThread = Thread.CurrentThread;
-				ResponseProxyThread = new Thread(() =>
+				Thread ResponseProxyThread = new Thread(() =>
 				{
 					try
 					{
-						CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, proxyStream, this.rawOutputStream, snoopy);
+						CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, proxyStream, this.tcpStream, snoopy);
 					}
 					catch (ThreadAbortException) { }
 					catch (Exception ex)
@@ -844,7 +879,8 @@ namespace BPUtil.SimpleHttp
 				ResponseProxyThread.Start();
 
 				// The current thread will handle any additional incoming data from our client and proxy it to newUrl.
-				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, this.inputStream, proxyStream, snoopy);
+				this.tcpClient.NoDelay = true;
+				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, this.tcpStream, proxyStream, snoopy);
 			}
 			catch (ThreadAbortException) { throw; }
 			catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
@@ -1337,7 +1373,7 @@ namespace BPUtil.SimpleHttp
 				FileInfo fiExe;
 				try
 				{
-					fiExe = new FileInfo(System.Reflection.Assembly.GetExecutingAssembly().Location);
+					fiExe = new FileInfo(System.Reflection.Assembly.GetEntryAssembly().Location);
 				}
 				catch
 				{
@@ -1350,7 +1386,7 @@ namespace BPUtil.SimpleHttp
 						fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
 					}
 				}
-				FileInfo fiCert = new FileInfo(fiExe.Directory.FullName + "\\SimpleHttpServer-SslCert.pfx");
+				FileInfo fiCert = new FileInfo(fiExe.Directory.FullName + "/SimpleHttpServer-SslCert.pfx");
 				if (fiCert.Exists)
 					ssl_certificate = new X509Certificate2(fiCert.FullName, "N0t_V3ry-S3cure#lol");
 				else
@@ -1423,9 +1459,10 @@ namespace BPUtil.SimpleHttp
 							try
 							{
 								TcpClient s = listener.AcceptTcpClient();
-								if (s.ReceiveTimeout < 10000/* && s.ReceiveTimeout != 0*/) // Timeout of 0 is infinite
+								// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
+								if (s.ReceiveTimeout < 10000 && s.ReceiveTimeout != 0) // Timeout of 0 is infinite
 									s.ReceiveTimeout = 10000;
-								if (s.SendTimeout < 10000/* && s.SendTimeout != 0*/) // Timeout of 0 is infinite
+								if (s.SendTimeout < 10000 && s.SendTimeout != 0) // Timeout of 0 is infinite
 									s.SendTimeout = 10000;
 								if (ReceiveBufferSize != null)
 									s.ReceiveBufferSize = ReceiveBufferSize.Value;

@@ -19,14 +19,15 @@ namespace BPUtil
 			ServicePointManager.DefaultConnectionLimit = int.MaxValue;
 			try
 			{
-				Initialize(System.Reflection.Assembly.GetEntryAssembly().Location);
+				System.Reflection.Assembly assembly = System.Reflection.Assembly.GetEntryAssembly();
+				InitializeProgram(assembly.Location, assembly.GetName().Name);
 			}
 			catch { }
 		}
 		/// <summary>
-		/// Call this to initialize global static variables.
+		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is the same folder as the exe.
 		/// </summary>
-		/// <param name="exePath">Pass in the path to the exe in the root directory of the application.  The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.</param>
+		/// <param name="exePath">Pass in the path to the exe in the root directory of the application.  The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.  The exe name is used to create the CommonApplicationDataBase string.</param>
 		/// <param name="writablePath">A string to be appended to ApplicationDirectoryBase to create WritableDirectoryBase.  Example: "" or "writable/" or "somedir/writable/"</param>
 		public static void Initialize(string exePath, string writablePath = "")
 		{
@@ -47,6 +48,18 @@ namespace BPUtil
 			writableDirectoryBase = applicationDirectoryBase + writablePath.TrimStart('\\', '/').Replace('\\', '/');
 			configFilePath = writableDirectoryBase + "Config.cfg";
 			errorFilePath = writableDirectoryBase + executableNameWithoutExtension + "Errors.txt";
+		}
+		/// <summary>
+		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is in Environment.SpecialFolder.CommonApplicationData.
+		/// </summary>
+		/// <param name="exePath">Pass in the path to the exe in the root directory of the application.  The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.  The exe name is used to create the CommonApplicationDataBase string.</param>
+		/// <param name="programName">A globally unique program name that does not change and is unlikely to collide with other programs on the user's system.  This is used as part of the WritableDirectoryBase folder path, so you could pass in "MyApp" or to be even safer, "MyCompany/MyApp".</param>
+		public static void InitializeProgram(string exePath, string programName)
+		{
+			Initialize(exePath);
+
+			writableDirectoryBase = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+			writableDirectoryBase = writableDirectoryBase.TrimEnd('\\', '/').Replace('\\', '/') + '/' + programName + '/';
 		}
 		private static string executablePath;
 		private static string executableNameWithExtension;
@@ -92,7 +105,7 @@ namespace BPUtil
 		}
 		private static string errorFilePath;
 		/// <summary>
-		/// Gets the full path to the error log file.  Includes trailing '/'.
+		/// Gets the full path to the error log file.
 		/// </summary>
 		public static string ErrorFilePath
 		{
@@ -109,6 +122,6 @@ namespace BPUtil
 		/// <summary>
 		/// The BPUtil version number, not to be confused with the version number of the application this is included in.  This version number is often neglected.
 		/// </summary>
-		public static string Version = "0.5.1";
+		public static string Version = "0.6";
 	}
 }

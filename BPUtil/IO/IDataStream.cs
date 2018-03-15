@@ -9,6 +9,7 @@ namespace BPUtil
 	public interface IDataStream
 	{
 		void Write(byte[] buffer, int offset, int count);
+		void Write(byte[] buffer);
 		int Read(byte[] buffer, int offset, int count);
 		void WriteByte(byte b);
 		void WriteInt16(short num);

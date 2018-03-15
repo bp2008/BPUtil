@@ -79,6 +79,7 @@
     <Compile Include="ObjectPool.cs" />
     <Compile Include="Platform.cs" />
     <Compile Include="PrivateAccessor.cs" />
+    <Compile Include="SecureRandom.cs" />
     <Compile Include="SerializableObjectBase.cs" />
     <Compile Include="SetTimeout.cs" />
     <Compile Include="SimpleHttp\Crypto\CertProperties.cs" />

@@ -89,6 +89,13 @@ namespace BPUtil
 		{
 			return BitConverter.ToString(GetSHA256Bytes(s)).Replace("-", "").ToLower();
 		}
+		/// <summary>
+		/// Computes the SHA1 hash of the specified string, optionally appending a binary salt value.
+		/// A SHA1 hash is 20 bytes (160 bits) long.
+		/// </summary>
+		/// <param name="s">The string to hash.</param>
+		/// <param name="salt">The salt value to append to the string before hashing.</param>
+		/// <returns></returns>
 		public static byte[] GetSHA1Bytes(string s, byte[] salt = null)
 		{
 			byte[] data = utf8NoBOM.GetBytes(s);
@@ -99,6 +106,16 @@ namespace BPUtil
 				Array.Copy(salt, 0, salted, data.Length, salt.Length);
 				data = salted;
 			}
+			return GetSHA1Bytes(data);
+		}
+		/// <summary>
+		/// Computes the SHA1 hash of the specified data.
+		/// A SHA1 hash is 20 bytes (160 bits) long.
+		/// </summary>
+		/// <param name="data">The data to hash.</param>
+		/// <returns></returns>
+		public static byte[] GetSHA1Bytes(byte[] data)
+		{
 			SHA1 sha = new SHA1CryptoServiceProvider();
 			byte[] result = sha.ComputeHash(data);
 			return result;

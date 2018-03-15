@@ -12,6 +12,7 @@ namespace BPUtil
 	/// </summary>
 	public static class ByteUtil
 	{
+		public static readonly UTF8Encoding Utf8NoBOM = new UTF8Encoding(false);
 		/// <summary>
 		/// Returns true of the content of the specified byte arrays exactly match each other, or if both arrays are null.
 		/// </summary>
@@ -53,6 +54,7 @@ namespace BPUtil
 			}
 			return true;
 		}
+
 		/// <summary>
 		/// Returns a new array containing the values of the first array XORed with the values of the second array.
 		/// </summary>
@@ -129,13 +131,13 @@ namespace BPUtil
 		/// <summary>
 		/// Generates a byte array of the specified length, filled with cryptographically strong random values.
 		/// </summary>
-		/// <param name="numBytes"></param>
+		/// <param name="numBytes">The length of the byte array to create.</param>
 		/// <returns></returns>
 		public static byte[] GenerateRandomBytes(int numBytes)
 		{
-			byte[] salt = new byte[numBytes];
-			System.Security.Cryptography.RandomNumberGenerator.Create().GetBytes(salt);
-			return salt;
+			byte[] buf = new byte[numBytes];
+			System.Security.Cryptography.RandomNumberGenerator.Create().GetBytes(buf);
+			return buf;
 		}
 		#region ReadNBytes
 		/// <summary>
@@ -199,6 +201,16 @@ namespace BPUtil
 			if (BitConverter.IsLittleEndian)
 				Array.Reverse(buf);
 			return buf;
+		}
+		public static MemoryDataStream ReadNBytesToDataStream(IDataStream s, int n)
+		{
+			byte[] buffer = ReadNBytes(s, n);
+			return new MemoryDataStream(buffer);
+		}
+		public static MemoryDataStream ReadNBytesToDataStream(Stream s, int n)
+		{
+			byte[] buffer = ReadNBytes(s, n);
+			return new MemoryDataStream(buffer);
 		}
 		/// <summary>
 		/// Returns a new array containing the specified bytes from the source array.
@@ -326,6 +338,10 @@ namespace BPUtil
 		{
 			return BitConverter.ToDouble(NetworkToHostOrder(buffer, offset, 8), 0);
 		}
+		public static string ReadUtf8(byte[] buffer, int offset, int byteLength)
+		{
+			return Utf8NoBOM.GetString(buffer, offset, byteLength);
+		}
 		#endregion
 		#region Read from stream
 		public static short ReadInt16(Stream s)
@@ -359,6 +375,10 @@ namespace BPUtil
 		public static double ReadDouble(Stream s)
 		{
 			return BitConverter.ToDouble(ReadNBytesFromNetworkOrder(s, 8), 0);
+		}
+		public static string ReadUtf8(Stream s, int byteLength)
+		{
+			return Utf8NoBOM.GetString(ReadNBytes(s, byteLength), 0, byteLength);
 		}
 		#endregion
 	}
