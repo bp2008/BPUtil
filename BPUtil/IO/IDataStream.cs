@@ -29,5 +29,8 @@ namespace BPUtil
 		ulong ReadUInt64();
 		float ReadFloat();
 		double ReadDouble();
+		string ReadUtf8(int lengthBytes);
+		byte[] ReadNBytes(int length);
+		byte[] ReadNBytesFromNetworkOrder(int length);
 	}
 }

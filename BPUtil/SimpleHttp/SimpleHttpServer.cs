@@ -61,7 +61,7 @@ namespace BPUtil.SimpleHttp
 		/// 
 		/// This stream is for writing binary data.
 		/// </summary>
-		[Obsolete("This property is deprecated and may be removed in a future version of BPUtil")]
+		[Obsolete("This property is deprecated and may be removed in a future version of BPUtil. Use tcpStream instead.")]
 		public Stream rawOutputStream { get { return tcpStream; } }
 
 		/// <summary>

@@ -12,6 +12,24 @@ namespace BPUtil
 	public class MemoryDataStream : MemoryStream, IDataStream
 	{
 		/// <summary>
+		/// Initializes a new non-resizable instance of the MemoryDataStream class by reading a specified number of bytes from the provided IDataStream.
+		/// </summary>
+		/// <param name="stream">The IDataStream to copy data from for initialization of the MemoryDataStream.</param>
+		/// <param name="length">The number of bytes to read from the IDataStream.  This will be the size of the new MemoryDataStream.</param>
+		public MemoryDataStream(IDataStream stream, int length) : base(ByteUtil.ReadNBytes(stream, length))
+		{
+		}
+
+		/// <summary>
+		/// Initializes a new non-resizable instance of the MemoryDataStream class by reading a specified number of bytes from the provided Stream.
+		/// </summary>
+		/// <param name="stream">The Stream to copy data from for initialization of the MemoryDataStream.</param>
+		/// <param name="length">The number of bytes to read from the Stream.  This will be the size of the new MemoryDataStream.</param>
+		public MemoryDataStream(Stream stream, int length) : base(ByteUtil.ReadNBytes(stream, length))
+		{
+		}
+
+		/// <summary>
 		/// Initializes a new non-resizable instance of the MemoryDataStream class based on the specified byte array.
 		/// </summary>
 		/// <param name="buffer">The array of unsigned bytes from which to create the current stream.</param>
@@ -33,6 +51,7 @@ namespace BPUtil
 		public MemoryDataStream()
 		{
 		}
+
 		/// <summary>
 		/// Writes a block of bytes to the current stream using data read from a buffer. With this overload, the entire buffer will be written.
 		/// </summary>
@@ -104,6 +123,28 @@ namespace BPUtil
 		public double ReadDouble()
 		{
 			return ByteUtil.ReadDouble(this);
+		}
+		public string ReadUtf8(int lengthBytes)
+		{
+			return ByteUtil.ReadUtf8(this, lengthBytes);
+		}
+		/// <summary>
+		/// Reads a specific number of bytes from the stream, returning a byte array.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.
+		/// </summary>
+		/// <param name="length">The number of bytes to read.</param>
+		/// <returns></returns>
+		public byte[] ReadNBytes(int length)
+		{
+			return ByteUtil.ReadNBytes((Stream)this, length);
+		}
+		/// <summary>
+		/// Reads a specific number of bytes from the stream, returning a byte array.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.
+		/// </summary>
+		/// <param name="length">The number of bytes to read.</param>
+		/// <returns></returns>
+		public byte[] ReadNBytesFromNetworkOrder(int length)
+		{
+			return ByteUtil.ReadNBytesFromNetworkOrder((Stream)this, length);
 		}
 	}
 }

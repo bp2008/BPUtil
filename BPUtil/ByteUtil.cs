@@ -149,6 +149,8 @@ namespace BPUtil
 		public static byte[] ReadNBytes(IDataStream s, int n)
 		{
 			byte[] buffer = new byte[n];
+			if (n == 0)
+				return buffer; // Just to be explicit and sure about this behavior.
 			int totalRead = 0;
 			int justRead;
 			do
@@ -169,6 +171,8 @@ namespace BPUtil
 		public static byte[] ReadNBytes(Stream s, int n)
 		{
 			byte[] buffer = new byte[n];
+			if (n == 0)
+				return buffer; // Just to be explicit and sure about this behavior.
 			int totalRead = 0;
 			int justRead;
 			do
@@ -201,16 +205,6 @@ namespace BPUtil
 			if (BitConverter.IsLittleEndian)
 				Array.Reverse(buf);
 			return buf;
-		}
-		public static MemoryDataStream ReadNBytesToDataStream(IDataStream s, int n)
-		{
-			byte[] buffer = ReadNBytes(s, n);
-			return new MemoryDataStream(buffer);
-		}
-		public static MemoryDataStream ReadNBytesToDataStream(Stream s, int n)
-		{
-			byte[] buffer = ReadNBytes(s, n);
-			return new MemoryDataStream(buffer);
 		}
 		/// <summary>
 		/// Returns a new array containing the specified bytes from the source array.
@@ -338,12 +332,28 @@ namespace BPUtil
 		{
 			return BitConverter.ToDouble(NetworkToHostOrder(buffer, offset, 8), 0);
 		}
+		/// <summary>
+		/// Converts all data from the buffer to a string assuming UTF8 encoding with no byte order mark.
+		/// </summary>
+		/// <param name="buffer">The buffer to convert.</param>
+		/// <returns></returns>
+		public static string ReadUtf8(byte[] buffer)
+		{
+			return Utf8NoBOM.GetString(buffer, 0, buffer.Length);
+		}
+		/// <summary>
+		/// Reads the specified number of bytes from the buffer and converts them to a string assuming UTF8 encoding with no byte order mark.
+		/// </summary>
+		/// <param name="buffer">The buffer to read from.</param>
+		/// <param name="offset">The offset to begin reading at.</param>
+		/// <param name="byteLength">The number of bytes to read.</param>
+		/// <returns></returns>
 		public static string ReadUtf8(byte[] buffer, int offset, int byteLength)
 		{
 			return Utf8NoBOM.GetString(buffer, offset, byteLength);
 		}
 		#endregion
-		#region Read from stream
+		#region Read from stream (Big endian on the stream)
 		public static short ReadInt16(Stream s)
 		{
 			return IPAddress.NetworkToHostOrder(BitConverter.ToInt16(ReadNBytes(s, 2), 0));
@@ -376,9 +386,65 @@ namespace BPUtil
 		{
 			return BitConverter.ToDouble(ReadNBytesFromNetworkOrder(s, 8), 0);
 		}
+		/// <summary>
+		/// Reads the specified number of bytes from the stream and converts them to a string assuming UTF8 encoding with no byte order mark.
+		/// </summary>
+		/// <param name="s">The stream to read from.</param>
+		/// <param name="byteLength">The number of bytes to read.</param>
+		/// <returns></returns>
 		public static string ReadUtf8(Stream s, int byteLength)
 		{
 			return Utf8NoBOM.GetString(ReadNBytes(s, byteLength), 0, byteLength);
+		}
+		#endregion
+		#region Read from stream (Little endian on the stream)
+		public static short ReadInt16LE(Stream s)
+		{
+			if (BitConverter.IsLittleEndian)
+				return BitConverter.ToInt16(ReadNBytes(s, 2), 0);
+			return ReadInt16(s);
+		}
+		public static ushort ReadUInt16LE(Stream s)
+		{
+			if (BitConverter.IsLittleEndian)
+				return BitConverter.ToUInt16(ReadNBytes(s, 2), 0);
+			return ReadUInt16(s);
+		}
+		public static int ReadInt32LE(Stream s)
+		{
+			if (BitConverter.IsLittleEndian)
+				return BitConverter.ToInt32(ReadNBytes(s, 4), 0);
+			return ReadInt32(s);
+		}
+		public static uint ReadUInt32LE(Stream s)
+		{
+			if (BitConverter.IsLittleEndian)
+				return BitConverter.ToUInt32(ReadNBytes(s, 4), 0);
+			return ReadUInt32(s);
+		}
+		public static long ReadInt64LE(Stream s)
+		{
+			if (BitConverter.IsLittleEndian)
+				return BitConverter.ToInt64(ReadNBytes(s, 8), 0);
+			return ReadInt64(s);
+		}
+		public static ulong ReadUInt64LE(Stream s)
+		{
+			if (BitConverter.IsLittleEndian)
+				return BitConverter.ToUInt64(ReadNBytes(s, 8), 0);
+			return ReadUInt64(s);
+		}
+		public static float ReadFloatLE(Stream s)
+		{
+			if (BitConverter.IsLittleEndian)
+				return BitConverter.ToSingle(ReadNBytes(s, 4), 0);
+			return ReadFloat(s);
+		}
+		public static double ReadDoubleLE(Stream s)
+		{
+			if (BitConverter.IsLittleEndian)
+				return BitConverter.ToDouble(ReadNBytes(s, 8), 0);
+			return ReadDouble(s);
 		}
 		#endregion
 	}

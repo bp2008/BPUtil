@@ -35,9 +35,47 @@ namespace BPUtil.SimpleHttp
 				foreach (UnicastIPAddressInformation addressInfo in ipProp.UnicastAddresses)
 				{
 					if (addressInfo.Address.AddressFamily == AddressFamily.InterNetwork)
-						AddV4Address(addressInfo.Address.GetAddressBytes(), addressInfo.IPv4Mask.GetAddressBytes());
+					{
+						if (Platform.IsRunningOnMono())
+						{
+							AddV4AddressMono(addressInfo);
+						}
+						else
+							AddV4Address(addressInfo.Address.GetAddressBytes(), addressInfo.IPv4Mask.GetAddressBytes());
+					}
 					else if (addressInfo.Address.AddressFamily == AddressFamily.InterNetworkV6)
 						localIPv6Addresses.Add(addressInfo.Address);
+				}
+			}
+		}
+
+		private static int monoIPv4MaskTestState = -1;
+		/// <summary>
+		/// Works around a method that was not implemented in some mono versions.
+		/// </summary>
+		/// <param name="addressInfo"></param>
+		private void AddV4AddressMono(UnicastIPAddressInformation addressInfo)
+		{
+			if (monoIPv4MaskTestState == 0)
+				AddV4Address(addressInfo.Address.GetAddressBytes(), new byte[] { 255, 255, 255, 0 });
+			else if (monoIPv4MaskTestState == 1)
+				AddV4Address(addressInfo.Address.GetAddressBytes(), addressInfo.IPv4Mask.GetAddressBytes());
+			else
+			{
+				if (monoIPv4MaskTestState != 0)
+				{
+					try
+					{
+						AddV4Address(addressInfo.Address.GetAddressBytes(), addressInfo.IPv4Mask.GetAddressBytes());
+						monoIPv4MaskTestState = 1;
+						return;
+					}
+					catch (NotImplementedException ex)
+					{
+						Logger.Debug(ex, "Your mono version is old, and does not support retrieving IPv4 Masks for your network interfaces. Assuming 255.255.255.0 from now on.");
+						monoIPv4MaskTestState = 0;
+						AddV4Address(addressInfo.Address.GetAddressBytes(), new byte[] { 255, 255, 255, 0 });
+					}
 				}
 			}
 		}
