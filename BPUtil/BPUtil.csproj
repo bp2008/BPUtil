@@ -62,6 +62,9 @@
     <Compile Include="ConsoleAppHelper.cs" />
     <Compile Include="CookieAwareWebClient.cs" />
     <Compile Include="Extensions.cs" />
+    <Compile Include="Forms\SelfCenteredForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Forms\ServiceManager.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -92,6 +95,7 @@
     <Compile Include="SimpleHttp\Crypto\Win32ErrorHelper.cs" />
     <Compile Include="SimpleHttp\Crypto\Win32Native.cs" />
     <Compile Include="SimpleHttp\HttpCompressionHelper.cs" />
+    <Compile Include="SimpleHttp\IProcessor.cs" />
     <Compile Include="SimpleHttp\NetworkAddressInfo.cs" />
     <Compile Include="SimpleHttp\ProxyDataBuffer.cs" />
     <Compile Include="SimpleThreadPool.cs" />

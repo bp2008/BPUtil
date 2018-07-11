@@ -24,7 +24,7 @@ using System.IO.Compression;
 
 namespace BPUtil.SimpleHttp
 {
-	public class HttpProcessor
+	public class HttpProcessor : IProcessor
 	{
 		public static UTF8Encoding Utf8NoBOM = new UTF8Encoding(false);
 		private const int BUF_SIZE = 4096;
@@ -343,7 +343,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Processes the request.
 		/// </summary>
-		internal void process()
+		public void Process()
 		{
 			try
 			{
@@ -379,7 +379,21 @@ namespace BPUtil.SimpleHttp
 					{
 						string headerValue = GetHeaderValue("x-real-ip");
 						if (!string.IsNullOrWhiteSpace(headerValue))
-							remoteIPAddressStr = headerValue;
+						{
+							IPAddress addr;
+							if (IPAddress.TryParse(headerValue, out addr))
+								remoteIpAddress = addr;
+						}
+					}
+					if (srv.XForwardedForHeader)
+					{
+						string headerValue = GetHeaderValue("x-forwarded-for");
+						if (!string.IsNullOrWhiteSpace(headerValue))
+						{
+							IPAddress addr;
+							if (IPAddress.TryParse(headerValue, out addr))
+								remoteIpAddress = addr;
+						}
 					}
 					RawQueryString = ParseQueryStringArguments(this.request_url.Query, preserveKeyCharacterCase: true);
 					QueryString = ParseQueryStringArguments(this.request_url.Query);
@@ -806,13 +820,17 @@ namespace BPUtil.SimpleHttp
 		/// <param name="networkTimeoutMs">The send and receive timeout to set for both TcpClients, in milliseconds.</param>
 		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
 		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
-		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null)
+		/// <param name="host">The value of the host header, also used in SSL authentication. If null or whitespace, it is set from the [newUrl] parameter.</param>
+		/// <param name="singleRequestOnly">If true, a Connection: close header will be added, and any existing Connection header will be dropped.</param>
+		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null, bool singleRequestOnly = false)
 		{
 			responseWritten = true;
 			try
 			{
 				// Connect to the server we're proxying to.
 				Uri newUri = new Uri(newUrl);
+				if (string.IsNullOrWhiteSpace(host))
+					host = newUri.DnsSafeHost;
 				TcpClient proxyClient = new TcpClient();
 				proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
 				proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
@@ -826,7 +844,7 @@ namespace BPUtil.SimpleHttp
 						if (acceptAnyCert)
 							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
 						proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(newUri.DnsSafeHost, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (SocketException) { throw; }
@@ -841,12 +859,15 @@ namespace BPUtil.SimpleHttp
 				// The first line of our HTTP request will be different from the original.
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, http_method + ' ' + newUri.PathAndQuery + ' ' + http_protocol_versionstring + "\r\n", snoopy);
 				// After the first line come the headers.
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + newUri.Host + "\r\n", snoopy);
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
+				if (singleRequestOnly)
+					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
 				foreach (KeyValuePair<string, string> header in httpHeadersRaw)
-					if (header.Key.ToLower() != "host")
-					{
+				{
+					string keyLower = header.Key.ToLower();
+					if (keyLower != "host" && (!singleRequestOnly || keyLower != "connection"))
 						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
-					}
+				}
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
 
 				// Write the original POST body if there was one.
@@ -883,7 +904,10 @@ namespace BPUtil.SimpleHttp
 				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, this.tcpStream, proxyStream, snoopy);
 			}
 			catch (ThreadAbortException) { throw; }
-			catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+			catch (Exception ex)
+			{
+				SimpleHttpLogger.LogVerbose(ex);
+			}
 		}
 		private void _ProxyString(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy)
 		{
@@ -1228,6 +1252,7 @@ namespace BPUtil.SimpleHttp
 		public int? SendBufferSize = null;
 		public int? ReceiveBufferSize = null;
 		public bool XRealIPHeader = false;
+		public bool XForwardedForHeader = false;
 		protected volatile bool stopRequested = false;
 		protected X509Certificate2 ssl_certificate;
 		private Thread thrHttp;
@@ -1255,6 +1280,7 @@ namespace BPUtil.SimpleHttp
 		{
 			return addressInfo;
 		}
+		public readonly IPAddress bindAddr = IPAddress.Any;
 
 		public SimpleThreadPool pool;
 		/// <summary>
@@ -1263,13 +1289,16 @@ namespace BPUtil.SimpleHttp
 		/// <param name="port">The port number on which to accept regular http connections. If -1, the server will not listen for http connections.</param>
 		/// <param name="httpsPort">(Optional) The port number on which to accept https connections. If -1, the server will not listen for https connections.</param>
 		/// <param name="cert">(Optional) Certificate to use for https connections.  If null and an httpsPort was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
-		public HttpServer(int port, int httpsPort = -1, X509Certificate2 cert = null)
+		/// <param name="bindAddr">If not null, the server will bind to this address.  Default: IPAddress.Any.</param>
+		public HttpServer(int port, int httpsPort = -1, X509Certificate2 cert = null, IPAddress bindAddr = null)
 		{
 			pool = new SimpleThreadPool("SimpleHttpServer");
 
 			this.port = port;
 			this.secure_port = httpsPort;
 			this.ssl_certificate = cert;
+			if (bindAddr != null)
+				this.bindAddr = bindAddr;
 
 			if (this.port > 65535 || this.port < -1) this.port = -1;
 			if (this.secure_port > 65535 || this.secure_port < -1) this.secure_port = -1;
@@ -1321,6 +1350,17 @@ namespace BPUtil.SimpleHttp
 		}
 		#endregion
 
+		/// <summary>
+		/// A function which produces an IProcessor instance, allowing this server to be used for protocols besides HTTP.  By default, this returns a standard HttpProcessor.
+		/// </summary>
+		/// <param name="s"></param>
+		/// <param name="srv"></param>
+		/// <param name="cert"></param>
+		/// <returns></returns>
+		public virtual IProcessor MakeClientProcessor(TcpClient s, HttpServer srv, X509Certificate2 cert)
+		{
+			return new HttpProcessor(s, srv, cert);
+		}
 		private void NetworkChange_NetworkAddressChanged(object sender, EventArgs e)
 		{
 			UpdateNetworkAddresses();
@@ -1432,7 +1472,7 @@ namespace BPUtil.SimpleHttp
 					bool threwExceptionOuter = false;
 					try
 					{
-						listener = new TcpListener(IPAddress.Any, isSecureListener ? secure_port : port);
+						listener = new TcpListener(bindAddr, isSecureListener ? secure_port : port);
 						if (isSecureListener)
 							secureListener = listener;
 						else
@@ -1484,7 +1524,7 @@ namespace BPUtil.SimpleHttp
 									}
 								}
 								HttpProcessor processor = new HttpProcessor(s, this, cert);
-								pool.Enqueue(processor.process);
+								pool.Enqueue(processor.Process);
 								//	try
 								//	{
 								//		StreamWriter outputStream = new StreamWriter(s.GetStream());

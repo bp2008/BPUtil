@@ -231,7 +231,7 @@ namespace BPUtil
 			return NetworkToHostOrder(SubArray(buf, offset, length));
 		}
 		#endregion
-		#region Write to byte array
+		#region Write to byte array (Big endian in the buffer)
 		public static void WriteInt16(short num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(num)), 0, buffer, offset, 2);
@@ -264,8 +264,20 @@ namespace BPUtil
 		{
 			Array.Copy(NetworkToHostOrder(BitConverter.GetBytes(num)), 0, buffer, offset, 8);
 		}
+		/// <summary>
+		/// Writes a string to the buffer at the specified offset. The string will be encoded as UTF8 with no byte order mark. Returns the number of bytes written.
+		/// </summary>
+		/// <param name="str">String to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		public static int WriteUtf8(string str, byte[] buffer, int offset)
+		{
+			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			Array.Copy(bytes, 0, buffer, offset, bytes.Length);
+			return bytes.Length;
+		}
 		#endregion
-		#region Write to stream
+		#region Write to stream (Big endian in the stream)
 		public static void WriteInt16(short num, Stream s)
 		{
 			s.Write(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(num)), 0, 2);
@@ -298,8 +310,19 @@ namespace BPUtil
 		{
 			s.Write(NetworkToHostOrder(BitConverter.GetBytes(num)), 0, 8);
 		}
+		/// <summary>
+		/// Writes a string to the specified stream. The string will be encoded as UTF8 with no byte order mark. Returns the number of bytes written.
+		/// </summary>
+		/// <param name="str">String to write.</param>
+		/// <param name="s">Stream to write to.</param>
+		public static int WriteUtf8(string str, Stream s)
+		{
+			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			s.Write(bytes, 0, bytes.Length);
+			return bytes.Length;
+		}
 		#endregion
-		#region Read from byte array
+		#region Read from byte array (Big endian in the buffer)
 		public static short ReadInt16(byte[] buffer, int offset)
 		{
 			return IPAddress.NetworkToHostOrder(BitConverter.ToInt16(buffer, offset));
