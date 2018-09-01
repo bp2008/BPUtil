@@ -14,7 +14,7 @@ namespace BPUtil
 		/// Invokes on the GUI thread the specified action after the specified timeout.
 		/// </summary>
 		/// <param name="TheAction">The action to run.</param>
-		/// <param name="Timeout">Values less than 0 are treated as 0.
+		/// <param name="Timeout">(milliseconds) Values less than 0 are treated as 0.
 		/// If the Timeout value is 0 for an OnGui operation, the invoke process will start before this method returns, making it impossible to cancel the operation.</param>
 		/// <param name="formForInvoking">A System.Windows.Forms form, required to invoke your method on the GUI thread.</param>
 		/// <returns></returns>
@@ -26,7 +26,7 @@ namespace BPUtil
 		/// Invokes on a background thread the specified action after the specified timeout.
 		/// </summary>
 		/// <param name="TheAction">The action to run.</param>
-		/// <param name="Timeout">Values less than 0 are treated as 0.</param>
+		/// <param name="Timeout">(milliseconds) Values less than 0 are treated as 0.</param>
 		/// <returns></returns>
 		public static TimeoutHandle OnBackground(Action TheAction, int Timeout)
 		{
@@ -37,7 +37,7 @@ namespace BPUtil
 		/// This timeout will not be cancelable.
 		/// </summary>
 		/// <param name="TheAction">The action to run.</param>
-		/// <param name="Timeout">Values less than 0 are treated as 0.</param>
+		/// <param name="Timeout">(milliseconds) Values less than 0 are treated as 0.</param>
 		/// <param name="formForInvoking">A System.Windows.Forms form, required to invoke your method on the GUI thread.</param>
 		/// <returns></returns>
 		public static void AfterGuiResumesThenOnBackground(Action TheAction, int Timeout, Form formForInvoking)

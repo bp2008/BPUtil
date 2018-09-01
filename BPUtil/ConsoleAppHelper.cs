@@ -23,5 +23,18 @@ namespace BPUtil
 		[DllImport("kernel32.dll", SetLastError = true)]
 		[return: MarshalAs(UnmanagedType.Bool)]
 		static extern bool AllocConsole();
+
+
+		/// <summary>
+		/// Escapes backslashes and double-quotation marks by prepending backslashes.
+		/// </summary>
+		/// <param name="str">Unescaped string.</param>
+		/// <param name="wrapInDoubleQuotes">If true, the return value will be wrapped in double quotes.</param>
+		/// <returns>A string suitable to be used as a command line argument.</returns>
+		public static string EscapeCommandLineArgument(string str, bool wrapInDoubleQuotes = false)
+		{
+			string dqWrap = wrapInDoubleQuotes ? "\"" : "";
+			return dqWrap + str.Replace("\\", "\\\\").Replace("\"", "\\\"") + dqWrap;
+		}
 	}
 }

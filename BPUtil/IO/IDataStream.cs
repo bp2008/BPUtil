@@ -20,6 +20,9 @@ namespace BPUtil
 		void WriteUInt64(ulong num);
 		void WriteFloat(float num);
 		void WriteDouble(double num);
+		int WriteUtf8(string str);
+		ushort WriteUtf8_16(string str);
+		uint WriteUtf8_32(string str);
 		int ReadByte();
 		short ReadInt16();
 		ushort ReadUInt16();
@@ -30,6 +33,8 @@ namespace BPUtil
 		float ReadFloat();
 		double ReadDouble();
 		string ReadUtf8(int lengthBytes);
+		string ReadUtf8_16();
+		string ReadUtf8_32();
 		byte[] ReadNBytes(int length);
 		byte[] ReadNBytesFromNetworkOrder(int length);
 	}

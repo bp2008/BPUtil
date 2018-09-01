@@ -825,89 +825,90 @@ namespace BPUtil.SimpleHttp
 		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null, bool singleRequestOnly = false)
 		{
 			responseWritten = true;
-			try
+			//try
+			//{
+			// Connect to the server we're proxying to.
+			Uri newUri = new Uri(newUrl);
+			if (string.IsNullOrWhiteSpace(host))
+				host = newUri.DnsSafeHost;
+			TcpClient proxyClient = new TcpClient();
+			proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
+			proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
+			proxyClient.Connect(newUri.DnsSafeHost, newUri.Port);
+			Stream proxyStream = proxyClient.GetStream();
+			if (newUri.Scheme == "https")
 			{
-				// Connect to the server we're proxying to.
-				Uri newUri = new Uri(newUrl);
-				if (string.IsNullOrWhiteSpace(host))
-					host = newUri.DnsSafeHost;
-				TcpClient proxyClient = new TcpClient();
-				proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
-				proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
-				proxyClient.Connect(newUri.DnsSafeHost, newUri.Port);
-				Stream proxyStream = proxyClient.GetStream();
-				if (newUri.Scheme == "https")
+				//try
+				//{
+				System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
+				if (acceptAnyCert)
+					certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
+				proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
+				((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+				//}
+				//catch (ThreadAbortException) { throw; }
+				//catch (SocketException) { throw; }
+				//catch (Exception ex)
+				//{
+				//	SimpleHttpLogger.LogVerbose(ex);
+				//	return ex;
+				//}
+			}
+
+			// Begin proxying by sending what we've already read from this.inputStream.
+			// The first line of our HTTP request will be different from the original.
+			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, http_method + ' ' + newUri.PathAndQuery + ' ' + http_protocol_versionstring + "\r\n", snoopy);
+			// After the first line come the headers.
+			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
+			if (singleRequestOnly)
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
+			foreach (KeyValuePair<string, string> header in httpHeadersRaw)
+			{
+				string keyLower = header.Key.ToLower();
+				if (keyLower != "host" && (!singleRequestOnly || keyLower != "connection"))
+					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
+			}
+			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
+
+			// Write the original POST body if there was one.
+			if (_internal_post_body_for_proxy != null)
+			{
+				long remember_position = _internal_post_body_for_proxy.Position;
+				_internal_post_body_for_proxy.Seek(0, SeekOrigin.Begin);
+				byte[] buf = _internal_post_body_for_proxy.ToArray();
+				_ProxyData(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
+				_internal_post_body_for_proxy.Seek(remember_position, SeekOrigin.Begin);
+			}
+
+			// Start a thread to connect to newUrl and proxy its response to our client.
+			Thread parentThread = Thread.CurrentThread;
+			Thread ResponseProxyThread = new Thread(() =>
+			{
+				try
 				{
-					try
-					{
-						System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
-						if (acceptAnyCert)
-							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
-						proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
-					}
-					catch (ThreadAbortException) { throw; }
-					catch (SocketException) { throw; }
-					catch (Exception ex)
-					{
-						SimpleHttpLogger.LogVerbose(ex);
+					CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, proxyStream, this.tcpStream, snoopy);
+				}
+				catch (ThreadAbortException) { }
+				catch (Exception ex)
+				{
+					if (ex.InnerException is ThreadAbortException)
 						return;
-					}
+					SimpleHttpLogger.LogVerbose(ex);
 				}
+			});
+			ResponseProxyThread.IsBackground = true;
+			ResponseProxyThread.Start();
 
-				// Begin proxying by sending what we've already read from this.inputStream.
-				// The first line of our HTTP request will be different from the original.
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, http_method + ' ' + newUri.PathAndQuery + ' ' + http_protocol_versionstring + "\r\n", snoopy);
-				// After the first line come the headers.
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
-				if (singleRequestOnly)
-					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
-				foreach (KeyValuePair<string, string> header in httpHeadersRaw)
-				{
-					string keyLower = header.Key.ToLower();
-					if (keyLower != "host" && (!singleRequestOnly || keyLower != "connection"))
-						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
-				}
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
-
-				// Write the original POST body if there was one.
-				if (_internal_post_body_for_proxy != null)
-				{
-					long remember_position = _internal_post_body_for_proxy.Position;
-					_internal_post_body_for_proxy.Seek(0, SeekOrigin.Begin);
-					byte[] buf = _internal_post_body_for_proxy.ToArray();
-					_ProxyData(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
-					_internal_post_body_for_proxy.Seek(remember_position, SeekOrigin.Begin);
-				}
-
-				// Start a thread to connect to newUrl and proxy its response to our client.
-				Thread parentThread = Thread.CurrentThread;
-				Thread ResponseProxyThread = new Thread(() =>
-				{
-					try
-					{
-						CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, proxyStream, this.tcpStream, snoopy);
-					}
-					catch (ThreadAbortException) { }
-					catch (Exception ex)
-					{
-						if (ex.InnerException is ThreadAbortException)
-							return;
-						SimpleHttpLogger.LogVerbose(ex);
-					}
-				});
-				ResponseProxyThread.IsBackground = true;
-				ResponseProxyThread.Start();
-
-				// The current thread will handle any additional incoming data from our client and proxy it to newUrl.
-				this.tcpClient.NoDelay = true;
-				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, this.tcpStream, proxyStream, snoopy);
-			}
-			catch (ThreadAbortException) { throw; }
-			catch (Exception ex)
-			{
-				SimpleHttpLogger.LogVerbose(ex);
-			}
+			// The current thread will handle any additional incoming data from our client and proxy it to newUrl.
+			this.tcpClient.NoDelay = true;
+			CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, this.tcpStream, proxyStream, snoopy);
+			//}
+			//catch (ThreadAbortException) { throw; }
+			//catch (Exception ex)
+			//{
+			//	SimpleHttpLogger.LogVerbose(ex);
+			//	return ex;
+			//}
 		}
 		private void _ProxyString(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy)
 		{

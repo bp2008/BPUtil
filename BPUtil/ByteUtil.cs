@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 
 namespace BPUtil
@@ -153,9 +154,20 @@ namespace BPUtil
 				return buffer; // Just to be explicit and sure about this behavior.
 			int totalRead = 0;
 			int justRead;
-			do
-				totalRead += (justRead = s.Read(buffer, totalRead, n - totalRead));
-			while (justRead > 0 && totalRead < n);
+			try
+			{
+				do
+					totalRead += (justRead = s.Read(buffer, totalRead, n - totalRead));
+				while (justRead > 0 && totalRead < n);
+			}
+			catch (IOException ex)
+			{
+				if (ex.InnerException is SocketException)
+					throw new EndOfStreamException("Stream was closed", ex);
+				else
+					throw;
+			}
+			catch (SocketException ex) { throw new EndOfStreamException("Stream was closed", ex); }
 			if (totalRead < n)
 				throw new EndOfStreamException("Stream was closed");
 			else if (totalRead > n)
@@ -175,9 +187,20 @@ namespace BPUtil
 				return buffer; // Just to be explicit and sure about this behavior.
 			int totalRead = 0;
 			int justRead;
-			do
-				totalRead += (justRead = s.Read(buffer, totalRead, n - totalRead));
-			while (justRead > 0 && totalRead < n);
+			try
+			{
+				do
+					totalRead += (justRead = s.Read(buffer, totalRead, n - totalRead));
+				while (justRead > 0 && totalRead < n);
+			}
+			catch (IOException ex)
+			{
+				if (ex.InnerException is SocketException)
+					throw new EndOfStreamException("Stream was closed", ex);
+				else
+					throw;
+			}
+			catch (SocketException ex) { throw new EndOfStreamException("Stream was closed", ex); }
 			if (totalRead < n)
 				throw new EndOfStreamException("Stream was closed");
 			else if (totalRead > n)
@@ -272,9 +295,59 @@ namespace BPUtil
 		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static int WriteUtf8(string str, byte[] buffer, int offset)
 		{
+			int maxLength = buffer.Length - offset;
+			if (str.Length > maxLength)
+				throw new ArgumentException("WriteUtf8(string, byte[], int) method received a string that is too large for the buffer it would be written to");
 			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			if (bytes.Length > maxLength)
+				throw new ArgumentException("WriteUtf8(string, byte[], int) method received a string that is too large for the buffer it would be written to, once UTF8-encoded.");
 			Array.Copy(bytes, 0, buffer, offset, bytes.Length);
 			return bytes.Length;
+		}
+		/// <summary>
+		/// <para>Writes the length of the string as a 16 bit unsigned integer, then writes the string.</para>
+		/// <para>The string will be encoded as UTF8 with no byte order mark.</para>
+		/// <para>Returns the number of bytes written.</para>
+		/// <para>Throws an exception if the byte array is larger than a 16 bit unsigned integer can hold.</para>
+		/// </summary>
+		/// <param name="str">String to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		public static ushort WriteUtf8_16(string str, byte[] buffer, int offset)
+		{
+			if (str.Length > ushort.MaxValue)
+				throw new ArgumentException("WriteUtf8_16 method cannot accept a string with length greater than " + ushort.MaxValue, "str");
+			int maxLength = buffer.Length - (offset + 2);
+			if (str.Length > maxLength)
+				throw new ArgumentException("WriteUtf8_16(string, byte[], int) method received a string that is too large for the buffer it would be written to");
+			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			if (bytes.Length > ushort.MaxValue)
+				throw new ArgumentException("WriteUtf8_16 method cannot accept a string with UTF8 length greater than " + ushort.MaxValue, "str");
+			if (bytes.Length > maxLength)
+				throw new ArgumentException("WriteUtf8(string, byte[], int) method received a string that is too large for the buffer it would be written to, once UTF8-encoded.");
+			WriteUInt16((ushort)bytes.Length, buffer, offset);
+			Array.Copy(bytes, 0, buffer, offset + 2, bytes.Length);
+			return (ushort)bytes.Length;
+		}
+		/// <summary>
+		/// <para>Writes the length of the string as a 32 bit unsigned integer, then writes the string.</para>
+		/// <para>The string will be encoded as UTF8 with no byte order mark.</para>
+		/// <para>Returns the number of bytes written.</para>
+		/// </summary>
+		/// <param name="str">String to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		public static uint WriteUtf8_32(string str, byte[] buffer, int offset)
+		{
+			int maxLength = buffer.Length - (offset + 2);
+			if (str.Length > maxLength)
+				throw new ArgumentException("WriteUtf8_16(string, byte[], int) method received a string that is too large for the buffer it would be written to");
+			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			if (bytes.Length > maxLength)
+				throw new ArgumentException("WriteUtf8(string, byte[], int) method received a string that is too large for the buffer it would be written to, once UTF8-encoded.");
+			WriteUInt32((uint)bytes.Length, buffer, offset);
+			Array.Copy(bytes, 0, buffer, offset + 4, bytes.Length);
+			return (uint)bytes.Length;
 		}
 		#endregion
 		#region Write to stream (Big endian in the stream)
@@ -320,6 +393,40 @@ namespace BPUtil
 			byte[] bytes = Utf8NoBOM.GetBytes(str);
 			s.Write(bytes, 0, bytes.Length);
 			return bytes.Length;
+		}
+		/// <summary>
+		/// <para>Writes the length of the string as a 16 bit unsigned integer, then writes the string.</para>
+		/// <para>The string will be encoded as UTF8 with no byte order mark.</para>
+		/// <para>Returns the number of bytes written.</para>
+		/// <para>Throws an exception if the byte array is larger than a 16 bit unsigned integer can hold.</para>
+		/// </summary>
+		/// <param name="str">String to write.</param>
+		/// <param name="s">Stream to write to.</param>
+		/// <exception cref="ArgumentException">If the string is longer than 65535 characters or bytes.</exception>
+		public static ushort WriteUtf8_16(string str, Stream s)
+		{
+			if (str.Length > ushort.MaxValue)
+				throw new ArgumentException("WriteUtf8_16 method cannot accept a string with length greater than " + ushort.MaxValue, "str");
+			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			if (bytes.Length > ushort.MaxValue)
+				throw new ArgumentException("WriteUtf8_16 method cannot accept a string with UTF8 length greater than " + ushort.MaxValue, "str");
+			WriteUInt16((ushort)bytes.Length, s);
+			s.Write(bytes, 0, bytes.Length);
+			return (ushort)bytes.Length;
+		}
+		/// <summary>
+		/// <para>Writes the length of the string as a 32 bit unsigned integer, then writes the string.</para>
+		/// <para>The string will be encoded as UTF8 with no byte order mark.</para>
+		/// <para>Returns the number of bytes written.</para>
+		/// </summary>
+		/// <param name="str">String to write.</param>
+		/// <param name="s">Stream to write to.</param>
+		public static uint WriteUtf8_32(string str, Stream s)
+		{
+			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			WriteUInt32((uint)bytes.Length, s);
+			s.Write(bytes, 0, bytes.Length);
+			return (uint)bytes.Length;
 		}
 		#endregion
 		#region Read from byte array (Big endian in the buffer)
@@ -373,7 +480,41 @@ namespace BPUtil
 		/// <returns></returns>
 		public static string ReadUtf8(byte[] buffer, int offset, int byteLength)
 		{
+			if (offset < 0 || offset >= buffer.Length)
+				throw new ArgumentException("offset must be >= 0 and < buffer.Length", "offset");
+			if (buffer.Length - offset < byteLength)
+				throw new ArgumentException("ReadUtf8(byte[" + buffer.Length + "], " + offset + ", " + byteLength + ") method instructed to read beyond the end of the buffer.");
 			return Utf8NoBOM.GetString(buffer, offset, byteLength);
+		}
+		/// <summary>
+		/// Reads a UTF8 string (no byte order mark) from the buffer, assuming the string's length is prepended as a 16 bit unsigned integer.
+		/// </summary>
+		/// <param name="buffer">The buffer to read from.</param>
+		/// <param name="offset">The offset to begin reading at.</param>
+		/// <returns></returns>
+		public static string ReadUtf8_16(byte[] buffer, int offset)
+		{
+			if (offset < 0 || offset >= buffer.Length)
+				throw new ArgumentException("offset must be >= 0 and < buffer.Length", "offset");
+			if (buffer.Length - offset < 2)
+				throw new ArgumentException("ReadUtf8_16(byte[" + buffer.Length + "], " + offset + ") method cannot read byte length because there are not enough bytes remaining in the buffer.");
+			int byteLength = ReadUInt16(buffer, offset);
+			return ReadUtf8(buffer, offset + 2, byteLength);
+		}
+		/// <summary>
+		/// Reads a UTF8 string (no byte order mark) from the buffer, assuming the string's length is prepended as a 16 bit unsigned integer.
+		/// </summary>
+		/// <param name="buffer">The buffer to read from.</param>
+		/// <param name="offset">The offset to begin reading at.</param>
+		/// <returns></returns>
+		public static string ReadUtf8_32(byte[] buffer, int offset)
+		{
+			if (offset < 0 || offset >= buffer.Length)
+				throw new ArgumentException("offset must be >= 0 and < buffer.Length", "offset");
+			if (buffer.Length - offset < 4)
+				throw new ArgumentException("ReadUtf8_32(byte[" + buffer.Length + "], " + offset + ") method cannot read byte length because there are not enough bytes remaining in the buffer.");
+			int byteLength = (int)ReadUInt32(buffer, offset);
+			return ReadUtf8(buffer, offset + 4, byteLength);
 		}
 		#endregion
 		#region Read from stream (Big endian on the stream)
@@ -417,6 +558,26 @@ namespace BPUtil
 		/// <returns></returns>
 		public static string ReadUtf8(Stream s, int byteLength)
 		{
+			return Utf8NoBOM.GetString(ReadNBytes(s, byteLength), 0, byteLength);
+		}
+		/// <summary>
+		/// Reads a UTF8 string (no byte order mark) from the stream, assuming the string's length is prepended as a 16 bit unsigned integer.
+		/// </summary>
+		/// <param name="s">The stream to read from.</param>
+		/// <returns></returns>
+		public static string ReadUtf8_16(Stream s)
+		{
+			int byteLength = ReadUInt16(s);
+			return Utf8NoBOM.GetString(ReadNBytes(s, byteLength), 0, byteLength);
+		}
+		/// <summary>
+		/// Reads a UTF8 string (no byte order mark) from the stream, assuming the string's length is prepended as a 32 bit unsigned integer.
+		/// </summary>
+		/// <param name="s">The stream to read from.</param>
+		/// <returns></returns>
+		public static string ReadUtf8_32(Stream s)
+		{
+			int byteLength = (int)ReadUInt32(s);
 			return Utf8NoBOM.GetString(ReadNBytes(s, byteLength), 0, byteLength);
 		}
 		#endregion

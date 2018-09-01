@@ -84,7 +84,7 @@ namespace BPUtil
 		}
 
 		/// <summary>
-		/// Runs the specified Action inside a try block and logs all exceptions except ThreadAbortException, which is rethrown.
+		/// Runs the specified Action inside a try block and logs all exceptions except ThreadAbortException, which is rethrown without being logged.
 		/// </summary>
 		/// <param name="actionToTry"></param>
 		public static void Catch_RethrowThreadAbort(Action actionToTry)
@@ -111,6 +111,24 @@ namespace BPUtil
 			}
 			catch (Exception ex) { Logger.Debug(ex); }
 			return false;
+		}
+		/// <summary>
+		/// This method is used for retreiving values from a dynamic object when you don't know for certain that the values exist.  If an exception is thrown retrieving the value, the default value will be returned instead.
+		/// </summary>
+		/// <typeparam name="T">The type of return value that is expected</typeparam>
+		/// <param name="funcToGet">A function or simple lambda expression that returns the expected value. e.g. "() => obj.maybeMissingField".</param>
+		/// <param name="defaultValue">The value to return if an exception is thrown by [funcToGet].  If unset, defaults to "default(T)".</param>
+		/// <returns></returns>
+		public static T Get<T>(Func<T> funcToGet, T defaultValue = default(T))
+		{
+			try
+			{
+				return funcToGet();
+			}
+			catch
+			{
+				return defaultValue;
+			}
 		}
 	}
 }

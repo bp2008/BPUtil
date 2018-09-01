@@ -29,6 +29,7 @@
     <Prefer32Bit>false</Prefer32Bit>
     <DocumentationFile>bin\Debug\BPUtil.xml</DocumentationFile>
     <NoWarn>CS1591</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -40,6 +41,7 @@
     <DocumentationFile>bin\Release\BPUtil.XML</DocumentationFile>
     <NoWarn>1591</NoWarn>
     <Prefer32Bit>false</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -55,6 +57,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AutoDisposeHandle.cs" />
     <Compile Include="BasicEventTimer.cs" />
     <Compile Include="BPMath.cs" />
     <Compile Include="BPMisc.cs" />
@@ -78,10 +81,13 @@
     <Compile Include="IO\MemoryDataStream.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="LogReader.cs" />
+    <Compile Include="NativeWin\NativeMethods.cs" />
+    <Compile Include="NativeWin\Win32Helper.cs" />
     <Compile Include="NumberUtil.cs" />
     <Compile Include="ObjectPool.cs" />
     <Compile Include="Platform.cs" />
     <Compile Include="PrivateAccessor.cs" />
+    <Compile Include="ProcessHelper.cs" />
     <Compile Include="SecureRandom.cs" />
     <Compile Include="SerializableObjectBase.cs" />
     <Compile Include="SetTimeout.cs" />

@@ -54,12 +54,15 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="exePath">Pass in the path to the exe in the root directory of the application.  The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.  The exe name is used to create the CommonApplicationDataBase string.</param>
 		/// <param name="programName">A globally unique program name that does not change and is unlikely to collide with other programs on the user's system.  This is used as part of the WritableDirectoryBase folder path, so you could pass in "MyApp" or to be even safer, "MyCompany/MyApp".</param>
-		public static void InitializeProgram(string exePath, string programName)
+		/// <param name="CreateWritableDir">If true, writableDirectoryBase will be created if needed.</param>
+		public static void InitializeProgram(string exePath, string programName, bool CreateWritableDir = false)
 		{
 			Initialize(exePath);
 
 			writableDirectoryBase = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
 			writableDirectoryBase = writableDirectoryBase.TrimEnd('\\', '/').Replace('\\', '/') + '/' + programName + '/';
+			if (CreateWritableDir)
+				Directory.CreateDirectory(writableDirectoryBase);
 		}
 		private static string executablePath;
 		private static string executableNameWithExtension;
