@@ -78,6 +78,20 @@ namespace BPUtil
 							catch (ThreadAbortException) { throw; }
 							catch (Exception) { }
 						}
+						if (obj.GetType().GetCustomAttributes(typeof(SerializeProperties), false).FirstOrDefault() != null)
+						{
+							foreach (PropertyInfo sourceProperty in obj.GetType().GetProperties())
+							{
+								try
+								{
+									PropertyInfo targetProperty = thistype.GetProperty(sourceProperty.Name);
+									if (targetProperty != null && targetProperty.MemberType == sourceProperty.MemberType)
+										targetProperty.SetValue(this, sourceProperty.GetValue(obj));
+								}
+								catch (ThreadAbortException) { throw; }
+								catch (Exception) { }
+							}
+						}
 					}
 					return true;
 				}
@@ -106,5 +120,9 @@ namespace BPUtil
 					Save(filePath);
 			}
 		}
+	}
+	public class SerializeProperties : Attribute
+	{
+		public SerializeProperties() { }
 	}
 }

@@ -200,26 +200,40 @@ namespace BPUtil
 				return true;
 			return false;
 		}
-		private static bool ProcessOwnedByUser(int pid, string userName, bool ignoreCase = false)
+		/// <summary>
+		/// Determines if the specified process is owned by the specified user.
+		/// </summary>
+		/// <param name="pid">The ID of the process.</param>
+		/// <param name="userName">A user name.  If the provided user name contains a domain name, the domain name of the processes's owner must match in order for this method to return true.</param>
+		/// <param name="ignoreCase">If true, the user name comparison is case-insensitive.</param>
+		/// <returns></returns>
+		public static bool ProcessOwnedByUser(int pid, string userName, bool ignoreCase = false)
 		{
 			if (userName == null)
 				return false;
+			string owner = GetUserWhichOwnsProcess(pid);
+			int userNameIdxSlash = userName.IndexOf('\\');
+			if (userNameIdxSlash == -1) // Specified user name did not contain a domain name, so we should remove it from the [owner] string.
+				owner = owner.Substring(owner.IndexOf('\\') + 1);
+			return string.Compare(owner, userName, ignoreCase) == 0;
+		}
+		/// <summary>
+		/// Returns the name of the user which owns the specified process, including domain name. e.g. "NT AUTHORITY\SYSTEM"
+		/// </summary>
+		/// <param name="pid">The ID of the process.</param>
+		/// <returns></returns>
+		public static string GetUserWhichOwnsProcess(int pid)
+		{
 			try
 			{
 				using (AutoDisposeHandle processHandle = OpenProcess(pid))
 				using (AutoDisposeHandle processToken = OpenProcessToken(processHandle))
 				using (WindowsIdentity identity = new WindowsIdentity(processToken))
-				{
-					string owner = identity.Name;
-					int userNameIdxSlash = userName.IndexOf('\\');
-					if (userNameIdxSlash == -1) // Specified user name did not contain a domain name, so we should remove it from the [owner] string.
-						owner = owner.Substring(owner.IndexOf('\\') + 1);
-					return string.Compare(owner, userName, ignoreCase) == 0;
-				}
+					return identity.Name;
 			}
 			catch
 			{
-				return false;
+				return null;
 			}
 		}
 		private static bool UserIsMatch(int pid, WellKnownSidType type)
