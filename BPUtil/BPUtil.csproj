@@ -88,6 +88,7 @@
     <Compile Include="Platform.cs" />
     <Compile Include="PrivateAccessor.cs" />
     <Compile Include="ProcessHelper.cs" />
+    <Compile Include="RegistryUtil.cs" />
     <Compile Include="SecureRandom.cs" />
     <Compile Include="SerializableObjectBase.cs" />
     <Compile Include="SetTimeout.cs" />
