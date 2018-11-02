@@ -53,7 +53,10 @@ namespace BPUtil
 				Timeout = 0;
 			TimeoutHandle cancelHandle = new TimeoutHandle();
 			if (invokeOnGuiThread && Timeout == 0)
-				formForInvoking.Invoke(TheAction);
+			{
+				if (!formForInvoking.IsDisposed)
+					formForInvoking.Invoke(TheAction);
+			}
 			else
 			{
 				Thread t = new Thread(
@@ -64,7 +67,10 @@ namespace BPUtil
 							if (cancelHandle.Wait(Timeout))
 								return;
 							if (invokeOnGuiThread)
-								formForInvoking.Invoke(TheAction);
+							{
+								if (!formForInvoking.IsDisposed)
+									formForInvoking.Invoke(TheAction);
+							}
 							else
 								TheAction();
 						}

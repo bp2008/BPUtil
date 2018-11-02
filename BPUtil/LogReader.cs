@@ -24,7 +24,7 @@ namespace BPUtil
 		public StreamingLogReader(string path = null, int StreamingSleepLength = 500)
 		{
 			this.StreamingSleepLength = StreamingSleepLength;
-			readerId = DateTime.Now.ToBinary();
+			readerId = TimeUtil.GetTimeInMsSinceEpoch();
 			if (path == null)
 				path = Globals.ErrorFilePath;
 			fiInputFile = new FileInfo(path);

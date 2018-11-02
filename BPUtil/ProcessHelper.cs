@@ -58,9 +58,11 @@ namespace BPUtil
 		/// </summary>
 		public bool userNameIgnoreCase = false;
 		/// <summary>
-		/// To be used internally by the ProcessHelper.ExecuteInteractive method.
+		///   <para>Specifies the session ID that needs to be impersonated.</para>
+		///   <para>If -1 (default), the argument will be replaced with the session ID of the active console (local monitor).</para>
+		///   <para>If null, any session ID will be acceptable to start the program in. Even session 0, which is where background services live!</para>
 		/// </summary>
-		internal int requiredSessionID = -1;
+		public int? requiredSessionID = -1;
 
 		public ProcessExecuteArgs() { }
 		/// <summary>
@@ -91,12 +93,14 @@ namespace BPUtil
 		/// <param name="commandLine">Sometimes, for unknown reasons, the first argument in this command line can be dropped.  This may be avoided by passing null for [executablePath] and including the executable path as the first token of [commandLine].</param>
 		/// <param name="workingDirectory"></param>
 		/// <param name="execArgs">Optional arguments to control process selection.</param>
+		/// <returns>The process ID of the executed program, or -1 if there was a problem. May also throw an exception.</returns>
 		/// <returns></returns>
 		public static int ExecuteInteractive(string executablePath, string commandLine, string workingDirectory, ProcessExecuteArgs execArgs = null)
 		{
 			if (execArgs == null)
 				execArgs = ProcessExecuteArgs.Default();
-			execArgs.requiredSessionID = GetConsoleSessionId();
+			if (execArgs.requiredSessionID == -1)
+				execArgs.requiredSessionID = GetConsoleSessionId();
 			if (execArgs.requiredSessionID == -1)
 				return -1; // No session currently attached to the console.
 
@@ -180,7 +184,7 @@ namespace BPUtil
 		private static bool IsSuitableProcess(Process p, ProcessExecuteArgs execArgs)
 		{
 			// p.ProcessName does not include the file extension. GetProcessesByName uses case-sensitive matching, so we'll use case-insensitive matching on process names here too.
-			if (p.SessionId != execArgs.requiredSessionID)
+			if (execArgs.requiredSessionID != null && p.SessionId != execArgs.requiredSessionID)
 				return false;
 			else if ((execArgs.flags & ProcessExecuteFlags.ImpersonateExplorer) == 0 && string.Compare(p.ProcessName, "explorer", true) == 0)
 				return false;

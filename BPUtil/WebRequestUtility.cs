@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using System.Web;
 
 namespace BPUtil
@@ -27,17 +29,21 @@ namespace BPUtil
 		/// </summary>
 		public string ContentType;
 		/// <summary>
-		/// The HTTP status code of the response.  200 is normal success, 404 is Not Found, and so on.
+		/// The HTTP status code of the response.  200 is normal success, 404 is Not Found, and so on. 0 indicates an exception was caught, and could indicate DNS resolution failure or connection failure.
 		/// </summary>
 		public int StatusCode = 0;
 		/// <summary>
-		/// A cache for the string value of the response.  This is populated the first time [str] is requested.
+		/// A cache for the string value of the response.  This is populated the first time <paramref name="str"/> is requested.
 		/// </summary>
 		private string _str;
 		/// <summary>
 		/// The remote IP address of the server, in case a DNS hostname was used in the URL.
 		/// </summary>
 		public IPAddress remoteIp;
+		/// <summary>
+		/// If an exception was caught, it will be here.
+		/// </summary>
+		public Exception ex;
 		/// <summary>
 		/// Returns the response in string format.
 		/// </summary>
@@ -63,20 +69,28 @@ namespace BPUtil
 	/// </summary>
 	public class WebRequestUtility
 	{
-		private static Encoding basicAuthEncoding = Encoding.GetEncoding("ISO-8859-1");
 		string UserAgentString;
 		/// <summary>
-		/// Time in milliseconds to wait for web responses.
+		/// Time in milliseconds to wait for web responses. Default is 10 minutes.
 		/// </summary>
-		public int requestTimeout = 600000; // 10 minutes
-											/// <summary>
-											/// If provided, all web requests will attempt basic authentication using these credentials.
-											/// </summary>
+		public int requestTimeout = 600000;
+		/// <summary>
+		/// You can provide a proxy server here, if desired. Example: new WebProxy("127.0.0.1", 8888)
+		/// </summary>
+		public IWebProxy proxy = null;
+		/// <summary>
+		/// If true, [proxy] is ignored and the HttpClient will use automatic proxy settings.  Default: false
+		/// </summary>
+		public bool automaticProxy = false;
+		/// <summary>
+		/// If provided, all web requests will attempt basic authentication using these credentials.
+		/// </summary>
 		public NetworkCredential BasicAuthCredentials;
 
-		//public bool skipCertificateValidation = false;
 		public WebRequestUtility(string UserAgentString, int requestTimeout = 600000)
 		{
+			if (!ServicePointManager.SecurityProtocol.HasFlag(SecurityProtocolType.Tls12))
+				ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 			this.UserAgentString = UserAgentString;
 			this.requestTimeout = requestTimeout;
 		}
@@ -121,7 +135,7 @@ namespace BPUtil
 				contentType = "application/x-www-form-urlencoded";
 				List<string> args = new List<string>();
 				for (int i = 0; i + 1 < keysAndValues.Length; i += 2)
-					args.Add(Uri.EscapeDataString(keysAndValues[i]) + "=" + Uri.EscapeDataString(keysAndValues[i + 1]));
+					args.Add(HttpUtility.UrlEncode(keysAndValues[i]) + "=" + HttpUtility.UrlEncode(keysAndValues[i + 1]));
 				string content = string.Join("&", args);
 				postBody = Encoding.UTF8.GetBytes(content);
 			}
@@ -133,8 +147,8 @@ namespace BPUtil
 		/// <param name="url">The url to POST.</param>
 		/// <param name="postBody">The content to post.</param>
 		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
-		///<param name="contentType">The value of the content-type header to set.</param>
-		///<param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "BPUtil" }</param>
+		/// <param name="contentType">The value of the content-type header to set.</param>
+		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
 		/// <returns></returns>
 		public BpWebResponse POST(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
 		{
@@ -144,57 +158,83 @@ namespace BPUtil
 		{
 			BpWebResponse response = new BpWebResponse();
 
-			HttpWebRequest webRequest = (HttpWebRequest)WebRequest.Create(url);
-			webRequest.Timeout = requestTimeout;
-			webRequest.Proxy = null;
-			//if (skipCertificateValidation)
-			//	webRequest.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;
-			if (!string.IsNullOrEmpty(UserAgentString))
-				webRequest.UserAgent = UserAgentString;
+			HttpClientHandler httpClientHandler = new HttpClientHandler();
+			if (automaticProxy)
+				httpClientHandler.UseProxy = true;
+			else
+			{
+				httpClientHandler.UseProxy = proxy != null;
+				if (proxy != null)
+					httpClientHandler.Proxy = proxy;
+			}
 
+			HttpClient client = new HttpClient(httpClientHandler);
+			client.Timeout = TimeSpan.FromMilliseconds(requestTimeout);
+			client.DefaultRequestHeaders.ExpectContinue = false;
+
+			bool addedUserAgentHeader = false;
 			if (headers != null)
 			{
 				for (int i = 0; i + 1 < headers.Length; i += 2)
 				{
 					string key = headers[i];
-					string keyLower = key.ToLower();
 					string value = headers[i + 1];
-					if (keyLower == "user-agent")
-						webRequest.UserAgent = value;
-					else if (key == "STARTBYTE")
-						webRequest.AddRange(int.Parse(value));
-					else
-						webRequest.Headers[key] = value;
+					if (key.ToLower() == "user-agent")
+						addedUserAgentHeader = true;
+					client.DefaultRequestHeaders.TryAddWithoutValidation(key, value);
 				}
 			}
+			if (!addedUserAgentHeader && !string.IsNullOrEmpty(UserAgentString))
+				client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgentString);
 			if (BasicAuthCredentials != null)
 			{
-				webRequest.Credentials = BasicAuthCredentials;
-				webRequest.PreAuthenticate = true;
+				httpClientHandler.Credentials = BasicAuthCredentials;
+				httpClientHandler.PreAuthenticate = true;
 			}
 			try
 			{
+				Task<HttpResponseMessage> responseTask;
 				if (postBody != null && postBody.Length > 1 && !string.IsNullOrWhiteSpace(contentType))
 				{
-					webRequest.Method = "POST";
-					webRequest.ContentType = contentType;
-					webRequest.ContentLength = postBody.Length;
-					using (Stream reqStream = webRequest.GetRequestStream())
-					{
-						reqStream.Write(postBody, 0, postBody.Length);
-					}
+					ByteArrayContent postBodyContent = new ByteArrayContent(postBody);
+					postBodyContent.Headers.Add("Content-Type", contentType);
+					//postBodyContent.Headers.Add("Content-Length", postBody.Length.ToString());
+					responseTask = client.PostAsync(url, postBodyContent);
 				}
+				else
+					responseTask = client.GetAsync(url);
 
-				using (HttpWebResponse webResponse = (HttpWebResponse)webRequest.GetResponse())
+				responseTask.Wait();
+
+				HttpResponseMessage httpResponse = responseTask.Result;
+				response.StatusCode = (int)httpResponse.StatusCode;
+
+				foreach (var kvp in httpResponse.Headers)
+					response.headers[kvp.Key] = string.Join(",", kvp.Value);
+				foreach (var kvp in httpResponse.Content.Headers)
+					response.headers[kvp.Key] = string.Join(",", kvp.Value);
+
+				if (httpResponse.Content.Headers.ContentType != null)
+					response.ContentType = httpResponse.Content.Headers.ContentType.ToString();
+				else if (response.headers.ContainsKey("Content-Type"))
+					response.ContentType = response.headers["Content-Type"];
+				else
+					response.ContentType = "";
+
+				if (earlyTerminationBytes == int.MaxValue)
+				{
+					Task<byte[]> getResponse = httpResponse.Content.ReadAsByteArrayAsync();
+					getResponse.Wait();
+					response.data = getResponse.Result;
+				}
+				else
 				{
 					using (MemoryStream ms = new MemoryStream())
 					{
-						using (Stream responseStream = webResponse.GetResponseStream())
+						Task<Stream> getStream = httpResponse.Content.ReadAsStreamAsync();
+						getStream.Wait();
+						using (Stream responseStream = getStream.Result)
 						{
-							foreach (string key in webResponse.Headers.AllKeys)
-								response.headers[key] = webResponse.Headers[key];
-							response.ContentType = webResponse.ContentType;
-							response.StatusCode = (int)webResponse.StatusCode;
 							// Dump the response stream into the MemoryStream ms
 							int bytesRead = 1;
 							byte[] buffer = new byte[8000];
@@ -215,12 +255,10 @@ namespace BPUtil
 					}
 				}
 			}
-			catch (WebException ex)
+			catch (Exception ex)
 			{
-				if (ex.Response == null)
-					response.StatusCode = 0;
-				else
-					response.StatusCode = (int)((HttpWebResponse)ex.Response).StatusCode;
+				response.StatusCode = 0;
+				response.ex = ex;
 			}
 			return response;
 		}
