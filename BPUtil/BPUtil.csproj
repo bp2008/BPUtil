@@ -59,6 +59,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Compression.cs" />
+    <Compile Include="MVC\ActionResult.cs" />
+    <Compile Include="MVC\ControllerInfo.cs" />
+    <Compile Include="MVC\MVCMain.cs" />
+    <Compile Include="MVC\Controller.cs" />
     <Compile Include="AutoDisposeHandle.cs" />
     <Compile Include="BasicEventTimer.cs" />
     <Compile Include="BPMath.cs" />
@@ -92,6 +97,7 @@
     <Compile Include="Linux\InputListener\LinuxInputListener.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="LogReader.cs" />
+    <Compile Include="MVC\RequestContext.cs" />
     <Compile Include="NativeWin\NativeMethods.cs" />
     <Compile Include="NativeWin\Win32Helper.cs" />
     <Compile Include="NumberUtil.cs" />
@@ -136,6 +142,7 @@
       <DependentUpon>ServiceManager.cs</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

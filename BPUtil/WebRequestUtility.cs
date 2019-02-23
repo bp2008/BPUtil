@@ -33,7 +33,7 @@ namespace BPUtil
 		/// </summary>
 		public int StatusCode = 0;
 		/// <summary>
-		/// A cache for the string value of the response.  This is populated the first time <paramref name="str"/> is requested.
+		/// A cache for the string value of the response.  This is populated the first time <see cref="str"/> is requested.
 		/// </summary>
 		private string _str;
 		/// <summary>
@@ -75,11 +75,13 @@ namespace BPUtil
 		/// </summary>
 		public int requestTimeout = 600000;
 		/// <summary>
-		/// You can provide a proxy server here, if desired. Example: new WebProxy("127.0.0.1", 8888)
+		/// <para>You can provide a proxy server here, if desired. Example: new WebProxy("127.0.0.1", 8888)</para>
+		/// <seealso cref="IWebProxy"/>
+		/// <seealso cref="WebProxy"/>
 		/// </summary>
 		public IWebProxy proxy = null;
 		/// <summary>
-		/// If true, [proxy] is ignored and the HttpClient will use automatic proxy settings.  Default: false
+		/// If true, <see cref="proxy"/> is ignored and the <seealso cref="HttpClient"/> will use automatic proxy settings.  Default: false
 		/// </summary>
 		public bool automaticProxy = false;
 		/// <summary>

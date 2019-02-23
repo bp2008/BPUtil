@@ -687,14 +687,11 @@ namespace BPUtil.SimpleHttp
 		{
 			if (responseWritten)
 				return false;
-			string acceptEncoding = GetHeaderValue("Accept-Encoding");
-			string[] types = acceptEncoding.Split(',');
-			foreach (string type in types)
-				if (type.Trim().ToLower() == "gzip")
-				{
-					compressionType = CompressionType.GZip;
-					return true;
-				}
+			if (ClientRequestsGZipCompression)
+			{
+				compressionType = CompressionType.GZip;
+				return true;
+			}
 			return false;
 		}
 		/// <summary>
@@ -712,6 +709,20 @@ namespace BPUtil.SimpleHttp
 				tcpStream.Flush();
 				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, false);
 				outputStream = new StreamWriter(tcpStream);
+			}
+		}
+		public bool ClientRequestsGZipCompression
+		{
+			get
+			{
+				string acceptEncoding = GetHeaderValue("Accept-Encoding");
+				string[] types = acceptEncoding.Split(',');
+				foreach (string type in types)
+					if (type.Trim().ToLower() == "gzip")
+					{
+						return true;
+					}
+				return false;
 			}
 		}
 		#endregion
