@@ -17,6 +17,19 @@ namespace BPUtil.MVC
 		/// The context of this request.
 		/// </summary>
 		public RequestContext Context { get; internal set; }
+		/// <summary>
+		/// A container which contains data accessible from view pages.
+		/// </summary>
+		public readonly ViewDataContainer ViewData = new ViewDataContainer();
+		/// <summary>
+		/// A wrapper around ViewData which can have key/value pairs added and read as dy namic properties.
+		/// </summary>
+		public readonly dynamic ViewBag;
+
+		public Controller()
+		{
+			ViewBag = new ViewBagContainer(ViewData);
+		}
 
 		/// <summary>
 		/// Returns a BinaryResult where the body is binary data.

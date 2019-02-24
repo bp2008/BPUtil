@@ -10,7 +10,7 @@ namespace BPUtil.MVC
 	public class RequestContext
 	{
 		public readonly HttpProcessor httpProcessor;
-		public readonly string originalRequestPath;
+		public readonly string OriginalRequestPath;
 		/// <summary>
 		/// The "path" part of the URL.  E.g. for the url "Articles/Science/Moon.html?search=crater" the "path" part is "Articles/Science/Moon.html".
 		/// </summary>
@@ -25,7 +25,7 @@ namespace BPUtil.MVC
 		public RequestContext(HttpProcessor httpProcessor, string requestPath)
 		{
 			this.httpProcessor = httpProcessor;
-			this.originalRequestPath = requestPath;
+			this.OriginalRequestPath = requestPath;
 
 			int idxQmark = requestPath.IndexOf('?');
 			if (idxQmark == -1)

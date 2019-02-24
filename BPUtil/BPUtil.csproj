@@ -98,6 +98,9 @@
     <Compile Include="Logger.cs" />
     <Compile Include="LogReader.cs" />
     <Compile Include="MVC\RequestContext.cs" />
+    <Compile Include="MVC\ViewBagContainer.cs" />
+    <Compile Include="MVC\ViewDataContainer.cs" />
+    <Compile Include="MVC\ViewResult.cs" />
     <Compile Include="NativeWin\NativeMethods.cs" />
     <Compile Include="NativeWin\Win32Helper.cs" />
     <Compile Include="NumberUtil.cs" />
