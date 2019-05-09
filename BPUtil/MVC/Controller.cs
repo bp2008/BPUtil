@@ -10,6 +10,7 @@ namespace BPUtil.MVC
 {
 	/// <summary>
 	/// Base class for a Controller roughly equivalent to those available in ASP.NET MVC.
+	/// The controller should define at least one ActionMethod.  An ActionMethod is a public method which returns an <see cref="ActionResult"/> (or a class derived from <see cref="ActionResult"/>).  The controller must not define multiple ActionMethods with the same name.
 	/// </summary>
 	public abstract class Controller
 	{
@@ -29,6 +30,15 @@ namespace BPUtil.MVC
 		public Controller()
 		{
 			ViewBag = new ViewBagContainer(ViewData);
+		}
+
+		/// <summary>
+		/// When overridden in a derived class, this method may return false to disallow access to the controller.
+		/// </summary>
+		/// <returns>True if the controller is usable in the current request context.  False if the controller must not be used.</returns>
+		public virtual bool OnAuthorization()
+		{
+			return true;
 		}
 
 		/// <summary>

@@ -17,6 +17,7 @@ namespace BPUtil.MVC
 		/// A map of Controller type names to ControllerInfo instances.
 		/// </summary>
 		private static SortedList<string, ControllerInfo> controllerInfoMap = new SortedList<string, ControllerInfo>();
+
 		/// <summary>
 		/// The Namespace containing the controllers for this instance.
 		/// </summary>
@@ -24,8 +25,8 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// Creates a new API from a namespace.
 		/// </summary>
-		/// <param name="assembly">The assembly where the API handler classes are located. e.g. Assembly.GetExecutingAssembly()</param>
-		/// <param name="namespaceStr">The namespace containing all the API handler classes. e.g. typeof(SomeAPIHandler).Namespace</param>
+		/// <param name="assembly">The assembly where the API controller classes are located. e.g. Assembly.GetExecutingAssembly()</param>
+		/// <param name="namespaceStr">The namespace containing all the API controller classes. e.g. typeof(SomeAPIHandler).Namespace</param>
 		public MVCMain(Assembly assembly, string namespaceStr)
 		{
 			this.Namespace = namespaceStr;
@@ -35,7 +36,7 @@ namespace BPUtil.MVC
 		}
 
 		/// <summary>
-		/// Processes a request from a client, then returns true. Returns false if the request could not be processed. Exceptions thrown by a controller are not caught here.
+		/// Processes a request from a client, then returns true. Returns false if the request could not be processed. Exceptions thrown by a controller are caught here.
 		/// </summary>
 		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
 		/// <param name="requestPath">The path requested by the client, with leading '/' removed. (e.g. httpProcessor.requestedPage)</param>
@@ -49,7 +50,15 @@ namespace BPUtil.MVC
 			if (!controllerInfoMap.TryGetValue(context.ControllerName, out ControllerInfo controllerInfo))
 				return false;
 
-			ActionResult actionResult = controllerInfo.CallMethod(context);
+			ActionResult actionResult = null;
+			try
+			{
+				actionResult = controllerInfo.CallMethod(context);
+			}
+			catch (Exception ex)
+			{
+				actionResult = GenerateErrorPage(httpProcessor, ex);
+			}
 
 			if (httpProcessor.responseWritten) // Controller methods may handle their own response, in which case we will ignore the result.
 				return true;
@@ -81,9 +90,28 @@ namespace BPUtil.MVC
 			return true;
 		}
 
+		/// <summary>
+		/// Returns true if the specified type is a controller we can create an instance of.  It must be in <see cref="Namespace"/> (specified in constructor).
+		/// </summary>
+		/// <param name="t">The type which might be a controller we can create an instance of.</param>
+		/// <returns></returns>
 		private bool IsController(Type t)
 		{
-			return t.Namespace == Namespace && t.IsSubclassOf(typeof(Controller)) && !t.IsAbstract;
+			return (t.Namespace == Namespace || t.Namespace.StartsWith(Namespace + ".")) && typeof(Controller).IsAssignableFrom(t) && !t.IsAbstract;
+		}
+
+		/// <summary>
+		/// Returns an error page showing details of an exception that was thrown.
+		/// </summary>
+		/// <param name="httpProcessor"></param>
+		/// <param name="ex"></param>
+		/// <returns></returns>
+		private ActionResult GenerateErrorPage(HttpProcessor httpProcessor, Exception ex)
+		{
+			if (MVCGlobals.RemoteClientsMaySeeExceptionDetails || httpProcessor.IsLocalConnection)
+				return new ExceptionHtmlResult(ex);
+			else
+				return new ExceptionHtmlResult(null);
 		}
 	}
 }

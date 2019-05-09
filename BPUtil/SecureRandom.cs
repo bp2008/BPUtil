@@ -44,6 +44,28 @@ namespace BPUtil
 			return random.Next(minValue, maxValue);
 		}
 
+		/// <summary>
+		/// Returns a random number between 0.0 and 1.0.
+		/// </summary>
+		/// <returns>
+		/// A double-precision floating point number greater than or equal to 0.0, and less than 1.0.
+		/// </returns>
+		public static double NextDouble()
+		{
+			return random.NextDouble();
+		}
+		/// <summary>
+		/// Fills the elements of a specified array of bytes with random numbers.
+		/// </summary>
+		/// <param name="buffer">An array of bytes to contain random numbers.</param>
+		/// <exception cref="T:System.ArgumentNullException">
+		///     <paramref name="buffer"/> is null.
+		/// </exception>
+		public static void NextBytes(byte[] buffer)
+		{
+			random.NextBytes(buffer);
+		}
+
 		/*
 		 * Original version by Stephen Toub and Shawn Farkas.
 		 * Random pool and thread safety added by Markus Olsson (freakcode.com).

@@ -20,8 +20,8 @@ namespace BPUtil.MVC
 		/// </summary>
 		public readonly string Query;
 		public readonly string ControllerName;
-		public readonly string ActionName;
-		public readonly string[] ActionArgs;
+		public string ActionName { get; protected set; }
+		public string[] ActionArgs { get; protected set; }
 		public RequestContext(HttpProcessor httpProcessor, string requestPath)
 		{
 			this.httpProcessor = httpProcessor;
@@ -53,6 +53,14 @@ namespace BPUtil.MVC
 			}
 			if (string.IsNullOrWhiteSpace(ActionName))
 				ActionName = "Index";
+		}
+		/// <summary>
+		/// Moves ActionName into the ActionArgs array as the new first element, and replaces ActionName with "Index".
+		/// </summary>
+		internal void AssumeActionNameIsArgumentForIndex()
+		{
+			ActionArgs = new string[] { ActionName }.Union(ActionArgs).ToArray();
+			ActionName = "Index";
 		}
 	}
 }

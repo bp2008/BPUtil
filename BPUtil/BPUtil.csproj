@@ -62,6 +62,8 @@
     <Compile Include="Compression.cs" />
     <Compile Include="MVC\ActionResult.cs" />
     <Compile Include="MVC\ControllerInfo.cs" />
+    <Compile Include="MVC\ExceptionHtmlResult.cs" />
+    <Compile Include="MVC\MVCGlobals.cs" />
     <Compile Include="MVC\MVCMain.cs" />
     <Compile Include="MVC\Controller.cs" />
     <Compile Include="AutoDisposeHandle.cs" />

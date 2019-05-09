@@ -1263,7 +1263,13 @@ namespace BPUtil.SimpleHttp
 		}
 		public int? SendBufferSize = null;
 		public int? ReceiveBufferSize = null;
+		/// <summary>
+		/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Real-IP".
+		/// </summary>
 		public bool XRealIPHeader = false;
+		/// <summary>
+		/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Forwarded-For".
+		/// </summary>
 		public bool XForwardedForHeader = false;
 		protected volatile bool stopRequested = false;
 		protected X509Certificate2 ssl_certificate;
