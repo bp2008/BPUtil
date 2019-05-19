@@ -60,6 +60,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Compression.cs" />
+    <Compile Include="Forms\InputDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\InputDialog.Designer.cs">
+      <DependentUpon>InputDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="MVC\ActionResult.cs" />
     <Compile Include="MVC\ControllerInfo.cs" />
     <Compile Include="MVC\ExceptionHtmlResult.cs" />
@@ -143,6 +149,9 @@
     <Compile Include="WebRequestUtility.cs" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Forms\InputDialog.resx">
+      <DependentUpon>InputDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Forms\ServiceManager.resx">
       <DependentUpon>ServiceManager.cs</DependentUpon>
     </EmbeddedResource>
