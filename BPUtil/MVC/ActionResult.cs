@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace BPUtil.MVC
@@ -9,10 +11,27 @@ namespace BPUtil.MVC
 		/// The response body for an HTTP response.
 		/// </summary>
 		public byte[] Body;
+
 		/// <summary>
-		/// The Content-Type header for an HTTP response.
+		/// A collection of HTTP headers for an HTTP response.
 		/// </summary>
-		public string ContentType;
+		public List<HttpHeader> headers = new List<HttpHeader>();
+
+		/// <summary>
+		/// Gets or sets the Content-Type header.
+		/// </summary>
+		public string ContentType
+		{
+			get
+			{
+				return GetHeaderValue("Content-Type");
+			}
+			set
+			{
+				AddOrUpdateHeader("Content-Type", value);
+			}
+		}
+
 		/// <summary>
 		/// The HTTP response status consisting of a 3-digit number optionally followed by one space character and a textual "Reason Phrase".  The Reason Phrase may not contain \r or \n characters. e.g. "200 OK" or "404 Not Found"
 		/// </summary>
@@ -28,6 +47,49 @@ namespace BPUtil.MVC
 		public ActionResult(string contentType)
 		{
 			this.ContentType = contentType;
+		}
+
+		/// <summary>
+		/// Returns the value of the specified header, or null if it is not found (the header may also exist with the value null).
+		/// </summary>
+		/// <param name="name">The header name, case-sensitive.</param>
+		/// <returns></returns>
+		public string GetHeaderValue(string name)
+		{
+			lock (headers)
+			{
+				return headers.Find(h => h.Name == name).Value;
+			}
+		}
+
+		/// <summary>
+		/// Adds or updates the value of the specified header.
+		/// </summary>
+		/// <param name="name">The header name, case-sensitive.</param>
+		/// <param name="value">The header value.</param>
+		public void AddOrUpdateHeader(string name, string value)
+		{
+			lock (headers)
+			{
+				HttpHeader header = headers.Find(h => h.Name == name);
+				if (header == null)
+					headers.Add(new HttpHeader(name, value));
+				else
+					header.Value = value;
+			}
+		}
+	}
+	public class HttpHeader
+	{
+		public string Name;
+		public string Value;
+		public HttpHeader()
+		{
+		}
+		public HttpHeader(string name, string value)
+		{
+			Name = name;
+			Value = value;
 		}
 	}
 	#region Binary Results
@@ -176,6 +238,20 @@ namespace BPUtil.MVC
 		/// </summary>
 		/// <param name="json">JSON markup.</param>
 		public JsonResult(string json) : base(json, "application/json") { }
+	}
+	/// <summary>
+	/// A result where the body is a plain-text error message and the response status has a custom value.
+	/// </summary>
+	public class StatusCodeResult : PlainTextResult
+	{
+		/// <summary>
+		/// Constructs an ErrorResult, which is a PlainTextResult with a custom response status.
+		/// </summary>
+		/// <param name="responseStatus">HTTP response status.</param>
+		public StatusCodeResult(string responseStatus = "500 Internal Server Error") : base(responseStatus)
+		{
+			ResponseStatus = responseStatus;
+		}
 	}
 	#endregion
 }

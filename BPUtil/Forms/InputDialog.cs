@@ -27,11 +27,13 @@ namespace BPUtil.Forms
 		/// </summary>
 		/// <param name="title">Title for the form's title bar.</param>
 		/// <param name="label">Label to display above the text input.</param>
-		public InputDialog(string title, string label)
+		/// <param name="defaultValue">The default value of the input text field.</param>
+		public InputDialog(string title, string label, string defaultValue = "")
 		{
 			InitializeComponent();
 			this.Text = title;
 			this.label1.Text = label;
+			this.txtInput.Text = defaultValue;
 		}
 
 		private void BtnOk_Click(object sender, EventArgs e)

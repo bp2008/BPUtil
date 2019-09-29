@@ -42,5 +42,24 @@ namespace BPUtil
 		{
 			return random.Value.Next(minValue, maxValue);
 		}
+		/// <summary>
+		/// Returns a byte array of the specified length, filled with random data.
+		/// </summary>
+		/// <param name="length">Length of the byte array to return.</param>
+		/// <returns></returns>
+		public static byte[] NextBytes(int length)
+		{
+			byte[] buf = new byte[length];
+			random.Value.NextBytes(buf);
+			return buf;
+		}
+		/// <summary>
+		/// Fills the specified byte array with random data.
+		/// </summary>
+		/// <param name="buf">A byte array to fill with random data.</param>
+		public static void NextBytes(byte[] buf)
+		{
+			random.Value.NextBytes(buf);
+		}
 	}
 }

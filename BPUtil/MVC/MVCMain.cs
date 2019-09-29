@@ -97,7 +97,8 @@ namespace BPUtil.MVC
 		/// <returns></returns>
 		private bool IsController(Type t)
 		{
-			return (t.Namespace == Namespace || t.Namespace.StartsWith(Namespace + ".")) && typeof(Controller).IsAssignableFrom(t) && !t.IsAbstract;
+			return (t.Namespace == Namespace || (t.Namespace != null && t.Namespace.StartsWith(Namespace + ".")))
+				&& typeof(Controller).IsAssignableFrom(t) && !t.IsAbstract;
 		}
 
 		/// <summary>

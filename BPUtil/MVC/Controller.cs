@@ -158,5 +158,14 @@ namespace BPUtil.MVC
 		{
 			return new JsonResult(json);
 		}
+
+		/// <summary>
+		/// Returns a StatusCodeResult with a custom response status.
+		/// </summary>
+		/// <param name="responseStatus">HTTP response status.</param>
+		protected virtual StatusCodeResult StatusCode(string responseStatus)
+		{
+			return new StatusCodeResult(responseStatus);
+		}
 	}
 }
