@@ -74,6 +74,43 @@ namespace BPUtil
 				return defaultValue;
 			return (T)value;
 		}
+
+		/// <summary>
+		/// Attempts to set the value of the specified registry key, throwing an exception if it fails.
+		/// </summary>
+		/// <param name="path">Path to the folder where the key is located.</param>
+		/// <param name="key">Name of the key to set the value of.</param>
+		/// <param name="value">Value to set.</param>
+		/// <param name="valueKind">The type of value stored in this registry key.</param>
+		/// <returns></returns>
+		public static void SetHKLMValue(string path, string key, object value, RegistryValueKind valueKind = RegistryValueKind.Unknown)
+		{
+			RegistryKey sk = HKLM.CreateSubKey(path);
+			if (valueKind == RegistryValueKind.Unknown)
+				sk.SetValue(key, value);
+			sk.SetValue(key, value, valueKind);
+		}
+
+		/// <summary>
+		/// Attempts to set the value of the specified registry key, returning true if successful or false if not.
+		/// </summary>
+		/// <param name="path">Path to the folder where the key is located.</param>
+		/// <param name="key">Name of the key to set the value of.</param>
+		/// <param name="value">Value to set.</param>
+		/// <param name="valueKind">The type of value stored in this registry key.</param>
+		/// <returns></returns>
+		public static bool SetHKLMValueSafe(string path, string key, object value, RegistryValueKind valueKind = RegistryValueKind.Unknown)
+		{
+			try
+			{
+				SetHKLMValue(path, key, value, valueKind);
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
 		public static string GetStringValue(RegistryKey key, string name)
 		{
 			object obj = key.GetValue(name);
@@ -92,6 +129,153 @@ namespace BPUtil
 			if (int.TryParse(obj.ToString(), out val))
 				return val;
 			return defaultValue;
+		}
+		public static long GetLongValue(RegistryKey key, string name, long defaultValue)
+		{
+			//if (ThrowWhenReadingIncompatibleValueTypes)
+			//{
+			//	RegistryValueKind kind = key.GetValueKind(name);
+			//	if (kind != RegistryValueKind.QWord)
+			//		throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected QWord.");
+			//}
+			object obj = key.GetValue(name);
+			if (obj == null)
+				return defaultValue;
+			if (typeof(long).IsAssignableFrom(obj.GetType()))
+				return (long)obj;
+			long val;
+			if (long.TryParse(obj.ToString(), out val))
+				return val;
+			return defaultValue;
+		}
+	}
+	/// <summary>
+	/// Provides a cleaner interface for reading registry values from a RegistryKey.
+	/// </summary>
+	public class RegEdit
+	{
+		public readonly RegistryKey key;
+		/// <summary>
+		/// If true, values must already exist and be the expected type, or else an exception will be thrown.
+		/// </summary>
+		public bool typeCheck = false;
+		public RegEdit(RegistryKey key)
+		{
+			this.key = key;
+		}
+		/// <summary>
+		/// Reads a String value.
+		/// </summary>
+		/// <param name="name"></param>
+		/// <returns></returns>
+		public string String(string name)
+		{
+			if (typeCheck)
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.String)
+					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected String.");
+			}
+			else if (key == null || !key.GetValueNames().Contains(name))
+				return null;
+			else
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.DWord)
+					return null;
+			}
+			return (string)this.key.GetValue(name);
+		}
+		/// <summary>
+		/// Reads a DWord (32 bit integer) value.
+		/// </summary>
+		/// <param name="name"></param>
+		/// <returns></returns>
+		public int DWord(string name)
+		{
+			if (typeCheck)
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.DWord)
+					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected DWord.");
+			}
+			else if (key == null || !key.GetValueNames().Contains(name))
+				return 0;
+			else
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.DWord)
+					return 0;
+			}
+			return (int)this.key.GetValue(name);
+		}
+		/// <summary>
+		/// Reads a QWord (64 bit integer) value.
+		/// </summary>
+		/// <param name="name"></param>
+		/// <returns></returns>
+		public long QWord(string name)
+		{
+			if (typeCheck)
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.QWord)
+					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected QWord.");
+			}
+			else if (key == null || !key.GetValueNames().Contains(name))
+				return 0;
+			else
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.QWord)
+					return 0;
+			}
+			return (long)this.key.GetValue(name);
+		}
+		/// <summary>
+		/// Writes a String value.
+		/// </summary>
+		/// <param name="name"></param>
+		/// <param name="value"></param>
+		public void String(string name, string value)
+		{
+			if (typeCheck)
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.String)
+					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected String.");
+			}
+			this.key.SetValue(name, value, RegistryValueKind.String);
+		}
+		/// <summary>
+		/// Writes a DWord (32 bit integer) value.
+		/// </summary>
+		/// <param name="name"></param>
+		/// <param name="value"></param>
+		public void DWord(string name, int value)
+		{
+			if (typeCheck)
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.DWord)
+					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected DWord.");
+			}
+			this.key.SetValue(name, value, RegistryValueKind.DWord);
+		}
+		/// <summary>
+		/// Writes a QWord (64 bit integer) value.
+		/// </summary>
+		/// <param name="name"></param>
+		/// <param name="value"></param>
+		public void QWord(string name, long value)
+		{
+			if (typeCheck)
+			{
+				RegistryValueKind kind = key.GetValueKind(name);
+				if (kind != RegistryValueKind.QWord)
+					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected QWord.");
+			}
+			this.key.SetValue(name, value, RegistryValueKind.QWord);
 		}
 	}
 }
