@@ -8,7 +8,7 @@ namespace UnitTests
 	[TestClass]
 	public class TestCachedObject
 	{
-		private const bool allowSlowTest = false;
+		private const bool allowSlowTest = true;
 		private class ObjectThatIsDifferentEachTime
 		{
 			private static long counter = 0;
