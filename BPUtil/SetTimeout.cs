@@ -8,6 +8,9 @@ using System.Windows.Forms;
 
 namespace BPUtil
 {
+	/// <summary>
+	/// Offers the ability to call methods after a delay of milliseconds. Operations scheduled via this class can be canceled.
+	/// </summary>
 	public static class SetTimeout
 	{
 		/// <summary>
