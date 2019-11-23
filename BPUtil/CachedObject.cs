@@ -51,13 +51,12 @@ namespace BPUtil
 		private CachedInstance current;
 		private Stopwatch updateTimer = new Stopwatch();
 		private object myLock = new object();
-		private EventWaitHandle refreshAsyncWaitHandle = new EventWaitHandle(true, EventResetMode.ManualReset);
 		private long minAgeMs;
 		private long maxAgeMs;
 		private Func<T> createNewObjectFunc;
 
 		/// <summary>
-		/// Returns the most recent copy of the object.  The first get may be slow, as the object will need to be created.
+		/// Returns the most recent copy of the object.  The first get may be slow, as the object will need to be created.  You should not work directly with this property, as it may change to a new instance at any time.  Make a local reference to the instance.
 		/// </summary>
 		public T Instance
 		{
@@ -82,20 +81,21 @@ namespace BPUtil
 			}
 			else if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
 			{
-				if (refreshAsyncWaitHandle.WaitOne(0))
+				SetTimeout.OnBackground(() =>
 				{
-					lock (myLock)
+					ci = current;
+					if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
 					{
-						ci = current;
-						if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
+						lock (myLock)
 						{
-							SetTimeout.OnBackground(() =>
+							ci = current;
+							if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
 							{
 								current = new CachedInstance(createNewObjectFunc(), updateTimer);
-							}, 0);
+							}
 						}
 					}
-				}
+				}, 0);
 			}
 		}
 	}

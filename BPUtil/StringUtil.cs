@@ -206,5 +206,14 @@ namespace BPUtil
 			builder.Append("\\u");
 			builder.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
 		}
+		public static string DeNullify(object maybeNull)
+		{
+			if (maybeNull == null)
+				return "";
+			else if (maybeNull is string)
+				return (string)maybeNull;
+			else
+				return maybeNull.ToString();
+		}
 	}
 }
