@@ -711,6 +711,9 @@ namespace BPUtil.SimpleHttp
 				outputStream = new StreamWriter(tcpStream);
 			}
 		}
+		/// <summary>
+		/// Returns true if the client has requested gzip compression.
+		/// </summary>
 		public bool ClientRequestsGZipCompression
 		{
 			get
@@ -735,6 +738,8 @@ namespace BPUtil.SimpleHttp
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		public virtual void writeSuccess(string contentType = "text/html; charset=UTF-8", long contentLength = -1, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
 		{
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
 			responseWritten = true;
 			outputStream.WriteLineRN("HTTP/1.1 " + responseCode);
 			if (!string.IsNullOrEmpty(contentType))
@@ -763,6 +768,8 @@ namespace BPUtil.SimpleHttp
 		/// <param name="description">(OPTIONAL) A description string to send after the headers as the response.  This is typically shown to the remote user in his browser.  If null, the code string is sent here.  If "", no response body is sent by this function, and you may or may not want to write your own.</param>
 		public virtual void writeFailure(string code = "404 Not Found", string description = null)
 		{
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
 			responseWritten = true;
 			outputStream.WriteLineRN("HTTP/1.1 " + code);
 			outputStream.WriteLineRN("Connection: close");
@@ -779,6 +786,8 @@ namespace BPUtil.SimpleHttp
 		/// <param name="redirectToUrl">URL to redirect to.</param>
 		public virtual void writeRedirect(string redirectToUrl)
 		{
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
 			responseWritten = true;
 			outputStream.WriteLineRN("HTTP/1.1 302 Found");
 			outputStream.WriteLineRN("Location: " + redirectToUrl);
@@ -788,12 +797,12 @@ namespace BPUtil.SimpleHttp
 
 		/// <summary>
 		/// Writes response headers to finish the WebSocket handshake with the client. No extensions are supported (such as compression) at this time.
-		/// This method is supposed to facilitate linking two WebSocket clients together using this server as a proxy.
-		/// NOTE: This functionality is untested and likely does not work as intended.
 		/// </summary>
-		public virtual void writeWebSocketProxy()
+		public virtual void writeWebSocketUpgrade()
 		{
 			responseWritten = true;
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
 			outputStream.WriteLineRN("HTTP/1.1 101 Switching Protocols");
 			outputStream.WriteLineRN("Upgrade: websocket");
 			outputStream.WriteLineRN("Connection: Upgrade");
@@ -835,6 +844,8 @@ namespace BPUtil.SimpleHttp
 		/// <param name="singleRequestOnly">If true, a Connection: close header will be added, and any existing Connection header will be dropped.</param>
 		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null, bool singleRequestOnly = false)
 		{
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
 			responseWritten = true;
 			//try
 			//{

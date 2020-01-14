@@ -67,6 +67,7 @@
     <Compile Include="Forms\InputDialog.Designer.cs">
       <DependentUpon>InputDialog.cs</DependentUpon>
     </Compile>
+    <Compile Include="IPUtil.cs" />
     <Compile Include="MVC\ActionResult.cs" />
     <Compile Include="MVC\ControllerInfo.cs" />
     <Compile Include="MVC\ExceptionHtmlResult.cs" />
@@ -136,6 +137,12 @@
     <Compile Include="SimpleHttp\NetworkAddressInfo.cs" />
     <Compile Include="SimpleHttp\ProxyDataBuffer.cs" />
     <Compile Include="SimpleHttp\WebpackProxy.cs" />
+    <Compile Include="SimpleHttp\WebSockets\WebSocket.cs" />
+    <Compile Include="SimpleHttp\WebSockets\WebSocketCloseCode.cs" />
+    <Compile Include="SimpleHttp\WebSockets\WebSocketFrame.cs" />
+    <Compile Include="SimpleHttp\WebSockets\WebSocketFrameHeader.cs" />
+    <Compile Include="SimpleHttp\WebSockets\WebSocketOpcode.cs" />
+    <Compile Include="SimpleHttp\WebSockets\WebSocketException.cs" />
     <Compile Include="SimpleThreadPool.cs" />
     <Compile Include="SimpleHttp\GlobalThrottledStream.cs" />
     <Compile Include="SimpleHttp\Mime.cs" />

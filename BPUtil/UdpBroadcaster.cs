@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -33,6 +34,10 @@ namespace BPUtil
 		Thread receiver;
 		Thread sender;
 		IPEndPoint sendEP;
+		/// <summary>
+		/// Gets the network interface being used by this UdpBroadcaster.
+		/// </summary>
+		public NetworkInterface Interface { get; internal set; }
 
 		/// <summary>
 		/// Raised when a UDP packet is received.
@@ -174,6 +179,89 @@ namespace BPUtil
 			catch (Exception ex)
 			{
 				Logger.Debug(ex);
+			}
+		}
+	}
+	/// <summary>
+	/// A class which sends and optionally receives UDP broadcast packets on all interfaces on a particular port.
+	/// </summary>
+	public class GlobalUdpBroadcaster
+	{
+		List<UdpBroadcaster> broadcasters;
+		/// <summary>
+		/// Raised when a UDP packet is received.
+		/// </summary>
+		public event EventHandler<UdpPacket> PacketReceived = delegate { };
+
+		public GlobalUdpBroadcaster(int port, bool listen)
+		{
+			broadcasters = IPUtil.GetOperationalInterfaces()
+				.Select(nic =>
+				{
+					UdpBroadcaster b = new UdpBroadcaster(nic.GetBroadcastAddress(), nic.Address, port, listen);
+					b.Interface = nic.Interface;
+					b.PacketReceived += B_PacketReceived;
+					return b;
+				})
+				.ToList();
+		}
+
+		private void B_PacketReceived(object sender, UdpPacket e)
+		{
+			PacketReceived(sender, e);
+		}
+
+		/// <summary>
+		/// Ends the send and receive threads.
+		/// </summary>
+		public void Stop()
+		{
+			lock (broadcasters)
+			{
+				foreach (UdpBroadcaster b in broadcasters)
+				{
+					try
+					{
+						b.Stop();
+					}
+					catch { }
+				}
+			}
+		}
+		/// <summary>
+		/// Broadcasts the specified packet.
+		/// </summary>
+		/// <param name="packet"></param>
+		public void Broadcast(byte[] packet)
+		{
+			lock (broadcasters)
+			{
+				foreach (UdpBroadcaster b in broadcasters)
+				{
+					try
+					{
+						b.Broadcast(packet);
+					}
+					catch { }
+				}
+			}
+		}
+		/// <summary>
+		/// Broadcasts the specified packet.
+		/// </summary>
+		/// <param name="getPacket">A function which returns the packet to broadcast.</param>
+		public void Broadcast(Func<NetworkInterface, byte[]> getPacket)
+		{
+			lock (broadcasters)
+			{
+				foreach (UdpBroadcaster b in broadcasters)
+				{
+					try
+					{
+						b.Broadcast(getPacket(b.Interface));
+					}
+					catch { }
+				}
 			}
 		}
 	}

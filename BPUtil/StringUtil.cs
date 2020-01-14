@@ -215,5 +215,66 @@ namespace BPUtil
 			else
 				return maybeNull.ToString();
 		}
+
+		/// <summary>
+		/// Returns a number of bytes formatted with an appropriate unit for disk / file sizes.  E.g. 1234567 => 1.18 MiB
+		/// </summary>
+		/// <param name="bytes">Number of bytes</param>
+		/// <param name="decimals">Maximum number of decimal places to expose.</param>
+		/// <returns></returns>
+		public static string FormatDiskBytes(long bytes, int decimals = 2)
+		{
+			return FormatDataSize(bytes,
+				new int[] { decimals, decimals, decimals, decimals, decimals, decimals, decimals, decimals, decimals },
+				1024,
+				new string[] { "B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB" });
+		}
+		/// <summary>
+		/// Returns a number of bytes formatted with an appropriate unit for network transfer sizes.  E.g. 1234567 => 1.23 MB
+		/// </summary>
+		/// <param name="bytes">Number of bytes</param>
+		/// <param name="decimals">Maximum number of decimal places to expose.</param>
+		/// <returns></returns>
+		public static string FormatNetworkBytes(long bytes, int decimals = 2)
+		{
+			return FormatDataSize(bytes,
+				new int[] { decimals, decimals, decimals, decimals, decimals, decimals, decimals, decimals, decimals },
+				1000,
+				new string[] { "B", "K", "M", "G", "T", "PB", "EB", "ZB", "YB" });
+		}
+		/// <summary>
+		/// <para>Returns a number of bits formatted with an appropriate unit for network transfer sizes.  E.g. 1234567 => 1.2 Mb</para>
+		/// <para>An appropriate number of decimal places is chosen automatically based on the size of the input.</para>
+		/// </summary>
+		/// <param name="bits">Number of bits</param>
+		/// <returns></returns>
+		public static string FormatNetworkBits(long bits)
+		{
+			return FormatDataSize(bits, new int[] { 0, 0, 1, 2, 2, 2, 2, 2, 2 }, 1000, new string[] { "b", "Kb", "Mb", "Gb", "Tb", "Pb", "Eb", "Zb", "Yb" });
+		}
+
+		private static string FormatDataSize(long input, int[] decimals, int factor, string[] sizes)
+		{
+			if (input == 0) return "0 " + sizes[0];
+			bool negative = input < 0;
+			if (negative)
+				input = -input;
+
+			// Decide which unit we'll use (index 0-8)
+			int unitIndex = (int)Math.Floor(Math.Log(input) / Math.Log(factor));
+			unitIndex = unitIndex.Clamp(0, 8);
+
+			// Build string formatting string
+			StringBuilder decimalStringFormat = new StringBuilder();
+			decimalStringFormat.Append("0");
+			int dm = decimals[unitIndex];
+			if (dm > 0)
+				decimalStringFormat.Append(".");
+			for (int n = 0; n < dm; n++)
+				decimalStringFormat.Append("#");
+
+			// Return final value
+			return (negative ? "-" : "") + (input / Math.Pow(factor, unitIndex)).ToString(decimalStringFormat.ToString()) + ' ' + sizes[unitIndex];
+		}
 	}
 }

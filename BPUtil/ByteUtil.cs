@@ -494,27 +494,49 @@ namespace BPUtil
 		/// <returns></returns>
 		public static string ReadUtf8_16(byte[] buffer, int offset)
 		{
-			if (offset < 0 || offset >= buffer.Length)
-				throw new ArgumentException("offset must be >= 0 and < buffer.Length", "offset");
-			if (buffer.Length - offset < 2)
-				throw new ArgumentException("ReadUtf8_16(byte[" + buffer.Length + "], " + offset + ") method cannot read byte length because there are not enough bytes remaining in the buffer.");
-			int byteLength = ReadUInt16(buffer, offset);
-			return ReadUtf8(buffer, offset + 2, byteLength);
+			return ReadUtf8_16(buffer, offset, out ushort ignored);
 		}
 		/// <summary>
 		/// Reads a UTF8 string (no byte order mark) from the buffer, assuming the string's length is prepended as a 16 bit unsigned integer.
 		/// </summary>
 		/// <param name="buffer">The buffer to read from.</param>
 		/// <param name="offset">The offset to begin reading at.</param>
+		/// <param name="strLen">[out] Length in bytes of the string that was read. (does not include the 2 byte length of the length field)</param>
+		/// <returns></returns>
+		public static string ReadUtf8_16(byte[] buffer, int offset, out ushort strLen)
+		{
+			if (offset < 0 || offset >= buffer.Length)
+				throw new ArgumentException("offset must be >= 0 and < buffer.Length", "offset");
+			if (buffer.Length - offset < 2)
+				throw new ArgumentException("ReadUtf8_16(byte[" + buffer.Length + "], " + offset + ") method cannot read byte length because there are not enough bytes remaining in the buffer.");
+			strLen = ReadUInt16(buffer, offset);
+			return ReadUtf8(buffer, offset + 2, strLen);
+		}
+		/// <summary>
+		/// Reads a UTF8 string (no byte order mark) from the buffer, assuming the string's length is prepended as a 32 bit unsigned integer.
+		/// </summary>
+		/// <param name="buffer">The buffer to read from.</param>
+		/// <param name="offset">The offset to begin reading at.</param>
 		/// <returns></returns>
 		public static string ReadUtf8_32(byte[] buffer, int offset)
+		{
+			return ReadUtf8_32(buffer, offset, out uint ignored);
+		}
+		/// <summary>
+		/// Reads a UTF8 string (no byte order mark) from the buffer, assuming the string's length is prepended as a 32 bit unsigned integer.
+		/// </summary>
+		/// <param name="buffer">The buffer to read from.</param>
+		/// <param name="offset">The offset to begin reading at.</param>
+		/// <param name="strLen">[out] Length in bytes of the string that was read. (does not include the 4 byte length of the length field)</param>
+		/// <returns></returns>
+		public static string ReadUtf8_32(byte[] buffer, int offset, out uint strLen)
 		{
 			if (offset < 0 || offset >= buffer.Length)
 				throw new ArgumentException("offset must be >= 0 and < buffer.Length", "offset");
 			if (buffer.Length - offset < 4)
 				throw new ArgumentException("ReadUtf8_32(byte[" + buffer.Length + "], " + offset + ") method cannot read byte length because there are not enough bytes remaining in the buffer.");
-			int byteLength = (int)ReadUInt32(buffer, offset);
-			return ReadUtf8(buffer, offset + 4, byteLength);
+			strLen = ReadUInt32(buffer, offset);
+			return ReadUtf8(buffer, offset + 4, (int)strLen);
 		}
 		#endregion
 		#region Read from stream (Big endian on the stream)
