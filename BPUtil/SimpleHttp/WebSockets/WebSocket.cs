@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,28 +18,46 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// The maximum size of a payload this WebSocket will allow to be received. Any payloads exceeding this size will cause the WebSocket to be closed.
 		/// </summary>
 		public static int MAX_PAYLOAD_BYTES = 20000000;
+
 		/// <summary>
-		/// The HttpProcessor instance this WebSocket is bound to.
+		/// The TcpClient instance this WebSocket is bound to.
 		/// </summary>
-		public readonly HttpProcessor p;
+		public readonly TcpClient tcpClient;
+		/// <summary>
+		/// The NetworkStream belonging to <see cref="tcpClient"/>.
+		/// </summary>
+		public readonly NetworkStream tcpStream;
 
 		protected Thread thrWebSocketRead;
-		protected Action<WebSocketBinaryFrame> onMessageReceived = delegate { };
-		protected Action<WebSocketBinaryFrame> onClose = delegate { };
+		protected Action<WebSocketFrame> onMessageReceived = delegate { };
+		protected Action<WebSocketCloseFrame> onClose = delegate { };
 		protected object sendLock = new object();
+		protected object startStopLock = new object();
+		protected bool handshakePerformed = false;
+		protected bool sentCloseCode = false;
+		protected bool isClosing = false;
 
 		#region Constructors and Initialization
 		/// <summary>
-		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/>.
+		/// Creates a new WebSocket bound to a <see cref="TcpClient"/> that is already connected.
+		/// </summary>
+		/// <param name="tcpc">A connected <see cref="TcpClient"/> to bind to the new WebSocket instance.</param>
+		public WebSocket(TcpClient tcpc)
+		{
+			this.tcpClient = tcpc;
+			this.tcpStream = tcpc.GetStream();
+		}
+
+		/// <summary>
+		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/> that has already read the request headers.  The WebSocket handshake will be completed automatically.
 		/// </summary>
 		/// <param name="p">An <see cref="HttpProcessor"/> to bind to the new WebSocket instance.</param>
-		public WebSocket(HttpProcessor p)
+		public WebSocket(HttpProcessor p) : this(p.tcpClient)
 		{
-			this.p = p;
-
 			if (!IsWebSocketRequest(p))
 				throw new Exception("Unable to create a WebSocket from a connection that did not request a websocket upgrade.");
 
+			handshakePerformed = true;
 			string version = p.GetHeaderValue("Sec-WebSocket-Version");
 			if (version != "13")
 			{
@@ -52,12 +72,12 @@ namespace BPUtil.SimpleHttp.WebSockets
 		}
 
 		/// <summary>
-		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/>.  This constructor starts a background thread to read from the web socket.
+		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/>.  The WebSocket handshake will be completed automatically.  This constructor calls StartReading automatically.
 		/// </summary>
 		/// <param name="p">An <see cref="HttpProcessor"/> to bind to the new WebSocket instance.</param>
 		/// <param name="onMessageReceived">A callback method which is called whenever a message is received from the WebSocket.</param>
 		/// <param name="onClose">A callback method which is called when the WebSocket is closed by the remote endpoint.</param>
-		public WebSocket(HttpProcessor p, Action<WebSocketBinaryFrame> onMessageReceived, Action<WebSocketBinaryFrame> onClose) : this(p)
+		public WebSocket(HttpProcessor p, Action<WebSocketFrame> onMessageReceived, Action<WebSocketCloseFrame> onClose) : this(p)
 		{
 			StartReading(onMessageReceived, onClose);
 		}
@@ -67,24 +87,42 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// </summary>
 		/// <param name="onMessageReceived">A callback method which is called whenever a message is received from the WebSocket.</param>
 		/// <param name="onClose">A callback method which is called when the WebSocket is closed by the remote endpoint.</param>
-		public void StartReading(Action<WebSocketBinaryFrame> onMessageReceived, Action<WebSocketBinaryFrame> onClose)
+		public void StartReading(Action<WebSocketFrame> onMessageReceived, Action<WebSocketCloseFrame> onClose)
 		{
-			if (thrWebSocketRead != null)
-				throw new Exception("WebSocket reading thread was already active!");
+			lock (startStopLock)
+			{
+				if (isClosing)
+					throw new Exception("The WebSocket instance has already started closing.");
+				if (!handshakePerformed)
+					throw new Exception("The WebSocket handshake has not been performed yet!");
+				if (thrWebSocketRead != null)
+					throw new Exception("WebSocket reading thread was already active!");
 
-			this.onMessageReceived = onMessageReceived;
-			this.onClose = onClose;
+				this.onMessageReceived = onMessageReceived;
+				this.onClose = onClose;
 
-			thrWebSocketRead = new Thread(WebSocketRead);
-			thrWebSocketRead.Name = "WebSocket Read";
-			thrWebSocketRead.IsBackground = true;
-			thrWebSocketRead.Start();
+				thrWebSocketRead = new Thread(WebSocketRead);
+				thrWebSocketRead.Name = "WebSocket Read";
+				thrWebSocketRead.IsBackground = true;
+				thrWebSocketRead.Start();
+			}
 		}
+
+		public void Close()
+		{
+			lock (startStopLock)
+			{
+				isClosing = true;
+				thrWebSocketRead?.Abort();
+			}
+		}
+
 		#endregion
 
 		#region Reading Frames
 		private void WebSocketRead()
 		{
+			WebSocketCloseFrame closeFrame = null;
 			try
 			{
 				WebSocketFrameHeader fragmentStart = null;
@@ -92,22 +130,12 @@ namespace BPUtil.SimpleHttp.WebSockets
 				ulong totalLength = 0;
 				while (true)
 				{
-					WebSocketFrameHeader head = new WebSocketFrameHeader(p.tcpStream);
+					WebSocketFrameHeader head = new WebSocketFrameHeader(tcpStream);
 
 					if (head.opcode == WebSocketOpcode.Close)
 					{
-						WebSocketCloseFrame closeFrame = new WebSocketCloseFrame(head, p.tcpStream);
+						closeFrame = new WebSocketCloseFrame(head, tcpStream);
 						Send(WebSocketCloseCode.Normal);
-						try
-						{
-							onClose(closeFrame);
-						}
-						catch (ThreadAbortException) { }
-						catch (Exception ex)
-						{
-							if (!p.isOrdinaryDisconnectException(ex))
-								SimpleHttpLogger.Log(ex);
-						}
 						//SimpleHttpLogger.LogVerbose("WebSocket connection closed with code: "
 						//	+ (ushort)closeFrame.CloseCode
 						//	+ " (" + closeFrame.CloseCode + ")"
@@ -116,13 +144,13 @@ namespace BPUtil.SimpleHttp.WebSockets
 					}
 					else if (head.opcode == WebSocketOpcode.Ping)
 					{
-						WebSocketPingFrame pingFrame = new WebSocketPingFrame(head, p.tcpStream);
+						WebSocketPingFrame pingFrame = new WebSocketPingFrame(head, tcpStream);
 						SendFrame(WebSocketOpcode.Pong, pingFrame.Data);
 						continue;
 					}
 					else if (head.opcode == WebSocketOpcode.Pong)
 					{
-						WebSocketPongFrame pingFrame = new WebSocketPongFrame(head, p.tcpStream);
+						WebSocketPongFrame pingFrame = new WebSocketPongFrame(head, tcpStream);
 						continue;
 					}
 					else if (head.opcode == WebSocketOpcode.Continuation || head.opcode == WebSocketOpcode.Text || head.opcode == WebSocketOpcode.Binary)
@@ -147,7 +175,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 						}
 
 						// Read the Frame's Payload
-						fragments.Add(ByteUtil.ReadNBytes(p.tcpStream, (int)head.payloadLength));
+						fragments.Add(ByteUtil.ReadNBytes(tcpStream, (int)head.payloadLength));
 
 						if (head.fin)
 						{
@@ -182,7 +210,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 							catch (ThreadAbortException) { }
 							catch (Exception ex)
 							{
-								if (!p.isOrdinaryDisconnectException(ex))
+								if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
 									SimpleHttpLogger.Log(ex);
 							}
 
@@ -194,11 +222,46 @@ namespace BPUtil.SimpleHttp.WebSockets
 					}
 				}
 			}
-			catch (ThreadAbortException) { }
+			catch (ThreadAbortException)
+			{
+				if (closeFrame == null)
+				{
+					closeFrame = new WebSocketCloseFrame();
+					closeFrame.CloseCode = WebSocketCloseCode.Normal;
+				}
+				Try.Swallow(() =>
+				{
+					tcpClient.SendTimeout = Math.Min(tcpClient.SendTimeout, 1000);
+					Send(closeFrame.CloseCode);
+				});
+			}
 			catch (Exception ex)
 			{
-				if (!p.isOrdinaryDisconnectException(ex))
+				bool isDisconnect = HttpProcessor.IsOrdinaryDisconnectException(ex);
+				if (!isDisconnect)
 					SimpleHttpLogger.LogVerbose(ex);
+
+				if (closeFrame == null)
+				{
+					closeFrame = new WebSocketCloseFrame();
+					closeFrame.CloseCode = isDisconnect ? WebSocketCloseCode.ConnectionLost : WebSocketCloseCode.InternalError;
+				}
+				Try.Swallow(() => { Send(closeFrame.CloseCode); });
+			}
+			finally
+			{
+				try
+				{
+					if (closeFrame == null)
+					{
+						// This should not happen, but it is possible that further development could leave a code path where closeFrame did not get set.
+						closeFrame = new WebSocketCloseFrame();
+						closeFrame.CloseCode = WebSocketCloseCode.InternalError;
+					}
+					onClose(closeFrame);
+				}
+				catch (ThreadAbortException) { }
+				catch (Exception) { }
 			}
 		}
 		#endregion
@@ -229,6 +292,9 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <param name="message">A message to include in the close frame.  You can assume this message will not be shown to the user.  The message may be truncated to ensure the UTF8-Encoded length is 125 bytes or less.</param>
 		public void Send(WebSocketCloseCode closeCode, string message = null)
 		{
+			if (sentCloseCode || closeCode == WebSocketCloseCode.None || closeCode == WebSocketCloseCode.TLSHandshakeFailed || closeCode == WebSocketCloseCode.ConnectionLost)
+				return;
+
 			byte[] msgBytes;
 			if (message == null)
 				msgBytes = new byte[0];
@@ -252,6 +318,8 @@ namespace BPUtil.SimpleHttp.WebSockets
 			Array.Copy(msgBytes, 0, payload, 2, msgBytes.Length);
 
 			SendFrame(WebSocketOpcode.Close, payload);
+
+			sentCloseCode = true;
 		}
 		internal void SendFrame(WebSocketOpcode opcode, byte[] data)
 		{
@@ -259,9 +327,9 @@ namespace BPUtil.SimpleHttp.WebSockets
 			{
 				// Write frame header
 				WebSocketFrameHeader head = new WebSocketFrameHeader(opcode, data.Length);
-				head.Write(p.tcpStream);
+				head.Write(tcpStream);
 				// Write payload
-				p.tcpStream.Write(data, 0, data.Length);
+				tcpStream.Write(data, 0, data.Length);
 			}
 		}
 
@@ -284,6 +352,94 @@ namespace BPUtil.SimpleHttp.WebSockets
 			if (string.IsNullOrWhiteSpace(p.GetHeaderValue("Sec-WebSocket-Key")))
 				return false;
 			return true;
+		}
+
+		/// <summary>
+		/// Given a "Sec-WebSocket-Key" header value from a WebSocket client, returns the value of the "Sec-WebSocket-Accept" header that the server should provide in its response to complete the handshake.
+		/// </summary>
+		/// <param name="SecWebSocketKeyClientValue">"Sec-WebSocket-Key" header value from a WebSocket client</param>
+		/// <returns></returns>
+		public static string CreateSecWebSocketAcceptValue(string SecWebSocketKeyClientValue)
+		{
+			return Hash.GetSHA1Base64(SecWebSocketKeyClientValue + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+		}
+
+		public void CompleteWebSocketHandshake(string expectedPath)
+		{
+			lock (startStopLock)
+			{
+				if (handshakePerformed)
+					throw new Exception("The WebSocket handshake has already been performed.");
+				handshakePerformed = true;
+			}
+
+			// Read HTTP Request line
+			string request = ByteUtil.ReadPrintableASCIILine(tcpStream);
+			if (request == null)
+				throw new Exception("HTTP protocol error: Line was unreadable.");
+			string[] tokens = request.Split(' ');
+			if (tokens.Length != 3)
+				throw new Exception("invalid http request line: " + request);
+			string http_method = tokens[0].ToUpper();
+			if (http_method != "GET")
+				throw new Exception("WebSocket protocol error: HTTP request method was not \"GET\"");
+
+			Uri request_url;
+			if (tokens[1].StartsWith("http://") || tokens[1].StartsWith("https://"))
+				request_url = new Uri(tokens[1]);
+			else
+			{
+				Uri base_uri_this_server = new Uri("http://" + tcpClient.Client.LocalEndPoint.ToString(), UriKind.Absolute);
+				request_url = new Uri(base_uri_this_server, tokens[1]);
+			}
+
+			string requestedPath = request_url.AbsolutePath.StartsWith("/") ? request_url.AbsolutePath : "/" + request_url.AbsolutePath;
+
+			if (requestedPath != expectedPath)
+				throw new Exception("WebSocket handshake could not be completed because the requested path \"" + requestedPath + "\" did not match the expected path \"" + expectedPath + "\"");
+
+			string http_protocol_versionstring = tokens[2];
+
+			// Read HTTP Headers
+			Dictionary<string, string> httpHeaders = new Dictionary<string, string>();
+			string line;
+			while ((line = ByteUtil.ReadPrintableASCIILine(tcpStream)) != "")
+			{
+				if (line == null)
+					throw new Exception("HTTP protocol error: Line was unreadable.");
+				int separator = line.IndexOf(':');
+				if (separator == -1)
+					throw new Exception("invalid http header line: " + line);
+				string name = line.Substring(0, separator);
+				int pos = separator + 1;
+				while (pos < line.Length && line[pos] == ' ')
+					pos++; // strip any spaces
+
+				string value = line.Substring(pos, line.Length - pos);
+
+				string nameLower = name.ToLower();
+				if (httpHeaders.TryGetValue(nameLower, out string existingValue))
+					httpHeaders[nameLower] = existingValue + "," + value;
+				else
+					httpHeaders[nameLower] = value;
+			}
+			if (!httpHeaders.TryGetValue("upgrade", out string header_upgrade)
+				|| !httpHeaders.TryGetValue("connection", out string header_connection)
+				|| !httpHeaders.TryGetValue("sec-websocket-key", out string header_sec_websocket_key))
+				throw new Exception("WebSocket handshake could not complete due to missing required http header(s)");
+
+			if (header_upgrade != "websocket"
+				|| header_connection != "Upgrade"
+				|| string.IsNullOrWhiteSpace(header_sec_websocket_key))
+				throw new Exception("WebSocket handshake could not complete due to a required http header having an unexpected value");
+
+			// Done reading the client's part of the handshake.
+			// Write the server part of the handshake.
+			ByteUtil.WriteUtf8("HTTP/1.1 101 Switching Protocols\r\n", tcpStream);
+			ByteUtil.WriteUtf8("Upgrade: websocket\r\n", tcpStream);
+			ByteUtil.WriteUtf8("Connection: Upgrade\r\n", tcpStream);
+			ByteUtil.WriteUtf8("Sec-WebSocket-Accept: " + CreateSecWebSocketAcceptValue(header_sec_websocket_key) + "\r\n", tcpStream);
+			ByteUtil.WriteUtf8("\r\n", tcpStream);
 		}
 		#endregion
 	}

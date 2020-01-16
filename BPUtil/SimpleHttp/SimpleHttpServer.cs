@@ -9,7 +9,6 @@ using System.Web;
 using System.Text;
 using System.Security.Cryptography.X509Certificates;
 using System.Net.NetworkInformation;
-using System.Security.Cryptography;
 using System.IO.Compression;
 
 // This file has been modified continuously since Nov 10, 2012 by Brian Pearce.
@@ -416,7 +415,7 @@ namespace BPUtil.SimpleHttp
 					catch (ThreadAbortException) { throw; }
 					catch (Exception e)
 					{
-						if (!isOrdinaryDisconnectException(e))
+						if (!IsOrdinaryDisconnectException(e))
 							SimpleHttpLogger.Log(e);
 						if (!responseWritten)
 							writeFailure("500 Internal Server Error");
@@ -438,7 +437,7 @@ namespace BPUtil.SimpleHttp
 				}
 				catch (Exception e)
 				{
-					if (!isOrdinaryDisconnectException(e))
+					if (!IsOrdinaryDisconnectException(e))
 						SimpleHttpLogger.LogVerbose(e);
 					if (shouldLogRequestsToFile())
 						SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
@@ -466,7 +465,7 @@ namespace BPUtil.SimpleHttp
 			catch (ThreadAbortException) { throw; }
 			catch (Exception ex)
 			{
-				if (!isOrdinaryDisconnectException(ex))
+				if (!IsOrdinaryDisconnectException(ex))
 					SimpleHttpLogger.LogVerbose(ex);
 			}
 			finally
@@ -488,21 +487,48 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 
+		/// <summary>
+		/// Returns true if the specified Exception is a SocketException or contains a SocketException within its InnerException tree.
+		/// </summary>
+		/// <param name="ex">The exception.</param>
+		/// <returns></returns>
+		[Obsolete("Use the static method IsOrdinaryDisconnectException instead.", false)]
 		public bool isOrdinaryDisconnectException(Exception ex)
 		{
-			if (ex is IOException)
+			return IsOrdinaryDisconnectException(ex);
+		}
+		/// <summary>
+		/// Returns true if the specified Exception is a SocketException or contains a SocketException within its InnerException tree.
+		/// </summary>
+		/// <param name="ex">The exception.</param>
+		/// <returns></returns>
+		public static bool IsOrdinaryDisconnectException(Exception ex)
+		{
+			//if (ex is IOException)
+			//{
+			//	if (ex.InnerException != null && ex.InnerException is SocketException)
+			//	{
+			//		//if (ex.InnerException.Message.Contains("An established connection was aborted by the software in your host machine")
+			//		//	|| ex.InnerException.Message.Contains("An existing connection was forcibly closed by the remote host")
+			//		//	|| ex.InnerException.Message.Contains("The socket has been shut down") /* Mono/Linux */
+			//		//	|| ex.InnerException.Message.Contains("Connection reset by peer") /* Mono/Linux */
+			//		//	|| ex.InnerException.Message.Contains("The socket is not connected") /* Mono/Linux */
+			//		//	)
+			//		return true; // Connection aborted.  This happens often enough that reporting it can be excessive.
+			//	}
+			//}
+			if (ex is SocketException)
+				return true;
+			if (ex is AggregateException)
 			{
-				if (ex.InnerException != null && ex.InnerException is SocketException)
-				{
-					//if (ex.InnerException.Message.Contains("An established connection was aborted by the software in your host machine")
-					//	|| ex.InnerException.Message.Contains("An existing connection was forcibly closed by the remote host")
-					//	|| ex.InnerException.Message.Contains("The socket has been shut down") /* Mono/Linux */
-					//	|| ex.InnerException.Message.Contains("Connection reset by peer") /* Mono/Linux */
-					//	|| ex.InnerException.Message.Contains("The socket is not connected") /* Mono/Linux */
-					//	)
-					return true; // Connection aborted.  This happens often enough that reporting it can be excessive.
-				}
+				AggregateException agg = ex as AggregateException;
+				if (agg.InnerExceptions != null)
+					foreach (Exception inner in agg.InnerExceptions)
+						if (IsOrdinaryDisconnectException(inner))
+							return true;
 			}
+			if (ex.InnerException != null)
+				return IsOrdinaryDisconnectException(ex.InnerException);
 			return false;
 		}
 		private bool shouldLogRequestsToFile()
@@ -806,14 +832,8 @@ namespace BPUtil.SimpleHttp
 			outputStream.WriteLineRN("HTTP/1.1 101 Switching Protocols");
 			outputStream.WriteLineRN("Upgrade: websocket");
 			outputStream.WriteLineRN("Connection: Upgrade");
-			outputStream.WriteLineRN("Sec-WebSocket-Accept: " + CreateWebSocketResponseKey(this.GetHeaderValue("sec-websocket-key")));
+			outputStream.WriteLineRN("Sec-WebSocket-Accept: " + WebSockets.WebSocket.CreateSecWebSocketKeyServerValue(this.GetHeaderValue("sec-websocket-key")));
 			outputStream.WriteLineRN("");
-		}
-		protected static string CreateWebSocketResponseKey(string base64Key)
-		{
-			SHA1 sha1 = new SHA1CryptoServiceProvider();
-			byte[] hashData = sha1.ComputeHash(Utf8NoBOM.GetBytes(base64Key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")); // It may be incorrect to use Utf8NoBOM here.
-			return Convert.ToBase64String(hashData);
 		}
 
 		/// <summary>

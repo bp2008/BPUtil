@@ -24,9 +24,11 @@ namespace BPUtil
 				Array.Copy(salt, 0, salted, data.Length, salt.Length);
 				data = salted;
 			}
-			SHA512 sha = new SHA512CryptoServiceProvider();
-			byte[] result = sha.ComputeHash(data);
-			return result;
+			using (SHA512 sha = new SHA512CryptoServiceProvider())
+			{
+				byte[] result = sha.ComputeHash(data);
+				return result;
+			}
 		}
 		/// <summary>
 		/// Computes the SHA512 hash of the specified string, optionally appending a binary salt value.
@@ -40,10 +42,10 @@ namespace BPUtil
 			return GetSHA512Bytes(data, salt);
 		}
 		/// <summary>
-		/// Encodes the specified string as UTF8 and calculates the SHA512 hash of the data.
+		/// Decodes the specified string as UTF8 and calculates the SHA512 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 128 characters long.
 		/// </summary>
-		/// <param name="s"></param>
+		/// <param name="s">The string to hash.</param>
 		/// <returns></returns>
 		public static string GetSHA512Hex(string s)
 		{
@@ -64,9 +66,11 @@ namespace BPUtil
 				Array.Copy(salt, 0, salted, data.Length, salt.Length);
 				data = salted;
 			}
-			SHA256 sha = new SHA256CryptoServiceProvider();
-			byte[] result = sha.ComputeHash(data);
-			return result;
+			using (SHA256 sha = new SHA256CryptoServiceProvider())
+			{
+				byte[] result = sha.ComputeHash(data);
+				return result;
+			}
 		}
 		/// <summary>
 		/// Computes the SHA256 hash of the specified string, optionally appending a binary salt value.
@@ -80,10 +84,10 @@ namespace BPUtil
 			return GetSHA256Bytes(data, salt);
 		}
 		/// <summary>
-		/// Encodes the specified string as UTF8 and calculates the SHA256 hash of the data.
+		/// Decodes the specified string as UTF8 and calculates the SHA256 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 64 characters long.
 		/// </summary>
-		/// <param name="s"></param>
+		/// <param name="s">The string to hash.</param>
 		/// <returns></returns>
 		public static string GetSHA256Hex(string s)
 		{
@@ -116,19 +120,31 @@ namespace BPUtil
 		/// <returns></returns>
 		public static byte[] GetSHA1Bytes(byte[] data)
 		{
-			SHA1 sha = new SHA1CryptoServiceProvider();
-			byte[] result = sha.ComputeHash(data);
-			return result;
+			using (SHA1 sha = new SHA1CryptoServiceProvider())
+			{
+				byte[] result = sha.ComputeHash(data);
+				return result;
+			}
 		}
 		/// <summary>
-		/// Encodes the specified string as UTF8 and calculates the SHA1 hash of the data.
+		/// Decodes the specified string as UTF8 and calculates the SHA1 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 40 characters long.
 		/// </summary>
-		/// <param name="s"></param>
+		/// <param name="s">The string to hash.</param>
 		/// <returns></returns>
 		public static string GetSHA1Hex(string s)
 		{
 			return BitConverter.ToString(GetSHA1Bytes(s)).Replace("-", "").ToLower();
+		}
+		/// <summary>
+		/// Decodes the specified string as UTF8 and calculates the SHA1 hash of the data.
+		/// The hash is returned as a base64-encoded string.
+		/// </summary>
+		/// <param name="s">The string to hash.</param>
+		/// <returns></returns>
+		public static string GetSHA1Base64(string s)
+		{
+			return Convert.ToBase64String(GetSHA1Bytes(s));
 		}
 		public static byte[] GetMD5Bytes(string s, byte[] salt = null)
 		{
@@ -140,15 +156,17 @@ namespace BPUtil
 				Array.Copy(salt, 0, salted, data.Length, salt.Length);
 				data = salted;
 			}
-			MD5 md5 = new MD5CryptoServiceProvider();
-			byte[] result = md5.ComputeHash(data);
-			return result;
+			using (MD5 md5 = new MD5CryptoServiceProvider())
+			{
+				byte[] result = md5.ComputeHash(data);
+				return result;
+			}
 		}
 		/// <summary>
-		/// Encodes the specified string as UTF8 and calculates the MD5 hash of the data.
+		/// Decodes the specified string as UTF8 and calculates the MD5 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 32 characters long.
 		/// </summary>
-		/// <param name="s"></param>
+		/// <param name="s">The string to hash.</param>
 		/// <returns></returns>
 		public static string GetMD5Hex(string s)
 		{

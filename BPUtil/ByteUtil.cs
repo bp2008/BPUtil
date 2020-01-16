@@ -140,6 +140,34 @@ namespace BPUtil
 			System.Security.Cryptography.RandomNumberGenerator.Create().GetBytes(buf);
 			return buf;
 		}
+
+		/// <summary>
+		/// <para>Reads a line of text from the input stream.  Each character must be a printable ASCII character [32-126] or "LF" [10] or "CR" [13].</para>
+		/// <para>The line is considered ended when an "LF" character is reached or the end of the stream is reached.</para>
+		/// <para>Any "CR" characters encountered are not added to the output string.</para>
+		/// <para>Null is returned if the line exceeds the specified [maxLength] or if any out-of-range characters are encountered.</para>
+		/// </summary>
+		/// <param name="inputStream"></param>
+		/// <param name="maxLength">Maximum length of the line.</param>
+		/// <returns></returns>
+		public static string ReadPrintableASCIILine(Stream inputStream, int maxLength = 32768)
+		{
+			int next_char;
+			List<byte> data = new List<byte>();
+			while (true)
+			{
+				next_char = inputStream.ReadByte();
+				if (next_char == '\n') { break; }
+				if (next_char == '\r') { continue; }
+				if (next_char == -1) { break; };
+				if (next_char < 32 || next_char > 126)
+					return null;
+				if (data.Count >= maxLength)
+					return null;
+				data.Add((byte)next_char);
+			}
+			return Encoding.ASCII.GetString(data.ToArray());
+		}
 		#region ReadNBytes
 		/// <summary>
 		/// Reads a specific number of bytes from the stream, returning a byte array.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.

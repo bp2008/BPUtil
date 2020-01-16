@@ -62,9 +62,14 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// </summary>
 		public string Message;
 
+		internal WebSocketCloseFrame() : base(new WebSocketFrameHeader(WebSocketOpcode.Close, 0), new byte[0]) { }
+
 		internal WebSocketCloseFrame(WebSocketFrameHeader head, Stream stream) : base(head, stream)
 		{
-			CloseCode = (WebSocketCloseCode)ByteUtil.ReadInt16(Data, 0);
+			if (Data.Length > 1)
+				CloseCode = (WebSocketCloseCode)ByteUtil.ReadInt16(Data, 0);
+			else
+				CloseCode = WebSocketCloseCode.None;
 
 			if (Data.Length > 2)
 				Message = ByteUtil.ReadUtf8(Data, 2, Data.Length - 2);
