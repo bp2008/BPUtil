@@ -111,7 +111,9 @@
     <Compile Include="MVC\ViewBagContainer.cs" />
     <Compile Include="MVC\ViewDataContainer.cs" />
     <Compile Include="MVC\ViewResult.cs" />
+    <Compile Include="NativeWin\WinConsole.cs" />
     <Compile Include="NativeWin\NativeMethods.cs" />
+    <Compile Include="NativeWin\PathCheck.cs" />
     <Compile Include="NativeWin\Win32Helper.cs" />
     <Compile Include="NumberUtil.cs" />
     <Compile Include="ObjectPool.cs" />

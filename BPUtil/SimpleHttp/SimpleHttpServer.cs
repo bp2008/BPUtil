@@ -826,13 +826,13 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public virtual void writeWebSocketUpgrade()
 		{
-			responseWritten = true;
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
+			responseWritten = true;
 			outputStream.WriteLineRN("HTTP/1.1 101 Switching Protocols");
 			outputStream.WriteLineRN("Upgrade: websocket");
 			outputStream.WriteLineRN("Connection: Upgrade");
-			outputStream.WriteLineRN("Sec-WebSocket-Accept: " + WebSockets.WebSocket.CreateSecWebSocketKeyServerValue(this.GetHeaderValue("sec-websocket-key")));
+			outputStream.WriteLineRN("Sec-WebSocket-Accept: " + WebSockets.WebSocket.CreateSecWebSocketAcceptValue(this.GetHeaderValue("sec-websocket-key")));
 			outputStream.WriteLineRN("");
 		}
 
@@ -866,7 +866,6 @@ namespace BPUtil.SimpleHttp
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
-			responseWritten = true;
 			//try
 			//{
 			// Connect to the server we're proxying to.
@@ -878,6 +877,7 @@ namespace BPUtil.SimpleHttp
 			proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
 			proxyClient.Connect(newUri.DnsSafeHost, newUri.Port);
 			Stream proxyStream = proxyClient.GetStream();
+			responseWritten = true;
 			if (newUri.Scheme == "https")
 			{
 				//try

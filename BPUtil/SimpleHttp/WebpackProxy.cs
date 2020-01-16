@@ -81,6 +81,12 @@ namespace BPUtil.SimpleHttp
 		{
 			try
 			{
+				string npmPath = NativeWin.PathCheck.GetFullPath("npm.cmd");
+				if (npmPath == null)
+				{
+					Logger.Debug("node.js does not seem to be installed.");
+					return false;
+				}
 				ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/C \"npm start\"");
 				psi.UseShellExecute = true;
 				psi.WorkingDirectory = new DirectoryInfo(workingDirectory).FullName;

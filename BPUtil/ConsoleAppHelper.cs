@@ -15,9 +15,11 @@ namespace BPUtil
 		/// 
 		/// Call this on Windows only.
 		/// </summary>
+		[Obsolete("Use NativeWin.WinConsole instead.", false)]
 		public static void AllocateConsole()
 		{
-			AllocConsole();
+			if (!Platform.IsUnix())
+				AllocConsole();
 		}
 
 		[DllImport("kernel32.dll", SetLastError = true)]

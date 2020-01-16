@@ -45,6 +45,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 		public WebSocket(TcpClient tcpc)
 		{
 			this.tcpClient = tcpc;
+			this.tcpClient.NoDelay = true;
 			this.tcpStream = tcpc.GetStream();
 		}
 
