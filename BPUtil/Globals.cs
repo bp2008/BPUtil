@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text;
 using System.IO;
 using System.Net;
+using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace BPUtil
 {
@@ -23,6 +25,12 @@ namespace BPUtil
 				InitializeProgram(assembly.Location, assembly.GetName().Name);
 			}
 			catch { }
+		}
+		/// <summary>
+		/// Initializes via the static constructor, where [exePath] is determined by <see cref="Assembly.GetEntryAssembly"/>, and WritableDirectoryBase is a subdirectory of <see cref="Environment.SpecialFolder.CommonApplicationData"/>.  The directory pointed at by WritableDirectoryBase will not be created automatically, and the current working directory will not be changed.
+		/// </summary>
+		public static void Initialize()
+		{
 		}
 		/// <summary>
 		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is the same folder as the exe.
@@ -50,7 +58,7 @@ namespace BPUtil
 			errorFilePath = writableDirectoryBase + executableNameWithoutExtension + "Errors.txt";
 		}
 		/// <summary>
-		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is in Environment.SpecialFolder.CommonApplicationData.
+		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is in <see cref="Environment.SpecialFolder.CommonApplicationData"/>.
 		/// </summary>
 		/// <param name="exePath">Pass in the path to the exe in the root directory of the application.  The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.  The exe name is used to create the CommonApplicationDataBase string.</param>
 		/// <param name="programName">A globally unique program name that does not change and is unlikely to collide with other programs on the user's system.  This is used as part of the WritableDirectoryBase folder path, so you could pass in "MyApp" or to be even safer, "MyCompany/MyApp".</param>
@@ -112,7 +120,24 @@ namespace BPUtil
 		/// </summary>
 		public static string ErrorFilePath
 		{
-			get { return errorFilePath; }
+			get
+			{
+				if (GetErrorFilePath != null)
+					return errorFilePath = GetErrorFilePath();
+				return errorFilePath;
+			}
+		}
+		/// <summary>
+		/// If specified, this function overrides <see cref="errorFilePath"/>.
+		/// </summary>
+		private static Func<string> GetErrorFilePath = null;
+		/// <summary>
+		/// Sets a function that will be called when getting <see cref="ErrorFilePath"/>.
+		/// </summary>
+		/// <param name="newPathFn">A function which returns the path to the log file. E.g. () => { return "C:/MyApp/MyErrorFile.txt"; }</param>
+		public static void OverrideErrorFilePath(Func<string> newPathFn)
+		{
+			GetErrorFilePath = newPathFn;
 		}
 		private static string configFilePath;
 		/// <summary>
@@ -126,5 +151,55 @@ namespace BPUtil
 		/// The BPUtil version number, not to be confused with the version number of the application this is included in.  This version number is often neglected.
 		/// </summary>
 		public static string Version = "0.6";
+
+		/// <summary>
+		/// Gets the GUID of the entry assembly.
+		/// </summary>
+		public static string AssemblyGuid
+		{
+			get
+			{
+				GuidAttribute attr = Assembly.GetEntryAssembly().GetCustomAttributes<GuidAttribute>().FirstOrDefault();
+				if (attr != null)
+					return attr.Value;
+				return "";
+			}
+		}
+
+		/// <summary>
+		/// Gets the title of the entry assembly.
+		/// </summary>
+		public static string AssemblyTitle
+		{
+			get
+			{
+				AssemblyTitleAttribute attr = Assembly.GetEntryAssembly().GetCustomAttributes<AssemblyTitleAttribute>().FirstOrDefault();
+				if (attr != null && !string.IsNullOrWhiteSpace(attr.Title))
+					return attr.Title;
+				return Path.GetFileNameWithoutExtension(Assembly.GetEntryAssembly().CodeBase);
+			}
+		}
+
+		/// <summary>
+		/// Gets the name of the entry assembly.
+		/// </summary>
+		public static string AssemblyName
+		{
+			get
+			{
+				return Assembly.GetEntryAssembly().GetName().Name;
+			}
+		}
+
+		/// <summary>
+		/// Gets the version of the entry assembly.
+		/// </summary>
+		public static string AssemblyVersion
+		{
+			get
+			{
+				return Assembly.GetEntryAssembly().GetName().Version.ToString();
+			}
+		}
 	}
 }

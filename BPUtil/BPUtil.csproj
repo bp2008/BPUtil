@@ -68,6 +68,7 @@
     <Compile Include="Forms\InputDialog.Designer.cs">
       <DependentUpon>InputDialog.cs</DependentUpon>
     </Compile>
+    <Compile Include="Forms\TrayIconApplicationContext.cs" />
     <Compile Include="IPUtil.cs" />
     <Compile Include="MVC\ActionResult.cs" />
     <Compile Include="MVC\ControllerInfo.cs" />
@@ -112,6 +113,8 @@
     <Compile Include="MVC\ViewBagContainer.cs" />
     <Compile Include="MVC\ViewDataContainer.cs" />
     <Compile Include="MVC\ViewResult.cs" />
+    <Compile Include="NativeWin\LastInput.cs" />
+    <Compile Include="NativeWin\SingleInstance.cs" />
     <Compile Include="NativeWin\WinConsole.cs" />
     <Compile Include="NativeWin\NativeMethods.cs" />
     <Compile Include="NativeWin\PathCheck.cs" />

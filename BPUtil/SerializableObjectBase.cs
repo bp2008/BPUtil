@@ -9,6 +9,10 @@ using System.Threading;
 
 namespace BPUtil
 {
+	/// <summary>
+	/// <para>Any class inheriting from this may be loaded and saved from file easily. Uses <see cref="System.Xml.Serialization.XmlSerializer"/>.</para>
+	/// <para>Note that strings stored via this class will have '\r' characters removed by the xml writer.</para>
+	/// </summary>
 	public abstract class SerializableObjectBase
 	{
 		private static ConcurrentDictionary<string, object> fileLocks = new ConcurrentDictionary<string, object>();

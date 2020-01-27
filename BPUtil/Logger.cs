@@ -5,6 +5,7 @@ using System.Text;
 using System.IO;
 using System.Collections.Concurrent;
 using System.Threading;
+using System.Windows.Forms;
 
 namespace BPUtil
 {
@@ -154,6 +155,21 @@ namespace BPUtil
 		public static void StopLoggingThreads()
 		{
 			httpLogger.StopLoggingThreads();
+		}
+
+		/// <summary>
+		/// Registers handlers for <see cref="Application.ThreadException"/> and AppDomain.CurrentDomain.UnhandledException, assigned to call <see cref="Debug(Exception, string)"/>.
+		/// </summary>
+		public static void CatchAll()
+		{
+			AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+			{
+				Logger.Debug(e.ExceptionObject as Exception);
+			};
+			Application.ThreadException += (sender, e) =>
+			{
+				Logger.Debug(e.Exception);
+			};
 		}
 	}
 	public class HttpLogger : SimpleHttp.ILogger
