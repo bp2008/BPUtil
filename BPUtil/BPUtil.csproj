@@ -59,9 +59,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="WaitingQueue.cs" />
     <Compile Include="CachedObject.cs" />
     <Compile Include="Compression.cs" />
     <Compile Include="CSV.cs" />
+    <Compile Include="AppInit.cs" />
     <Compile Include="Forms\InputDialog.cs">
       <SubType>Form</SubType>
     </Compile>

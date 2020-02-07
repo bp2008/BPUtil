@@ -852,6 +852,7 @@ namespace BPUtil.SimpleHttp
 		}
 
 		#region Request Proxy Http(s)
+		private static SimpleThreadPool proxyResponseThreadPool = new SimpleThreadPool("ProxyResponses", 6, 1024, 10000);
 		/// <summary>
 		/// Acts as a proxy server, sending the request to a different URL.  This method starts a new (and unpooled) thread to handle the response from the remote server.
 		/// The "Host" header is rewritten (or added) and output as the first header.
@@ -922,9 +923,8 @@ namespace BPUtil.SimpleHttp
 				_internal_post_body_for_proxy.Seek(remember_position, SeekOrigin.Begin);
 			}
 
-			// Start a thread to connect to newUrl and proxy its response to our client.
-			Thread parentThread = Thread.CurrentThread;
-			Thread ResponseProxyThread = new Thread(() =>
+			// Start a thread to proxy the response to our client.
+			proxyResponseThreadPool.Enqueue(() =>
 			{
 				try
 				{
@@ -938,8 +938,6 @@ namespace BPUtil.SimpleHttp
 					SimpleHttpLogger.LogVerbose(ex);
 				}
 			});
-			ResponseProxyThread.IsBackground = true;
-			ResponseProxyThread.Start();
 
 			// The current thread will handle any additional incoming data from our client and proxy it to newUrl.
 			this.tcpClient.NoDelay = true;
@@ -954,20 +952,25 @@ namespace BPUtil.SimpleHttp
 		}
 		private void _ProxyString(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy)
 		{
-			ProxyDataItem item = new ProxyDataItem(Direction, str);
-			snoopy?.AddItem(item);
+			if (snoopy != null)
+				snoopy.AddItem(new ProxyDataItem(Direction, str));
 			//DebugLogStreamWrite(item.ToString());
 			byte[] buf = Utf8NoBOM.GetBytes(str);
 			target.Write(buf, 0, buf.Length);
 		}
 		private void _ProxyData(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy)
 		{
-			if (buf.Length != length)
-				buf = ByteUtil.SubArray(buf, 0, length);
-			ProxyDataItem item = new ProxyDataItem(Direction, buf);
-			snoopy?.AddItem(item);
-			//DebugLogStreamWrite(item.ToString() + "\r\n");
-			target.Write(buf, 0, buf.Length);
+			if (snoopy != null)
+			{
+				ProxyDataItem item;
+				if (buf.Length != length)
+					item = new ProxyDataItem(Direction, ByteUtil.SubArray(buf, 0, length));
+				else
+					item = new ProxyDataItem(Direction, buf);
+				//DebugLogStreamWrite(item.ToString() + "\r\n");
+				snoopy?.AddItem(item);
+			}
+			target.Write(buf, 0, length);
 		}
 		//private object DebugWriterLock = new object();
 		//private int rnd = StaticRandom.Next();

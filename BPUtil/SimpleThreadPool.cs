@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,36 +7,23 @@ using BPUtil.SimpleHttp;
 
 namespace BPUtil
 {
-	class PoolThread
-	{
-		public Thread thread;
-		public EventWaitHandle waitHandle = new EventWaitHandle(false, EventResetMode.AutoReset);
-		public volatile bool thisThreadHasWork = false;
-
-		public PoolThread(Thread thread)
-		{
-			this.thread = thread;
-		}
-	}
 	public class SimpleThreadPool
 	{
 		/// <summary>
-		/// A stack of threads that are idle.
-		/// </summary>
-		List<PoolThread> idleThreads = new List<PoolThread>();
-		/// <summary>
 		/// A queue of actions to be performed by threads.
 		/// </summary>
-		ConcurrentQueue<Action> actionQueue = new ConcurrentQueue<Action>();
+		WaitingQueue<Action> actionQueue = new WaitingQueue<Action>();
 		int threadTimeoutMilliseconds;
 		int _currentMinThreads;
 		int _currentMaxThreads;
 		int _currentLiveThreads = 0;
-		int _currentBusyThreads = 0;
+		int _currentIdleThreads = 0;
 		int threadNamingCounter = -1;
 		bool threadsAreBackgroundThreads;
-		string poolName;
-		object threadLock = new object();
+		/// <summary>
+		/// Gets the name of this thread pool.
+		/// </summary>
+		public string PoolName { get; }
 		volatile bool abort = false;
 		/// <summary>
 		/// Gets the number of threads that are currently available, including those which are busy and those which are idle.
@@ -56,11 +42,21 @@ namespace BPUtil
 		{
 			get
 			{
-				return Thread.VolatileRead(ref _currentBusyThreads);
+				return CurrentLiveThreads - CurrentIdleThreads;
 			}
 		}
 		/// <summary>
-		/// Gets or sets the soft maximum number of threads this pool should have active at any given time.  It is possible for there to be temporarily more threads than this if certain race conditions are met.  If reducing the value, it may take some time for the number of threads to fall into line, as no special effort is taken to reduce the live thread count quickly.
+		/// Gets the number of threads that are currently busy processing actions.
+		/// </summary>
+		public int CurrentIdleThreads
+		{
+			get
+			{
+				return Thread.VolatileRead(ref _currentIdleThreads);
+			}
+		}
+		/// <summary>
+		/// Gets or sets the soft maximum number of threads this pool should have active at any given time.  It is possible for there to be temporarily more threads than this if certain race conditions are met.  If reducing the value, it may take some time for the number of threads to fall, as no special effort is taken to reduce the live thread count quickly.
 		/// </summary>
 		public int MaxThreads
 		{
@@ -93,17 +89,17 @@ namespace BPUtil
 		}
 		private Action<Exception, string> logErrorAction = SimpleHttpLogger.Log;
 		/// <summary>
-		/// 
+		/// Creates a new SimpleThreadPool.
 		/// </summary>
-		/// <param name="poolName"></param>
+		/// <param name="poolName">The name this pool shall have. Each thread created by this pool shall be named with this string followed by a space and an auto-incremented number.</param>
 		/// <param name="minThreads">The minimum number of threads that should be kept alive at all times.</param>
 		/// <param name="maxThreads">The largest number of threads this pool should attempt to have alive at any given time.  It is possible for there to be temporarily more threads than this if certain race conditions are met.</param>
-		/// <param name="threadTimeoutMilliseconds"></param>
-		/// <param name="useBackgroundThreads">If true, the application will be able to exit without waiting for this thread pool.  Background threads do not prevent a process from terminating. Once all foreground threads belonging to a process have terminated, the common language runtime ends the process. Any remaining background threads are stopped and do not complete.</param>
+		/// <param name="threadTimeoutMilliseconds">Threads with no work to do will automatically terminate after this many milliseconds (unless doing so would dishonor the [minThreads] limit).</param>
+		/// <param name="useBackgroundThreads">If true, the application will be able to exit without waiting for all the threads in this thread pool to exit.  Background threads do not prevent a process from terminating. Once all foreground threads belonging to a process have terminated, the common language runtime ends the process. Any remaining background threads are stopped and do not complete.</param>
 		/// <param name="logErrorAction">A method to use for logging exceptions.  If null, SimpleHttpLogger.Log will be used.</param>
 		public SimpleThreadPool(string poolName, int minThreads = 6, int maxThreads = 32, int threadTimeoutMilliseconds = 60000, bool useBackgroundThreads = true, Action<Exception, string> logErrorAction = null)
 		{
-			this.poolName = poolName;
+			this.PoolName = poolName;
 			this.threadTimeoutMilliseconds = threadTimeoutMilliseconds;
 			if (minThreads < 0 || minThreads > maxThreads)
 				throw new ArgumentException("minThreads must be >= 0 and <= maxThreads", "minThreads");
@@ -114,155 +110,76 @@ namespace BPUtil
 			this.threadsAreBackgroundThreads = useBackgroundThreads;
 			if (logErrorAction != null)
 				this.logErrorAction = logErrorAction;
-			SpawnNewIdleThreads(minThreads);
+			SpawnNewThreads(minThreads);
 		}
 		/// <summary>
-		/// Creates new threads and signal them to begin working.
+		/// Creates new threads.
 		/// </summary>
 		/// <returns></returns>
-		private void SpawnNewActiveThreads(int count)
-		{
-			SpawnNewActiveOrIdleThreads(count, true);
-		}
-		/// <summary>
-		/// Creates new thread but does not signal them. Instead, the threads are added to the pool of idle threads.
-		/// </summary>
-		/// <returns></returns>
-		private void SpawnNewIdleThreads(int count)
-		{
-			SpawnNewActiveOrIdleThreads(count, false);
-		}
-		private void SpawnNewActiveOrIdleThreads(int count, bool active)
+		private void SpawnNewThreads(int count)
 		{
 			if (abort)
 				return;
-			lock (threadLock)
+			for (int i = 0; i < count; i++)
 			{
-				for (int i = 0; i < count; i++)
+				if (CurrentLiveThreads < MaxThreads)
 				{
-					if (CurrentLiveThreads < MaxThreads)
-					{
-						Interlocked.Increment(ref _currentLiveThreads);
-						PoolThread pt = new PoolThread(new Thread(threadLoop));
-						if (active)
-							pt.waitHandle.Set();
-						pt.thread.IsBackground = threadsAreBackgroundThreads;
-						pt.thread.Name = poolName + " " + Interlocked.Increment(ref threadNamingCounter);
-						pt.thread.Start(pt);
-						if (!active)
-							idleThreads.Add(pt);
-					}
+					Interlocked.Increment(ref _currentLiveThreads);
+					Thread t = new Thread(threadLoop);
+					t.IsBackground = threadsAreBackgroundThreads;
+					t.Name = PoolName + " " + Interlocked.Increment(ref threadNamingCounter);
+					t.Start();
 				}
 			}
 		}
 		/// <summary>
-		/// Aborts all idle threads, prevents the creation of new threads, and prevents new actions from being enqueued.  This cannot be undone.
+		/// Prevents the creation of new threads and prevents new actions from being enqueued.  This cannot be undone.
 		/// </summary>
 		public void Stop()
 		{
 			abort = true;
-			lock (threadLock)
-			{
-				foreach (PoolThread pt in idleThreads)
-					try
-					{
-						pt.thread.Abort();
-					}
-					catch (ThreadAbortException) { throw; }
-					catch (Exception ex)
-					{
-						SimpleHttpLogger.Log(ex);
-					}
-			}
 		}
 		public void Enqueue(Action action)
 		{
 			if (abort)
 				return;
+			bool startNewThread = CurrentIdleThreads < 1;
 			actionQueue.Enqueue(action);
-			if (!SignalTopThread())
-				SpawnNewActiveThreads(1);
+			if (startNewThread || CurrentIdleThreads < 1)
+				SpawnNewThreads(1); // Spawning the thread AFTER enqueuing ensures that the new thread won't need to wait (as long) for a job to do.
 		}
 
-		private bool SignalTopThread()
-		{
-			if (idleThreads.Count > 0)
-			{
-				lock (threadLock)
-				{
-					if (idleThreads.Count > 0)
-					{
-						PoolThread pt = idleThreads[idleThreads.Count - 1];
-						idleThreads.RemoveAt(idleThreads.Count - 1);
-						pt.thisThreadHasWork = true;
-						pt.waitHandle.Set();
-						return true;
-					}
-				}
-			}
-			return false;
-		}
-		private void threadLoop(object args)
+		private void threadLoop()
 		{
 			try
 			{
-				PoolThread pt = (PoolThread)args;
+				Interlocked.Increment(ref _currentIdleThreads);
 				while (true)
 				{
-					// Wait for a signal
-					if (!pt.waitHandle.WaitOne(threadTimeoutMilliseconds))
+					// Check for queued actions to perform.
+					while (actionQueue.TryDequeue(out Action action, threadTimeoutMilliseconds))
 					{
-						// Timeout has occurred. Make sure this thread has no work to perform before quitting.
-						lock (threadLock)
+						Interlocked.Decrement(ref _currentIdleThreads);
+						try
 						{
-							if (pt.thisThreadHasWork)
-							{
-								// This thread can't quit now because it has work to do.
-								pt.thisThreadHasWork = false;
-							}
-							else if (CurrentLiveThreads <= MinThreads)
-							{
-								// There is no work to do right now, but this thread is not allowed to quit.
-								continue;
-							}
-							else
-							{
-								// This thread is allowed to quit
-								Interlocked.Decrement(ref _currentLiveThreads);
-								idleThreads.Remove(pt);
-								return;
-							}
+							action();
+						}
+						catch (ThreadAbortException) { throw; }
+						catch (Exception ex)
+						{
+							logErrorAction(ex, "Error on " + Thread.CurrentThread.Name);
+						}
+						finally
+						{
+							Interlocked.Increment(ref _currentIdleThreads);
 						}
 					}
-					pt.thisThreadHasWork = false;
-					// If we get here, this thread has been signaled or the timeout has expired but this thread was not allowed to quit.
-					Interlocked.Increment(ref _currentBusyThreads);
-					try
-					{
-						// Check for queued actions to perform.
-						Action action;
-						while (actionQueue.TryDequeue(out action))
-						{
-							try
-							{
-								action();
-							}
-							catch (ThreadAbortException) { throw; }
-							catch (Exception ex)
-							{
-								logErrorAction(ex, "Error on " + Thread.CurrentThread.Name);
-							}
-						}
-					}
-					finally
-					{
-						Interlocked.Decrement(ref _currentBusyThreads);
-					}
-					// Return me to the pool
-					lock (threadLock)
-					{
-						idleThreads.Add(pt);
-					}
+
+					// Timeout has occurred.
+					if (CurrentLiveThreads <= MinThreads)
+						continue;// If this thread quit, we would dip below the minimum live threads limit.
+					else
+						return;// This thread is allowed to quit
 				}
 			}
 			catch (OperationCanceledException) { }
@@ -271,10 +188,10 @@ namespace BPUtil
 			{
 				logErrorAction(ex, "Fatal error on \"" + Thread.CurrentThread.Name + "\" indicating a programming error.");
 			}
-			lock (threadLock)
+			finally
 			{
+				Interlocked.Decrement(ref _currentIdleThreads);
 				Interlocked.Decrement(ref _currentLiveThreads);
-				idleThreads.Remove((PoolThread)args);
 			}
 		}
 	}
