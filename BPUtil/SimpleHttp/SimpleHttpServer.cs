@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections;
-using System.IO;
-using System.Net;
-using System.Net.Sockets;
-using System.Threading;
 using System.Collections.Generic;
-using System.Web;
-using System.Text;
-using System.Security.Cryptography.X509Certificates;
-using System.Net.NetworkInformation;
+using System.IO;
 using System.IO.Compression;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Threading;
 
 // This file has been modified continuously since Nov 10, 2012 by Brian Pearce.
 // Based on http://www.codeproject.com/Articles/137979/Simple-HTTP-Server-in-C
@@ -136,6 +135,17 @@ namespace BPUtil.SimpleHttp
 		/// A flag that is set when WriteSuccess(), WriteFailure(), or WriteRedirect() is called.
 		/// </summary>
 		public bool responseWritten = false;
+
+		/// <summary>
+		/// True if a "Connection: keep-alive;" header was received from the client.
+		/// </summary>
+		public bool keepAliveRequested;
+
+		/// <summary>
+		/// True if a "Connection: keep-alive;" header was sent to the client.
+		/// This flag is reset to false at the start of each request.
+		/// </summary>
+		public bool keepAlive = false;
 
 		#region Properties dealing with the IP Address of the remote host
 		private int isLanConnection = -1;
@@ -286,22 +296,35 @@ namespace BPUtil.SimpleHttp
 		#endregion
 
 		public readonly bool secure_https;
-		private X509Certificate2 ssl_certificate;
+		private ICertificateSelector certificateSelector;
 		/// <summary>
 		/// The type of compression that will be used for the response stream.
 		/// </summary>
 		public CompressionType compressionType { get; private set; } = CompressionType.None;
 
 		/// <summary>
-		/// This is a reference to the MemoryStream containing the post body, for internal use only by the ProxyTo method.
+		/// Gets the MemoryStream containing the POST content. It will be seeked to the beginning before this HttpProcessor is sent to the HttpServer for handling. For non-POST requests, this will be null.
 		/// </summary>
-		private MemoryStream _internal_post_body_for_proxy;
+		public MemoryStream PostBodyStream { get; protected set; }
+
+		public long keepAliveRequestCount { get; protected set; } = 0;
+
+		///// <summary>
+		///// For internal use only by the ProxyTo method, this field 
+		///// </summary>
+		//private IPEndPoint _internal_proxy_keepalive_remote_endpoint;
+		///// <summary>
+		///// For internal use only by the ProxyTo method, this field stores a TcpClient that has been kept alive intentionally in anticipation of another request.
+		///// </summary>
+		//private TcpClient _internal_proxy_keepalive_tcp_client;
 		#endregion
 
-		public HttpProcessor(TcpClient s, HttpServer srv, X509Certificate2 ssl_certificate = null)
+		public HttpProcessor(TcpClient s, HttpServer srv, X509Certificate2 ssl_certificate = null) : this(s, srv, SimpleCertificateSelector.FromCertificate(ssl_certificate)) { }
+
+		public HttpProcessor(TcpClient s, HttpServer srv, ICertificateSelector certificateSelector)
 		{
-			this.ssl_certificate = ssl_certificate;
-			this.secure_https = ssl_certificate != null;
+			this.certificateSelector = certificateSelector;
+			this.secure_https = certificateSelector != null;
 			this.tcpClient = s;
 			this.base_uri_this_server = new Uri("http" + (this.secure_https ? "s" : "") + "://" + s.Client.LocalEndPoint.ToString(), UriKind.Absolute);
 			this.srv = srv;
@@ -352,8 +375,16 @@ namespace BPUtil.SimpleHttp
 				{
 					try
 					{
+						X509Certificate cert;
+						if (certificateSelector is SimpleCertificateSelector)
+							cert = certificateSelector.GetCertificate(null); // SimpleCertificateSelector doesn't use serverName, so we can skip reading it.
+						else
+						{
+							tcpStream = TLS.TlsServerNameReader.Read(tcpStream, out string serverName);
+							cert = certificateSelector.GetCertificate(serverName);
+						}
 						tcpStream = new System.Net.Security.SslStream(tcpStream, false, null, null);
-						((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(ssl_certificate, false, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+						((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(cert, false, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (SocketException) { throw; }
@@ -363,104 +394,135 @@ namespace BPUtil.SimpleHttp
 						return;
 					}
 				}
-				//int inputStreamThrottlingRuleset = 1;
-				//int outputStreamThrottlingRuleset = 0;
-				//if (IsLanConnection)
-				//	inputStreamThrottlingRuleset = outputStreamThrottlingRuleset = 2;
-				//inputStream =  new GlobalThrottledStream(tcpStream, inputStreamThrottlingRuleset, RemoteIPAddressInt);
-				//rawOutputStream = new GlobalThrottledStream(tcpStream, outputStreamThrottlingRuleset, RemoteIPAddressInt);
-				outputStream = new StreamWriter(tcpStream, Utf8NoBOM);
-				try
+				Stream originalTcpStream = tcpStream;
+				do
 				{
-					parseRequest();
-					readHeaders();
-					if (srv.XRealIPHeader)
+					if (keepAlive)
 					{
-						string headerValue = GetHeaderValue("x-real-ip");
-						if (!string.IsNullOrWhiteSpace(headerValue))
-						{
-							IPAddress addr;
-							if (IPAddress.TryParse(headerValue, out addr))
-								remoteIpAddress = addr;
-						}
+						responseCookies = new Cookies();
+						httpHeaders.Clear();
+						httpHeadersRaw.Clear();
+						PostParams.Clear();
+						RawPostParams.Clear();
+						QueryString.Clear();
+						RawQueryString.Clear();
+						postContentType = postFormDataRaw = "";
+						responseWritten = false;
+						keepAliveRequested = false;
+						compressionType = CompressionType.None;
 					}
-					if (srv.XForwardedForHeader)
-					{
-						string headerValue = GetHeaderValue("x-forwarded-for");
-						if (!string.IsNullOrWhiteSpace(headerValue))
-						{
-							IPAddress addr;
-							if (IPAddress.TryParse(headerValue, out addr))
-								remoteIpAddress = addr;
-						}
-					}
-					RawQueryString = ParseQueryStringArguments(this.request_url.Query, preserveKeyCharacterCase: true);
-					QueryString = ParseQueryStringArguments(this.request_url.Query);
-					requestCookies = Cookies.FromString(GetHeaderValue("Cookie", ""));
+					keepAlive = false;
+					keepAliveRequestCount++;
+					tcpStream = originalTcpStream;
+					//int inputStreamThrottlingRuleset = 1;
+					//int outputStreamThrottlingRuleset = 0;
+					//if (IsLanConnection)
+					//	inputStreamThrottlingRuleset = outputStreamThrottlingRuleset = 2;
+					//inputStream =  new GlobalThrottledStream(tcpStream, inputStreamThrottlingRuleset, RemoteIPAddressInt);
+					//rawOutputStream = new GlobalThrottledStream(tcpStream, outputStreamThrottlingRuleset, RemoteIPAddressInt);
+					outputStream = new StreamWriter(tcpStream, Utf8NoBOM, tcpClient.SendBufferSize, true);
 					try
 					{
-						if (http_method.Equals("GET"))
+						tcpClient.ReceiveTimeout = 10000;
+						parseRequest();
+						readHeaders();
+						keepAliveRequested = "keep-alive".Equals(GetHeaderValue("connection"), StringComparison.OrdinalIgnoreCase);
+						if (srv.XRealIPHeader)
 						{
-							if (shouldLogRequestsToFile())
-								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "GET", request_url.OriginalString);
-							handleGETRequest();
+							string headerValue = GetHeaderValue("x-real-ip");
+							if (!string.IsNullOrWhiteSpace(headerValue))
+							{
+								if (srv.IsTrustedProxyServer(remoteIpAddress))
+								{
+									IPAddress addr;
+									if (IPAddress.TryParse(headerValue, out addr))
+										remoteIpAddress = addr;
+								}
+							}
 						}
-						else if (http_method.Equals("POST"))
+						if (srv.XForwardedForHeader)
 						{
-							if (shouldLogRequestsToFile())
-								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "POST", request_url.OriginalString);
-							handlePOSTRequest();
+							string headerValue = GetHeaderValue("x-forwarded-for");
+							if (!string.IsNullOrWhiteSpace(headerValue))
+							{
+								if (srv.IsTrustedProxyServer(remoteIpAddress))
+								{
+									IPAddress addr;
+									if (IPAddress.TryParse(headerValue, out addr))
+										remoteIpAddress = addr;
+								}
+							}
+						}
+						RawQueryString = ParseQueryStringArguments(this.request_url.Query, preserveKeyCharacterCase: true);
+						QueryString = ParseQueryStringArguments(this.request_url.Query);
+						requestCookies = Cookies.FromString(GetHeaderValue("Cookie", ""));
+						try
+						{
+							if (http_method.Equals("GET"))
+							{
+								if (shouldLogRequestsToFile())
+									SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "GET", request_url.OriginalString);
+								handleGETRequest();
+							}
+							else if (http_method.Equals("POST"))
+							{
+								if (shouldLogRequestsToFile())
+									SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "POST", request_url.OriginalString);
+								handlePOSTRequest();
+							}
+						}
+						catch (ThreadAbortException) { throw; }
+						catch (Exception e)
+						{
+							if (!IsOrdinaryDisconnectException(e))
+								SimpleHttpLogger.Log(e);
+							if (!responseWritten)
+								writeFailure("500 Internal Server Error");
+						}
+						finally
+						{
+							if (!responseWritten)
+								this.writeFailure();
 						}
 					}
 					catch (ThreadAbortException) { throw; }
+					catch (HttpProcessorException e)
+					{
+						SimpleHttpLogger.LogVerbose(e);
+						if (shouldLogRequestsToFile())
+							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
+						if (!responseWritten)
+							this.writeFailure(e.Message);
+					}
 					catch (Exception e)
 					{
 						if (!IsOrdinaryDisconnectException(e))
-							SimpleHttpLogger.Log(e);
+							SimpleHttpLogger.LogVerbose(e);
+						if (shouldLogRequestsToFile())
+							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
 						if (!responseWritten)
-							writeFailure("500 Internal Server Error");
+							this.writeFailure("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
 					}
-					finally
+					outputStream.Flush();
+					tcpStream.Flush();
+					// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
+					try
 					{
-						if (!responseWritten)
-							this.writeFailure();
+						outputStream.Dispose();
 					}
+					catch (ThreadAbortException) { throw; }
+					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+					try
+					{
+						if (tcpStream is GZipStream)
+							tcpStream.Dispose();
+					}
+					catch (ThreadAbortException) { throw; }
+					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+					outputStream = null;
+					tcpStream = null;
 				}
-				catch (ThreadAbortException) { throw; }
-				catch (HttpProcessorException e)
-				{
-					SimpleHttpLogger.LogVerbose(e);
-					if (shouldLogRequestsToFile())
-						SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
-					if (!responseWritten)
-						this.writeFailure(e.Message);
-				}
-				catch (Exception e)
-				{
-					if (!IsOrdinaryDisconnectException(e))
-						SimpleHttpLogger.LogVerbose(e);
-					if (shouldLogRequestsToFile())
-						SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
-					if (!responseWritten)
-						this.writeFailure("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
-				}
-				outputStream.Flush();
-				tcpStream.Flush();
-				// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
-				try
-				{
-					outputStream.Dispose();
-				}
-				catch (ThreadAbortException) { throw; }
-				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
-				try
-				{
-					tcpStream.Dispose();
-				}
-				catch (ThreadAbortException) { throw; }
-				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
-				outputStream = null;
-				tcpStream = null;
+				while (keepAlive);
 			}
 			catch (ThreadAbortException) { throw; }
 			catch (Exception ex)
@@ -472,15 +534,7 @@ namespace BPUtil.SimpleHttp
 			{
 				try
 				{
-					if (tcpClient != null)
-						tcpClient.Close();
-				}
-				catch (ThreadAbortException) { throw; }
-				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
-				try
-				{
-					if (tcpStream != null)
-						tcpStream.Dispose();
+					tcpClient?.Close();
 				}
 				catch (ThreadAbortException) { throw; }
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
@@ -636,7 +690,7 @@ namespace BPUtil.SimpleHttp
 			int content_len = 0;
 			using (MemoryStream ms = new MemoryStream())
 			{
-				_internal_post_body_for_proxy = ms;
+				PostBodyStream = ms;
 				string content_length_str = GetHeaderValue("Content-Length");
 				if (!string.IsNullOrWhiteSpace(content_length_str))
 				{
@@ -681,6 +735,7 @@ namespace BPUtil.SimpleHttp
 				{
 					StreamReader sr = new StreamReader(ms, Utf8NoBOM);
 					postFormDataRaw = sr.ReadToEnd();
+					ms.Seek(0, SeekOrigin.Begin);
 
 					RawPostParams = ParseQueryStringArguments(postFormDataRaw, false, true, convertPlusToSpace: true);
 					PostParams = ParseQueryStringArguments(postFormDataRaw, false, convertPlusToSpace: true);
@@ -698,7 +753,7 @@ namespace BPUtil.SimpleHttp
 				{
 					srv.handlePOSTRequest(this, new StreamReader(ms, Utf8NoBOM));
 				}
-				_internal_post_body_for_proxy = null;
+				PostBodyStream = null;
 			}
 		}
 		#region Response Compression
@@ -733,8 +788,8 @@ namespace BPUtil.SimpleHttp
 					return;
 				outputStream.Flush();
 				tcpStream.Flush();
-				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, false);
-				outputStream = new StreamWriter(tcpStream);
+				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, true);
+				outputStream = new StreamWriter(tcpStream, ByteUtil.Utf8NoBOM, tcpClient.SendBufferSize, true);
 			}
 		}
 		/// <summary>
@@ -762,16 +817,23 @@ namespace BPUtil.SimpleHttp
 		/// <param name="contentLength">(OPTIONAL) The length of your response, in bytes, if you know it.</param>
 		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeSuccess(string contentType = "text/html; charset=UTF-8", long contentLength = -1, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
+		/// <param name="keepAlive">(OPTIONAL) If true, sends the header "Connection: keep-alive" instead of "Connection: close". If you use keepAlive, you must either specify a contentLength (and honor it) or use chunked transfer encoding. If you specify keepAlive with a negative contentLength, the header "Transfer-Encoding: chunked" will automatically be added.</param>
+		public virtual void writeSuccess(string contentType = "text/html; charset=UTF-8", long contentLength = -1, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null, bool keepAlive = false)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
+
+			if (keepAlive && !this.keepAliveRequested)
+				throw new Exception("writeSuccess was told to use \"Connection: keep-alive\", but the client did not request it.");
+
 			responseWritten = true;
 			outputStream.WriteLineRN("HTTP/1.1 " + responseCode);
 			if (!string.IsNullOrEmpty(contentType))
 				outputStream.WriteLineRN("Content-Type: " + contentType);
 			if (contentLength > -1)
 				outputStream.WriteLineRN("Content-Length: " + contentLength);
+			else if (keepAlive)
+				outputStream.WriteLineRN("Transfer-Encoding: chunked");
 			if (compressionType == CompressionType.GZip)
 				outputStream.WriteLineRN("Content-Encoding: gzip");
 			string cookieStr = responseCookies.ToString();
@@ -780,9 +842,14 @@ namespace BPUtil.SimpleHttp
 			if (additionalHeaders != null)
 				foreach (KeyValuePair<string, string> header in additionalHeaders)
 					outputStream.WriteLineRN(header.Key + ": " + header.Value);
-			outputStream.WriteLineRN("Connection: close");
+			if (keepAlive)
+				outputStream.WriteLineRN("Connection: keep-alive");
+			else
+				outputStream.WriteLineRN("Connection: close");
 			outputStream.WriteLineRN("");
-			//if (contentLength > 1500)
+
+			this.keepAlive = keepAlive;
+
 			tcpClient.NoDelay = true;
 			EnableCompressionIfSet();
 		}
@@ -837,6 +904,32 @@ namespace BPUtil.SimpleHttp
 		}
 
 		/// <summary>
+		/// Writes the specified response with the Content-Length header set appropriately.
+		/// </summary>
+		/// <param name="body">Data to send in the response. This string will be encoded as UTF8.</param>
+		/// <param name="contentType">Content-Type header value. e.g. "text/html; charset=UTF-8"</param>
+		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
+		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
+		public virtual void writeFullResponseUTF8(string body, string contentType, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
+		{
+			writeFullResponseBytes(ByteUtil.Utf8NoBOM.GetBytes(body), contentType, responseCode);
+		}
+
+		/// <summary>
+		/// Writes the specified response with the Content-Length header set appropriately.
+		/// </summary>
+		/// <param name="body">Data to send in the response.</param>
+		/// <param name="contentType">Content-Type header value. e.g. "application/octet-stream"</param>
+		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
+		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
+		public virtual void writeFullResponseBytes(byte[] body, string contentType, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
+		{
+			writeSuccess(contentType, body.Length, responseCode, additionalHeaders, this.keepAliveRequested);
+			this.outputStream.Flush();
+			this.tcpStream.Write(body, 0, body.Length);
+		}
+
+		/// <summary>
 		/// Gets the value of the header, or null if the header does not exist.  The name is case insensitive.
 		/// </summary>
 		/// <param name="name">The case insensitive name of the header to get the value of.</param>
@@ -852,7 +945,10 @@ namespace BPUtil.SimpleHttp
 		}
 
 		#region Request Proxy Http(s)
-		private static SimpleThreadPool proxyResponseThreadPool = new SimpleThreadPool("ProxyResponses", 6, 1024, 10000);
+		/// <summary>
+		/// A thread pool to be used when additional threads are needed for proxying data.
+		/// </summary>
+		protected static SimpleThreadPool proxyResponseThreadPool = new SimpleThreadPool("ProxyResponses", 0, 1024, 10000);
 		/// <summary>
 		/// Acts as a proxy server, sending the request to a different URL.  This method starts a new (and unpooled) thread to handle the response from the remote server.
 		/// The "Host" header is rewritten (or added) and output as the first header.
@@ -873,75 +969,77 @@ namespace BPUtil.SimpleHttp
 			Uri newUri = new Uri(newUrl);
 			if (string.IsNullOrWhiteSpace(host))
 				host = newUri.DnsSafeHost;
-			TcpClient proxyClient = new TcpClient();
-			proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
-			proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
-			proxyClient.Connect(newUri.DnsSafeHost, newUri.Port);
-			Stream proxyStream = proxyClient.GetStream();
-			responseWritten = true;
-			if (newUri.Scheme == "https")
+			using (TcpClient proxyClient = new TcpClient())
 			{
-				//try
-				//{
-				System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
-				if (acceptAnyCert)
-					certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
-				proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-				((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
-				//}
-				//catch (ThreadAbortException) { throw; }
-				//catch (SocketException) { throw; }
-				//catch (Exception ex)
-				//{
-				//	SimpleHttpLogger.LogVerbose(ex);
-				//	return ex;
-				//}
-			}
-
-			// Begin proxying by sending what we've already read from this.inputStream.
-			// The first line of our HTTP request will be different from the original.
-			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, http_method + ' ' + newUri.PathAndQuery + ' ' + http_protocol_versionstring + "\r\n", snoopy);
-			// After the first line come the headers.
-			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
-			if (singleRequestOnly)
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
-			foreach (KeyValuePair<string, string> header in httpHeadersRaw)
-			{
-				string keyLower = header.Key.ToLower();
-				if (keyLower != "host" && (!singleRequestOnly || keyLower != "connection"))
-					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
-			}
-			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
-
-			// Write the original POST body if there was one.
-			if (_internal_post_body_for_proxy != null)
-			{
-				long remember_position = _internal_post_body_for_proxy.Position;
-				_internal_post_body_for_proxy.Seek(0, SeekOrigin.Begin);
-				byte[] buf = _internal_post_body_for_proxy.ToArray();
-				_ProxyData(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
-				_internal_post_body_for_proxy.Seek(remember_position, SeekOrigin.Begin);
-			}
-
-			// Start a thread to proxy the response to our client.
-			proxyResponseThreadPool.Enqueue(() =>
-			{
-				try
+				proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
+				proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
+				proxyClient.Connect(newUri.DnsSafeHost, newUri.Port);
+				Stream proxyStream = proxyClient.GetStream();
+				responseWritten = true;
+				if (newUri.Scheme == "https")
 				{
-					CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, proxyStream, this.tcpStream, snoopy);
+					//try
+					//{
+					System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
+					if (acceptAnyCert)
+						certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
+					proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
+					((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+					//}
+					//catch (ThreadAbortException) { throw; }
+					//catch (SocketException) { throw; }
+					//catch (Exception ex)
+					//{
+					//	SimpleHttpLogger.LogVerbose(ex);
+					//	return ex;
+					//}
 				}
-				catch (ThreadAbortException) { }
-				catch (Exception ex)
-				{
-					if (ex.InnerException is ThreadAbortException)
-						return;
-					SimpleHttpLogger.LogVerbose(ex);
-				}
-			});
 
-			// The current thread will handle any additional incoming data from our client and proxy it to newUrl.
-			this.tcpClient.NoDelay = true;
-			CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, this.tcpStream, proxyStream, snoopy);
+				// Begin proxying by sending what we've already read from this.inputStream.
+				// The first line of our HTTP request will be different from the original.
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, http_method + ' ' + newUri.PathAndQuery + ' ' + http_protocol_versionstring + "\r\n", snoopy);
+				// After the first line come the headers.
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
+				if (singleRequestOnly)
+					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
+				foreach (KeyValuePair<string, string> header in httpHeadersRaw)
+				{
+					string keyLower = header.Key.ToLower();
+					if (keyLower != "host" && (!singleRequestOnly || keyLower != "connection"))
+						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
+				}
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
+
+				// Write the original POST body if there was one.
+				if (PostBodyStream != null)
+				{
+					long remember_position = PostBodyStream.Position;
+					PostBodyStream.Seek(0, SeekOrigin.Begin);
+					byte[] buf = PostBodyStream.ToArray();
+					_ProxyData(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
+					PostBodyStream.Seek(remember_position, SeekOrigin.Begin);
+				}
+
+				// Start a thread to proxy the response to our client.
+				proxyResponseThreadPool.Enqueue(() =>
+				{
+					try
+					{
+						CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, proxyStream, this.tcpStream, snoopy);
+					}
+					catch (ThreadAbortException) { }
+					catch (Exception ex)
+					{
+						if (ex.InnerException is ThreadAbortException)
+							return;
+						SimpleHttpLogger.LogVerbose(ex);
+					}
+				});
+
+				// The current thread will handle any additional incoming data from our client and proxy it to newUrl.
+				this.tcpClient.NoDelay = true;
+				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, this.tcpStream, proxyStream, snoopy);
+			}
 			//}
 			//catch (ThreadAbortException) { throw; }
 			//catch (Exception ex)
@@ -1298,15 +1396,15 @@ namespace BPUtil.SimpleHttp
 		public int? SendBufferSize = null;
 		public int? ReceiveBufferSize = null;
 		/// <summary>
-		/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Real-IP".
+		/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Real-IP".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.
 		/// </summary>
 		public bool XRealIPHeader = false;
 		/// <summary>
-		/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Forwarded-For".
+		/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Forwarded-For".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.
 		/// </summary>
 		public bool XForwardedForHeader = false;
 		protected volatile bool stopRequested = false;
-		protected X509Certificate2 ssl_certificate;
+		protected ICertificateSelector certificateSelector;
 		private Thread thrHttp;
 		private Thread thrHttps;
 		private TcpListener unsecureListener = null;
@@ -1319,6 +1417,7 @@ namespace BPUtil.SimpleHttp
 		/// Raised when an SSL connection is made using a certificate that will expire within the next 14 days.  This event will not be raised more than once in a 60 minute period (assuming the same HttpServer instance is used).
 		/// The TimeSpan argument indicates the time to expiration, which may be less than or equal to TimeSpan.Zero if the certificate is expired.
 		/// </summary>
+		[Obsolete("This is no longer used.")]
 		public event EventHandler<TimeSpan> CertificateExpirationWarning = delegate { };
 		private DateTime timeOfNextCertificateExpirationWarning = DateTime.MinValue;
 
@@ -1342,13 +1441,21 @@ namespace BPUtil.SimpleHttp
 		/// <param name="httpsPort">(Optional) The port number on which to accept https connections. If -1, the server will not listen for https connections.</param>
 		/// <param name="cert">(Optional) Certificate to use for https connections.  If null and an httpsPort was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
 		/// <param name="bindAddr">If not null, the server will bind to this address.  Default: IPAddress.Any.</param>
-		public HttpServer(int port, int httpsPort = -1, X509Certificate2 cert = null, IPAddress bindAddr = null)
+		public HttpServer(int port, int httpsPort = -1, X509Certificate2 cert = null, IPAddress bindAddr = null) : this(port, httpsPort, SimpleCertificateSelector.FromCertificate(cert), bindAddr) { }
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <param name="port">The port number on which to accept regular http connections. If -1, the server will not listen for http connections.</param>
+		/// <param name="httpsPort">(Optional) The port number on which to accept https connections. If -1, the server will not listen for https connections.</param>
+		/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an httpsPort was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
+		/// <param name="bindAddr">If not null, the server will bind to this address.  Default: IPAddress.Any.</param>
+		public HttpServer(int port, int httpsPort, ICertificateSelector certificateSelector, IPAddress bindAddr)
 		{
 			pool = new SimpleThreadPool("SimpleHttpServer");
 
 			this.port = port;
 			this.secure_port = httpsPort;
-			this.ssl_certificate = cert;
+			this.certificateSelector = certificateSelector;
 			if (bindAddr != null)
 				this.bindAddr = bindAddr;
 
@@ -1364,8 +1471,8 @@ namespace BPUtil.SimpleHttp
 
 			if (this.secure_port > -1)
 			{
-				if (ssl_certificate == null)
-					ssl_certificate = HttpServer.GetSelfSignedCertificate();
+				if (certificateSelector == null)
+					certificateSelector = SimpleCertificateSelector.FromCertificate(HttpServer.GetSelfSignedCertificate());
 				thrHttps = new Thread(listen);
 				thrHttps.IsBackground = true;
 				thrHttps.Name = "HttpsServer Thread";
@@ -1407,11 +1514,11 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		/// <param name="s"></param>
 		/// <param name="srv"></param>
-		/// <param name="cert"></param>
+		/// <param name="certSelector">An instnace of a type deriving from ICertificateSelector, such as <see cref="SimpleCertificateSelector"/> or <see cref="ServerNameCertificateSelector"/>.</param>
 		/// <returns></returns>
-		public virtual IProcessor MakeClientProcessor(TcpClient s, HttpServer srv, X509Certificate2 cert)
+		public virtual IProcessor MakeClientProcessor(TcpClient s, HttpServer srv, ICertificateSelector certSelector)
 		{
-			return new HttpProcessor(s, srv, cert);
+			return new HttpProcessor(s, srv, certSelector);
 		}
 		private void NetworkChange_NetworkAddressChanged(object sender, EventArgs e)
 		{
@@ -1433,26 +1540,28 @@ namespace BPUtil.SimpleHttp
 		/// <param name="newCertificate"></param>
 		public void SetCertificate(X509Certificate2 newCertificate)
 		{
-			ssl_certificate = newCertificate;
+			certificateSelector = SimpleCertificateSelector.FromCertificate(newCertificate);
 		}
 		/// <summary>
 		/// Returns the date in local time after which the certificate is no longer valid.  If the certificate is null, returns DateTime.MaxValue.
 		/// </summary>
 		/// <returns></returns>
+		[Obsolete("This doesn't work properly when using Server Name Indication to select a certificate.")]
 		public DateTime GetCertificateExpiration()
 		{
-			if (ssl_certificate != null)
-				return ssl_certificate.NotAfter;
+			if (certificateSelector != null)
+				return (certificateSelector.GetCertificate(null) as X509Certificate2).NotAfter;
 			return DateTime.MaxValue;
 		}
 		/// <summary>
 		/// Returns the date in local time after which the certificate is no longer valid.  If the certificate is null, returns DateTime.MaxValue.
 		/// </summary>
 		/// <returns></returns>
+		[Obsolete("This doesn't work properly when using Server Name Indication to select a certificate.")]
 		public string GetCertificateFriendlyName()
 		{
-			if (ssl_certificate != null)
-				return ssl_certificate.FriendlyName;
+			if (certificateSelector != null)
+				return (certificateSelector.GetCertificate(null) as X509Certificate2).FriendlyName;
 			return null;
 		}
 
@@ -1560,22 +1669,21 @@ namespace BPUtil.SimpleHttp
 									s.ReceiveBufferSize = ReceiveBufferSize.Value;
 								if (SendBufferSize != null)
 									s.SendBufferSize = SendBufferSize.Value;
-								X509Certificate2 cert = isSecureListener ? ssl_certificate : null;
-								DateTime now = DateTime.Now;
-								if (cert != null && now.AddDays(14) > cert.NotAfter && timeOfNextCertificateExpirationWarning < now)
-								{
-									timeOfNextCertificateExpirationWarning = now.AddHours(1);
-									try
-									{
-										CertificateExpirationWarning(this, now - cert.NotAfter);
-									}
-									catch (ThreadAbortException) { throw; }
-									catch (Exception ex)
-									{
-										SimpleHttpLogger.Log(ex);
-									}
-								}
-								HttpProcessor processor = new HttpProcessor(s, this, cert);
+								//DateTime now = DateTime.Now;
+								//if (cert != null && now.AddDays(14) > cert.NotAfter && timeOfNextCertificateExpirationWarning < now)
+								//{
+								//	timeOfNextCertificateExpirationWarning = now.AddHours(1);
+								//	try
+								//	{
+								//		CertificateExpirationWarning(this, now - cert.NotAfter);
+								//	}
+								//	catch (ThreadAbortException) { throw; }
+								//	catch (Exception ex)
+								//	{
+								//		SimpleHttpLogger.Log(ex);
+								//	}
+								//}
+								IProcessor processor = MakeClientProcessor(s, this, isSecureListener ? certificateSelector : null);
 								pool.Enqueue(processor.Process);
 								//	try
 								//	{
@@ -1746,7 +1854,21 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		protected abstract void stopServer();
 
+		/// <summary>
+		/// If this method returns true, requests should be logged to a file.
+		/// </summary>
+		/// <returns></returns>
 		public virtual bool shouldLogRequestsToFile()
+		{
+			return false;
+		}
+
+		/// <summary>
+		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
+		/// </summary>
+		/// <param name="remoteIpAddress"></param>
+		/// <returns></returns>
+		public virtual bool IsTrustedProxyServer(IPAddress remoteIpAddress)
 		{
 			return false;
 		}

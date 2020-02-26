@@ -25,18 +25,21 @@ namespace BPUtil
 			innerQueue.Enqueue(item);
 			sem.Release();
 		}
+
+
 		/// <summary>
 		/// Tries to remove and return the object at the beginning of the <see cref="WaitingQueue{T}"/>. This function will block until an object is obtained or the timeout expires.
 		/// </summary>
 		/// <param name="result">When this method returns, if the operation was successful, result contains the object removed. If no object was available to be removed, the value is unspecified.</param>
 		/// <param name="millisecondsTimeout">Maximum number of milliseconds to wait for an item to become available. If -1, the wait may be indefinite.</param>
 		/// <returns></returns>
+		[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0034:Simplify 'default' expression", Justification = "Old syntax for VS2017 support")]
 		public bool TryDequeue(out T result, int millisecondsTimeout)
 		{
 			if (sem.Wait(millisecondsTimeout))
 				return innerQueue.TryDequeue(out result);
 			else
-				result = default;
+				result = default(T);
 			return false;
 		}
 	}

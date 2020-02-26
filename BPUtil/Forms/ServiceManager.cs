@@ -31,6 +31,8 @@ namespace BPUtil.Forms
 		BackgroundWorker bw = null;
 		string statusStr = "";
 		string servicePath = "";
+
+		string doOnStartup = null;
 		/// <summary>
 		/// 
 		/// </summary>
@@ -47,6 +49,25 @@ namespace BPUtil.Forms
 			this.additionalButtons = additionalButtons;
 			this.customControl = additionalControl;
 
+			string[] cmdArgs = Environment.GetCommandLineArgs();
+			if (cmdArgs.Length == 3)
+			{
+				if (cmdArgs[1] == "UponStartupInstallService") doOnStartup = "INSTALL";
+				else if (cmdArgs[1] == "UponStartupUninstallService") doOnStartup = "UNINSTALL";
+				else if (cmdArgs[1] == "UponStartupStartService") doOnStartup = "START";
+				else if (cmdArgs[1] == "UponStartupStopService") doOnStartup = "STOP";
+
+				if (doOnStartup != null)
+				{
+					string[] coords = cmdArgs[2].Split(',');
+					if (coords.Length == 2 && int.TryParse(coords[0], out int x) && int.TryParse(coords[1], out int y))
+					{
+						this.StartPosition = FormStartPosition.Manual;
+						this.Location = new Point(x, y);
+					}
+				}
+			}
+
 			Application.EnableVisualStyles();
 			InitializeComponent();
 		}
@@ -61,6 +82,9 @@ namespace BPUtil.Forms
 			timer.Tick += Timer_Tick;
 			timer.Interval = 1000;
 			timer.Start();
+
+			if (doOnStartup != null)
+				DoInBackground(doOnStartup);
 		}
 
 		private void AddCustomControl()
@@ -174,13 +198,36 @@ namespace BPUtil.Forms
 			if (bw != null)
 				return;
 			statusStr = "";
-			progressBar.Visible = true;
-			bw = new BackgroundWorker();
-			bw.DoWork += Bw_DoWork;
-			bw.RunWorkerCompleted += Bw_RunWorkerCompleted;
-			bw.WorkerSupportsCancellation = true;
-			bw.RunWorkerAsync(tag);
-			UpdateStatus();
+
+			if (NativeWin.Admin.IsRunningAsAdmin())
+			{
+				progressBar.Visible = true;
+				bw = new BackgroundWorker();
+				bw.DoWork += Bw_DoWork;
+				bw.RunWorkerCompleted += Bw_RunWorkerCompleted;
+				bw.WorkerSupportsCancellation = true;
+				bw.RunWorkerAsync(tag);
+				UpdateStatus();
+			}
+			else
+			{
+				string arg = null;
+
+				if (tag == "INSTALL") arg = "UponStartupInstallService";
+				else if (tag == "UNINSTALL") arg = "UponStartupUninstallService";
+				else if (tag == "START") arg = "UponStartupStartService";
+				else if (tag == "STOP") arg = "UponStartupStopService";
+				else
+					statusStr = "Unsupported Operation: " + tag;
+
+				if (arg != null)
+				{
+					if (NativeWin.Admin.StartSelfAsAdmin(arg + " " + this.Location.X + "," + this.Location.Y))
+						Application.Exit();
+					else
+						statusStr = "Unable to perform requested operation.";
+				}
+			}
 		}
 
 		private void Bw_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)

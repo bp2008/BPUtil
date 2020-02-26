@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 
@@ -45,6 +46,11 @@ namespace BPUtil
 		/// </summary>
 		public Exception ex;
 		/// <summary>
+		/// If the request/thread was aborted, this will be true.
+		/// </summary>
+		public bool canceled = false;
+
+		/// <summary>
 		/// Returns the response in string format.
 		/// </summary>
 		/// <remarks>The response is assumed to be UTF8-formatted string data.</remarks>
@@ -65,36 +71,115 @@ namespace BPUtil
 		}
 	}
 	/// <summary>
-	/// Provides HTTP GET and POST methods which are useful in situations where the WebClient class falls short.
+	/// Provides HTTP GET and POST methods which are useful in situations where the WebClient class falls short.  An instance of this is intended to be used with only a single remote host.  This class is thread-safe.
 	/// </summary>
 	public class WebRequestUtility
 	{
-		string UserAgentString;
 		/// <summary>
-		/// Time in milliseconds to wait for web responses. Default is 10 minutes.
+		/// Gets or sets the value of the "User-Agent" HTTP header.
 		/// </summary>
-		public int requestTimeout = 600000;
+		public string UserAgent
+		{
+			get
+			{
+				if (client.DefaultRequestHeaders.TryGetValues("User-Agent", out IEnumerable<string> values))
+					foreach (string value in values)
+						return value;
+				return null;
+			}
+			set
+			{
+				try
+				{
+					if (client.DefaultRequestHeaders.Contains("User-Agent"))
+						client.DefaultRequestHeaders.Remove("User-Agent");
+				}
+				catch { }
+				if (!string.IsNullOrEmpty(value))
+					client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", value);
+			}
+		}
 		/// <summary>
-		/// <para>You can provide a proxy server here, if desired. Example: new WebProxy("127.0.0.1", 8888)</para>
-		/// <seealso cref="IWebProxy"/>
-		/// <seealso cref="WebProxy"/>
+		/// Gets or sets the timespan to wait before the request times out.
 		/// </summary>
-		public IWebProxy proxy = null;
+		public TimeSpan RequestTimeout
+		{
+			get
+			{
+				return client.Timeout;
+			}
+			set
+			{
+				client.Timeout = value;
+			}
+		}
 		/// <summary>
-		/// If true, <see cref="proxy"/> is ignored and the <seealso cref="HttpClient"/> will use automatic proxy settings.  Default: false
+		/// <para>You can provide a proxy server here, if desired.  Example: new WebProxy("127.0.0.1", 8888)</para>
+		/// <para>See <seealso cref="IWebProxy"/>, <seealso cref="WebProxy"/>.</para>
+		/// <para>Also see <seealso cref="UseProxy"/>.</para>
 		/// </summary>
-		public bool automaticProxy = false;
+		public IWebProxy Proxy
+		{
+			get
+			{
+				return httpClientHandler.Proxy;
+			}
+			set
+			{
+				httpClientHandler.Proxy = value;
+			}
+		}
+		/// <summary>
+		/// If false, no web proxy server will be used.  If true, the <seealso cref="HttpClient"/> will use the <see cref="Proxy"/> server. If Proxy is null, the <seealso cref="HttpClient"/> will use automatic proxy settings.
+		/// </summary>
+		public bool UseProxy
+		{
+			get
+			{
+				return httpClientHandler.UseProxy;
+			}
+			set
+			{
+				httpClientHandler.UseProxy = value;
+			}
+		}
 		/// <summary>
 		/// If provided, all web requests will attempt basic authentication using these credentials.
 		/// </summary>
-		public NetworkCredential BasicAuthCredentials;
+		public NetworkCredential BasicAuthCredentials
+		{
+			get
+			{
+				return (NetworkCredential)httpClientHandler.Credentials;
+			}
+			set
+			{
+				httpClientHandler.Credentials = value;
+				httpClientHandler.PreAuthenticate = value != null;
+			}
+		}
 
-		public WebRequestUtility(string UserAgentString, int requestTimeout = 600000)
+		protected HttpClient client;
+		protected HttpClientHandler httpClientHandler;
+
+		/// <summary>
+		/// Constructs a WebRequestUtility which can be used for multiple HTTP requests, even concurrent ones. This class is thread-safe.
+		/// </summary>
+		/// <param name="userAgent">User-Agent header value.</param>
+		/// <param name="requestTimeout">Initial request timeout in milliseconds. If 0 or less, this value is ignored. To modify after construction, see <see cref="RequestTimeout"/>.</param>
+		public WebRequestUtility(string userAgent, int requestTimeout = 600000)
 		{
 			if (!ServicePointManager.SecurityProtocol.HasFlag(SecurityProtocolType.Tls12))
 				ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-			this.UserAgentString = UserAgentString;
-			this.requestTimeout = requestTimeout;
+
+			httpClientHandler = new HttpClientHandler();
+			client = new HttpClient(httpClientHandler);
+			client.DefaultRequestHeaders.ExpectContinue = false;
+
+			if (!string.IsNullOrEmpty(userAgent))
+				this.UserAgent = userAgent;
+			if (requestTimeout > 0)
+				RequestTimeout = TimeSpan.FromMilliseconds(requestTimeout);
 		}
 
 		/// <summary>
@@ -160,51 +245,27 @@ namespace BPUtil
 		{
 			BpWebResponse response = new BpWebResponse();
 
-			HttpClientHandler httpClientHandler = new HttpClientHandler();
-			if (automaticProxy)
-				httpClientHandler.UseProxy = true;
-			else
-			{
-				httpClientHandler.UseProxy = proxy != null;
-				if (proxy != null)
-					httpClientHandler.Proxy = proxy;
-			}
-
-			HttpClient client = new HttpClient(httpClientHandler);
-			client.Timeout = TimeSpan.FromMilliseconds(requestTimeout);
-			client.DefaultRequestHeaders.ExpectContinue = false;
-
-			bool addedUserAgentHeader = false;
+			HttpRequestMessage requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
 			if (headers != null)
 			{
 				for (int i = 0; i + 1 < headers.Length; i += 2)
 				{
 					string key = headers[i];
 					string value = headers[i + 1];
-					if (key.ToLower() == "user-agent")
-						addedUserAgentHeader = true;
-					client.DefaultRequestHeaders.TryAddWithoutValidation(key, value);
+					requestMessage.Headers.TryAddWithoutValidation(key, value);
 				}
 			}
-			if (!addedUserAgentHeader && !string.IsNullOrEmpty(UserAgentString))
-				client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgentString);
-			if (BasicAuthCredentials != null)
+			if (postBody != null && postBody.Length > 1 && !string.IsNullOrWhiteSpace(contentType))
 			{
-				httpClientHandler.Credentials = BasicAuthCredentials;
-				httpClientHandler.PreAuthenticate = true;
+				ByteArrayContent postBodyContent = new ByteArrayContent(postBody);
+				postBodyContent.Headers.Add("Content-Type", contentType);
+				//postBodyContent.Headers.Add("Content-Length", postBody.Length.ToString());
+				requestMessage.Method = HttpMethod.Post;
+				requestMessage.Content = postBodyContent;
 			}
 			try
 			{
-				Task<HttpResponseMessage> responseTask;
-				if (postBody != null && postBody.Length > 1 && !string.IsNullOrWhiteSpace(contentType))
-				{
-					ByteArrayContent postBodyContent = new ByteArrayContent(postBody);
-					postBodyContent.Headers.Add("Content-Type", contentType);
-					//postBodyContent.Headers.Add("Content-Length", postBody.Length.ToString());
-					responseTask = client.PostAsync(url, postBodyContent);
-				}
-				else
-					responseTask = client.GetAsync(url);
+				Task<HttpResponseMessage> responseTask = client.SendAsync(requestMessage);
 
 				responseTask.Wait();
 
@@ -261,6 +322,8 @@ namespace BPUtil
 			{
 				response.StatusCode = 0;
 				response.ex = ex;
+				if (ex.GetExceptionWhere(e2 => e2 is ThreadAbortException || e2.Message.Contains("The request was aborted: The request was canceled")) != null)
+					response.canceled = true;
 			}
 			return response;
 		}

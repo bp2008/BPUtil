@@ -150,7 +150,7 @@ namespace BPUtil
 		/// <summary>
 		/// The BPUtil version number, not to be confused with the version number of the application this is included in.  This version number is often neglected.
 		/// </summary>
-		public static string Version = "0.6";
+		public static string Version = "0.7";
 
 		/// <summary>
 		/// Gets the GUID of the entry assembly.

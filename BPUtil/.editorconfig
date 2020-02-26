@@ -1,0 +1,4 @@
+﻿[*.cs]
+
+# IDE0034WithoutSuggestion: Simplify 'default' expression
+dotnet_diagnostic.IDE0034WithoutSuggestion.severity = silent

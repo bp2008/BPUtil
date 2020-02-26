@@ -59,6 +59,23 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BPQueue.cs" />
+    <Compile Include="IO\BasicDataStream.cs" />
+    <Compile Include="NativeWin\Admin.cs" />
+    <Compile Include="SimpleHttp\TLS\CertificateSelectors\ICertificateSelector.cs" />
+    <Compile Include="SimpleHttp\TLS\CertificateSelectors\ServerNameCertificateSelector.cs" />
+    <Compile Include="SimpleHttp\TLS\CertificateSelectors\SimpleCertificateSelector.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\Enums\ContentType.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\FragmentStream.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeMessage.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\Enums\HandshakeType.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\HandshakeBody.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\ProtocolVersion.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\ClientHello.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\TLSPlaintext.cs" />
+    <Compile Include="SimpleHttp\TLS\TlsServerNameReader.cs" />
+    <Compile Include="IO\UnreadableStream.cs" />
+    <Compile Include="StringSorting.cs" />
     <Compile Include="WaitingQueue.cs" />
     <Compile Include="CachedObject.cs" />
     <Compile Include="Compression.cs" />
@@ -85,7 +102,7 @@
     <Compile Include="ByteUtil.cs" />
     <Compile Include="ConsoleAppHelper.cs" />
     <Compile Include="ConsoleKeyHelper.cs" />
-    <Compile Include="CookieAwareWebClient.cs" />
+    <Compile Include="AdvWebClient.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="Forms\SelfCenteredForm.cs">
       <SubType>Form</SubType>

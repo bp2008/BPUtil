@@ -89,56 +89,56 @@ namespace UnitTests
 		public void TestMVCViewBadExpression()
 		{
 			string input = "<html><head><title>@Htmlencode:Title</title></head><body>@Body</body></html>";
+			bool threw = false;
 			try
 			{
 				ProcessView(input, BuildViewData());
-				Assert.Fail("Test did not throw exception as expected due to invalid method name \"Htmlencode\".");
 			}
-			catch (Exception) { }
+			catch (Exception) { threw = true; }
+			Assert.IsTrue(threw, "Test did not throw exception as expected due to invalid method name \"Htmlencode\".");
 		}
 		[TestMethod]
 		public void TestMVCViewBadExpression2()
 		{
 			string input = "<html><head><title>@ </title></head><body>@Body</body></html>";
+			bool threw = false;
 			try
 			{
 				ProcessView(input, BuildViewData());
-				Assert.Fail("Test did not throw exception as expected due to empty expression \"<title>@ </title>\"");
 			}
-			catch (Exception) { }
+			catch (Exception) { threw = true; }
+			Assert.IsTrue(threw, "Test did not throw exception as expected due to empty expression \"<title>@ </title>\"");
 		}
 		[TestMethod]
 		public void TestMVCViewBadExpression3()
 		{
 			string input = "<html><head><title>Test</title></head><body>@</body></html>";
+			bool threw = false;
 			try
 			{
 				ProcessView(input, BuildViewData());
-				Assert.Fail("Test did not throw exception as expected due to empty expression \"<body>@</body>\"");
 			}
-			catch (Exception) { }
+			catch (Exception) { threw = true; }
+			Assert.IsTrue(threw, "Test did not throw exception as expected due to empty expression \"<body>@</body>\"");
 		}
 		[TestMethod]
 		public void TestMVCViewAtEscape()
 		{
 			string input = "<html><head><title>@@@@@@</title></head><body>@@</body></html>";
-			try
-			{
-				ProcessView(input, BuildViewData());
-				Assert.Fail("Test did not throw exception as expected due to empty expression \"<body>@</body>\"");
-			}
-			catch (Exception) { }
+			string output = ProcessView(input, BuildViewData());
+			Assert.AreEqual("<html><head><title>@@@</title></head><body>@</body></html>", output);
 		}
 		[TestMethod]
 		public void TestMVCViewAtEscapeFail()
 		{
 			string input = "<html><head><title>@@@@@@@</title></head><body>@@</body></html>";
+			bool threw = false;
 			try
 			{
 				ProcessView(input, BuildViewData());
-				Assert.Fail("Test did not throw exception as expected due to empty expression after 3 escaped '@' characters: \"<title>@@@@@@@</title>\"");
 			}
-			catch (Exception) { }
+			catch (Exception) { threw = true; }
+			Assert.IsTrue(threw, "Test did not throw exception as expected due to empty expression after 3 escaped '@' characters: \"<title>@@@@@@@</title>\"");
 		}
 	}
 }

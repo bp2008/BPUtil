@@ -1,4 +1,5 @@
 ﻿using BPUtil.Forms;
+using BPUtil.SimpleHttp;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -36,14 +37,16 @@ namespace BPUtil
 			Environment.CurrentDirectory = Globals.WritableDirectoryBase;
 
 			Logger.CatchAll();
+			SimpleHttpLogger.RegisterLogger(Logger.httpLogger, false);
 
 			ServiceType myService = new ServiceType();
 
 			// Initialize the settings object, if the service has a public static field named "settings" that inherits from SerializableObjectBase.
 			FieldInfo settingsField = myService.GetType().GetField("settings", BindingFlags.Static | BindingFlags.Public);
+			SerializableObjectBase settingsObj = null;
 			if (settingsField != null && settingsField.FieldType.IsSubclassOf(typeof(SerializableObjectBase)))
 			{
-				SerializableObjectBase settingsObj = (SerializableObjectBase)settingsField.GetValue(null);
+				settingsObj = (SerializableObjectBase)settingsField.GetValue(null);
 				if (settingsObj == null)
 				{
 					settingsObj = (SerializableObjectBase)Activator.CreateInstance(settingsField.FieldType);
@@ -57,12 +60,17 @@ namespace BPUtil
 			{
 				string Title = myService.ServiceName + " " + Globals.AssemblyVersion + " Service Manager";
 
-				ButtonDefinition[] additionalButtons = new ButtonDefinition[] {
-					new ButtonDefinition("Open Data Folder", btnOpenDataFolder_Click)
-				};
+				List<ButtonDefinition> additionalButtons = new List<ButtonDefinition>();
+				additionalButtons.Add(new ButtonDefinition("Open Data Folder", btnOpenDataFolder_Click));
+				if (settingsObj != null)
+					additionalButtons.Add(new ButtonDefinition("Update Settings File", (sender, ignored) =>
+											{
+												settingsObj.Save();
+												Process.Start(settingsObj.GetType().Name + ".cfg");
+											}));
 
 				bool didStart = false;
-				if (Debugger.IsAttached)
+				if (Debugger.IsAttached || options.RunForDebugging)
 				{
 					PrivateAccessor.CallMethod<ServiceType>(myService, "OnStart", new object[] { new string[0] });
 					didStart = true;
@@ -70,7 +78,7 @@ namespace BPUtil
 
 				try
 				{
-					System.Windows.Forms.Application.Run(new ServiceManager(Title, myService.ServiceName, additionalButtons));
+					System.Windows.Forms.Application.Run(new ServiceManager(Title, myService.ServiceName, additionalButtons.ToArray()));
 
 				}
 				finally
@@ -92,9 +100,13 @@ namespace BPUtil
 		#endregion
 	}
 	/// <summary>
-	/// Placeholder options for <see cref="AppInit.WindowsService{ServiceType}(WindowsServiceInitOptions)"/>.
+	/// Options for <see cref="AppInit.WindowsService{ServiceType}(WindowsServiceInitOptions)"/>.
 	/// </summary>
 	public class WindowsServiceInitOptions
 	{
+		/// <summary>
+		/// If true, the service's OnStart() method will be called even if <see cref="Debugger.IsAttached"/> is false.  Useful in some development circumstances, such as when launching the application with a performance profiler.
+		/// </summary>
+		public bool RunForDebugging = false;
 	}
 }
