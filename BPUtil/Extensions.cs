@@ -98,7 +98,6 @@ namespace BPUtil
 		/// <summary>
 		/// Traverses the Exception and its InnerException tree, looking for an Exception which causes the given [<paramref name="where" />] method to return true. If one is found, it is returned.  If none is found, null is returned.
 		/// </summary>
-		/// <typeparam name="T">The type of Exception to look for.</typeparam>
 		/// <param name="baseException">This exception.</param>
 		/// <param name="where">A function which returns true if the passed-in exception meets expectations.</param>
 		/// <returns></returns>

@@ -181,7 +181,7 @@ namespace BPUtil
 			else
 			{
 				RegistryValueKind kind = key.GetValueKind(name);
-				if (kind != RegistryValueKind.DWord)
+				if (kind != RegistryValueKind.String)
 					return null;
 			}
 			return (string)this.key.GetValue(name);
@@ -245,6 +245,8 @@ namespace BPUtil
 				if (kind != RegistryValueKind.String)
 					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected String.");
 			}
+			if (value == null)
+				value = "";
 			this.key.SetValue(name, value, RegistryValueKind.String);
 		}
 		/// <summary>
