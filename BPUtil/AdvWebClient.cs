@@ -19,7 +19,7 @@ namespace BPUtil
 		/// <summary>
 		/// Cookies to include in requests.  May be null.
 		/// </summary>
-		public CookieContainer CookieContainer { get; private set; }
+		public CookieContainer CookieContainer { get; private set; } = new CookieContainer();
 		/// <summary>
 		/// Number of milliseconds a request can remain open (without a response?) before it times out. If null, the default HttpWebRequest. Timeout will be kept.
 		/// </summary>
@@ -48,7 +48,7 @@ namespace BPUtil
 		{
 			WebRequest _req = base.GetWebRequest(address);
 			HttpWebRequest request = (HttpWebRequest)_req;
-			if (CookieContainer != null)
+			if (CookieContainer != null && CookieContainer.Count > 0)
 				request.CookieContainer = CookieContainer;
 			if (Timeout != null)
 				request.Timeout = Timeout.Value;
