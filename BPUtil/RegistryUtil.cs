@@ -166,7 +166,7 @@ namespace BPUtil
 		/// <summary>
 		/// Reads a String value.
 		/// </summary>
-		/// <param name="name"></param>
+		/// <param name="name">Case-insensitive value name.</param>
 		/// <returns></returns>
 		public string String(string name)
 		{
@@ -176,7 +176,7 @@ namespace BPUtil
 				if (kind != RegistryValueKind.String)
 					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected String.");
 			}
-			else if (key == null || !key.GetValueNames().Contains(name))
+			else if (key == null || !key.GetValueNames().Contains(name, true))
 				return null;
 			else
 			{
@@ -189,7 +189,7 @@ namespace BPUtil
 		/// <summary>
 		/// Reads a DWord (32 bit integer) value.
 		/// </summary>
-		/// <param name="name"></param>
+		/// <param name="name">Case-insensitive value name.</param>
 		/// <returns></returns>
 		public int DWord(string name)
 		{
@@ -199,7 +199,7 @@ namespace BPUtil
 				if (kind != RegistryValueKind.DWord)
 					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected DWord.");
 			}
-			else if (key == null || !key.GetValueNames().Contains(name))
+			else if (key == null || !key.GetValueNames().Contains(name, true))
 				return 0;
 			else
 			{
@@ -212,7 +212,7 @@ namespace BPUtil
 		/// <summary>
 		/// Reads a QWord (64 bit integer) value.
 		/// </summary>
-		/// <param name="name"></param>
+		/// <param name="name">Case-insensitive value name.</param>
 		/// <returns></returns>
 		public long QWord(string name)
 		{
@@ -222,7 +222,7 @@ namespace BPUtil
 				if (kind != RegistryValueKind.QWord)
 					throw new Exception("Type of \"" + key.Name + "/" + name + "\" is " + kind + ". Expected QWord.");
 			}
-			else if (key == null || !key.GetValueNames().Contains(name))
+			else if (key == null || !key.GetValueNames().Contains(name, true))
 				return 0;
 			else
 			{
@@ -235,7 +235,7 @@ namespace BPUtil
 		/// <summary>
 		/// Writes a String value.
 		/// </summary>
-		/// <param name="name"></param>
+		/// <param name="name">Value name</param>
 		/// <param name="value"></param>
 		public void String(string name, string value)
 		{
@@ -252,7 +252,7 @@ namespace BPUtil
 		/// <summary>
 		/// Writes a DWord (32 bit integer) value.
 		/// </summary>
-		/// <param name="name"></param>
+		/// <param name="name">Value name</param>
 		/// <param name="value"></param>
 		public void DWord(string name, int value)
 		{
@@ -267,7 +267,7 @@ namespace BPUtil
 		/// <summary>
 		/// Writes a QWord (64 bit integer) value.
 		/// </summary>
-		/// <param name="name"></param>
+		/// <param name="name">Value name</param>
 		/// <param name="value"></param>
 		public void QWord(string name, long value)
 		{

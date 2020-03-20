@@ -427,12 +427,13 @@ namespace BPUtil.SimpleHttp
 						parseRequest();
 						readHeaders();
 						keepAliveRequested = "keep-alive".Equals(GetHeaderValue("connection"), StringComparison.OrdinalIgnoreCase);
+						IPAddress originalRemoteIp = RemoteIPAddress;
 						if (srv.XRealIPHeader)
 						{
 							string headerValue = GetHeaderValue("x-real-ip");
 							if (!string.IsNullOrWhiteSpace(headerValue))
 							{
-								if (srv.IsTrustedProxyServer(remoteIpAddress))
+								if (srv.IsTrustedProxyServer(originalRemoteIp))
 								{
 									IPAddress addr;
 									if (IPAddress.TryParse(headerValue, out addr))
@@ -445,7 +446,7 @@ namespace BPUtil.SimpleHttp
 							string headerValue = GetHeaderValue("x-forwarded-for");
 							if (!string.IsNullOrWhiteSpace(headerValue))
 							{
-								if (srv.IsTrustedProxyServer(remoteIpAddress))
+								if (srv.IsTrustedProxyServer(originalRemoteIp))
 								{
 									IPAddress addr;
 									if (IPAddress.TryParse(headerValue, out addr))

@@ -124,5 +124,24 @@ namespace BPUtil
 			return null;
 		}
 		#endregion
+		/// <summary>
+		/// Returns true if the collection contains the specified string.
+		/// </summary>
+		/// <param name="collection"></param>
+		/// <param name="str"></param>
+		/// <param name="ignoreCase"></param>
+		/// <returns></returns>
+		public static bool Contains(this IEnumerable<string> collection, string str, bool ignoreCase)
+		{
+			return collection.Any(s =>
+			{
+				if (s == str)
+					return true;
+				if (ignoreCase && str != null && s != null)
+					return s.Equals(str, StringComparison.OrdinalIgnoreCase);
+				return false;
+			});
+
+		}
 	}
 }
