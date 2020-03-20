@@ -163,7 +163,7 @@ namespace BPUtil
 		protected HttpClientHandler httpClientHandler;
 
 		/// <summary>
-		/// Constructs a WebRequestUtility which can be used for multiple HTTP requests, even concurrent ones. This class is thread-safe.
+		/// Constructs a WebRequestUtility which can be used for multiple HTTP requests, even concurrent ones.  This class is thread-safe.
 		/// </summary>
 		/// <param name="userAgent">User-Agent header value.</param>
 		/// <param name="requestTimeout">Initial request timeout in milliseconds. If 0 or less, this value is ignored. To modify after construction, see <see cref="RequestTimeout"/>.</param>
@@ -171,6 +171,8 @@ namespace BPUtil
 		{
 			if (!ServicePointManager.SecurityProtocol.HasFlag(SecurityProtocolType.Tls12))
 				ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+			if (ServicePointManager.DefaultConnectionLimit < 16)
+				ServicePointManager.DefaultConnectionLimit = 16;
 
 			httpClientHandler = new HttpClientHandler();
 			client = new HttpClient(httpClientHandler);
@@ -195,7 +197,24 @@ namespace BPUtil
 		/// <returns></returns>
 		public BpWebResponse GET(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
 		{
-			return internal_GET_or_POST(url, null, null, headers, earlyTerminationBytes);
+			Task<BpWebResponse> task = GETAsync(url, headers, earlyTerminationBytes);
+			task.Wait();
+			return task.Result;
+		}
+		/// <summary>
+		/// Performs an HTTP GET request.
+		/// </summary>
+		/// <param name="url">The url to GET.</param>
+		/// <param name="headers"><para>An array of strings containing header names and values. The array should be populated in the order of "name", "value", "name", "value", and so on.</para>
+		/// <para>
+		/// For example:
+		/// </para>
+		/// <code>new string[] { "HeaderNameOne", "Header Value One!", "HeaderNameTwo", "Header Value Two!", "User-Agent", "Mozilla" }</code></param>
+		/// <param name="earlyTerminationBytes">(Advanced use) If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <returns></returns>
+		public async Task<BpWebResponse> GETAsync(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		{
+			return await internal_GET_or_POST(url, null, null, headers, earlyTerminationBytes).ConfigureAwait(false);
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending key and value strings to the server using the content type "application/x-www-form-urlencoded".
@@ -215,6 +234,28 @@ namespace BPUtil
 		/// <returns></returns>
 		public BpWebResponse POST(string url, string[] keysAndValues, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
 		{
+			Task<BpWebResponse> task = POSTAsync(url, keysAndValues, headers, earlyTerminationBytes);
+			task.Wait();
+			return task.Result;
+		}
+		/// <summary>
+		/// Performs an HTTP POST request, sending key and value strings to the server using the content type "application/x-www-form-urlencoded".
+		/// </summary>
+		/// <param name="url">The url to POST.</param>
+		/// <param name="keysAndValues">An array of strings containing parameter names and values. The array should be populated in the order of "name", "value", "name", "value", and so on.
+		/// <para>
+		/// For example:
+		/// </para>
+		/// <code>new string[] { "ParamOne", "Value One!", "ParamTwo", "Value Two!" }</code></param>
+		/// <param name="headers">An array of strings containing header names and values. The array should be populated in the order of "name", "value", "name", "value", and so on.
+		/// <para>
+		/// For example:
+		/// </para>
+		/// <code>new string[] { "HeaderNameOne", "Header Value One!", "HeaderNameTwo", "Header Value Two!", "User-Agent", "Mozilla" }</code></param>
+		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <returns></returns>
+		public async Task<BpWebResponse> POSTAsync(string url, string[] keysAndValues, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		{
 			byte[] postBody = null;
 			string contentType = null;
 			if (keysAndValues != null && keysAndValues.Length > 1 && keysAndValues.Length % 2 == 0)
@@ -226,7 +267,7 @@ namespace BPUtil
 				string content = string.Join("&", args);
 				postBody = Encoding.UTF8.GetBytes(content);
 			}
-			return internal_GET_or_POST(url, postBody, contentType, headers, earlyTerminationBytes);
+			return await internal_GET_or_POST(url, postBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending the specified body content.
@@ -239,9 +280,24 @@ namespace BPUtil
 		/// <returns></returns>
 		public BpWebResponse POST(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
 		{
-			return internal_GET_or_POST(url, postBody, contentType, headers, earlyTerminationBytes);
+			Task<BpWebResponse> task = POSTAsync(url, postBody, contentType, headers, earlyTerminationBytes);
+			task.Wait();
+			return task.Result;
 		}
-		protected virtual BpWebResponse internal_GET_or_POST(string url, byte[] postBody, string contentType, string[] headers, int earlyTerminationBytes)
+		/// <summary>
+		/// Performs an HTTP POST request, sending the specified body content.
+		/// </summary>
+		/// <param name="url">The url to POST.</param>
+		/// <param name="postBody">The content to post.</param>
+		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="contentType">The value of the content-type header to set.</param>
+		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <returns></returns>
+		public async Task<BpWebResponse> POSTAsync(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		{
+			return await internal_GET_or_POST(url, postBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
+		}
+		protected virtual async Task<BpWebResponse> internal_GET_or_POST(string url, byte[] postBody, string contentType, string[] headers, int earlyTerminationBytes)
 		{
 			BpWebResponse response = new BpWebResponse();
 
@@ -265,11 +321,8 @@ namespace BPUtil
 			}
 			try
 			{
-				Task<HttpResponseMessage> responseTask = client.SendAsync(requestMessage);
+				HttpResponseMessage httpResponse = await client.SendAsync(requestMessage).ConfigureAwait(false);
 
-				responseTask.Wait();
-
-				HttpResponseMessage httpResponse = responseTask.Result;
 				response.StatusCode = (int)httpResponse.StatusCode;
 
 				foreach (var kvp in httpResponse.Headers)
@@ -286,17 +339,13 @@ namespace BPUtil
 
 				if (earlyTerminationBytes == int.MaxValue)
 				{
-					Task<byte[]> getResponse = httpResponse.Content.ReadAsByteArrayAsync();
-					getResponse.Wait();
-					response.data = getResponse.Result;
+					response.data = await httpResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 				}
 				else
 				{
 					using (MemoryStream ms = new MemoryStream())
 					{
-						Task<Stream> getStream = httpResponse.Content.ReadAsStreamAsync();
-						getStream.Wait();
-						using (Stream responseStream = getStream.Result)
+						using (Stream responseStream = await httpResponse.Content.ReadAsStreamAsync().ConfigureAwait(false))
 						{
 							// Dump the response stream into the MemoryStream ms
 							int bytesRead = 1;
