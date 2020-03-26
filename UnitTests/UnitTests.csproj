@@ -54,6 +54,9 @@
     <Compile Include="TestExceptionExtensions.cs" />
     <Compile Include="TestMVC.cs" />
     <Compile Include="TestCachedObject.cs" />
+    <Compile Include="TestObjectCache.cs" />
+    <Compile Include="TestObjectSize.cs" />
+    <Compile Include="TestStringCache.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

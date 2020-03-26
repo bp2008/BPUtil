@@ -62,6 +62,8 @@
     <Compile Include="BPQueue.cs" />
     <Compile Include="IO\BasicDataStream.cs" />
     <Compile Include="NativeWin\Admin.cs" />
+    <Compile Include="ObjectCache.cs" />
+    <Compile Include="ObjectSize.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ICertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ServerNameCertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\SimpleCertificateSelector.cs" />
@@ -75,6 +77,7 @@
     <Compile Include="SimpleHttp\TLS\Implementation\TLSPlaintext.cs" />
     <Compile Include="SimpleHttp\TLS\TlsServerNameReader.cs" />
     <Compile Include="IO\UnreadableStream.cs" />
+    <Compile Include="StringCache.cs" />
     <Compile Include="StringSorting.cs" />
     <Compile Include="WaitingQueue.cs" />
     <Compile Include="CachedObject.cs" />
