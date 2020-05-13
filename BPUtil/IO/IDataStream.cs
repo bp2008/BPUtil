@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BPUtil
+namespace BPUtil.IO
 {
 	public interface IDataStream
 	{

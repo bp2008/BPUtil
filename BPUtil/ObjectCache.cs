@@ -70,7 +70,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Returns the value that is cached for the given key, or default(<see cref="TValue"/>).
+		/// Returns the value that is cached for the given key, or default(TValue).
 		/// </summary>
 		/// <param name="key">The object to use as dictionary key. `null` is not a valid key.</param>
 		/// <returns></returns>
@@ -79,7 +79,7 @@ namespace BPUtil
 			return Get(key, out long cacheAgeMs);
 		}
 		/// <summary>
-		/// Returns the value that is cached for the given key, or default(<see cref="TValue"/>).
+		/// Returns the value that is cached for the given key, or default(TValue").
 		/// </summary>
 		/// <param name="key">The object to use as dictionary key. `null` is not a valid key.</param>
 		/// <param name="cacheAgeMs">Milliseconds age of the cached value.  Will be 0 if no item was cached.</param>
@@ -140,7 +140,7 @@ namespace BPUtil
 		/// Calculates the amount of memory, in bytes, of storing this item in the ObjectCache.  Accuracy is not 100% guaranteed.
 		/// </summary>
 		/// <param name="key"></param>
-		/// <param name="value"></param>
+		/// <param name="item"></param>
 		/// <returns></returns>
 		private long CalculateItemSize(TKey key, CacheItem item)
 		{

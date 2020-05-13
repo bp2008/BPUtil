@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BPUtil.IO;
+using System;
 using System.IO;
 
 namespace BPUtil.SimpleHttp.TLS.Implementation

@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using BPUtil;
 
-namespace BPUtil
+namespace BPUtil.IO
 {
 	/// <summary>
 	/// A stream you can use to wrap another stream to provide convenient Read and Write functions for various common types.
@@ -15,18 +15,22 @@ namespace BPUtil
 	public class BasicDataStream : Stream, IDataStream, IDisposable
 	{
 		public readonly Stream originalStream;
+		public readonly bool leaveOpen;
 		/// <summary>
 		/// Initializes a new instance of the BasicDataStream class by wrapping another stream.
 		/// </summary>
 		/// <param name="stream">The original stream to wrap.</param>
-		public BasicDataStream(Stream stream)
+		/// <param name="leaveOpen">If true, the inner stream will not be closed or disposed when the outer stream is.</param>
+		public BasicDataStream(Stream stream, bool leaveOpen = false)
 		{
 			originalStream = stream;
+			this.leaveOpen = leaveOpen;
 		}
 
 		public new void Dispose()
 		{
-			originalStream.Dispose();
+			if (!leaveOpen)
+				originalStream.Dispose();
 		}
 
 		/// <summary>
@@ -297,7 +301,8 @@ namespace BPUtil
 		}
 		public override void Close()
 		{
-			originalStream.Close();
+			if (!leaveOpen)
+				originalStream.Close();
 		}
 		#endregion
 		#endregion

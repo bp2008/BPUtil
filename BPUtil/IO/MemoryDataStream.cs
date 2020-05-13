@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using BPUtil;
 
-namespace BPUtil
+namespace BPUtil.IO
 {
 	public class MemoryDataStream : MemoryStream, IDataStream
 	{

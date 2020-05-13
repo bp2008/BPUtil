@@ -20,12 +20,14 @@ namespace BPUtil
 		/// <param name="createNewObjectFunc">A function which returns a new instance of the managed object.  This is called whenever a new instance is needed.</param>
 		/// <param name="minAge">Minimum age.  After the cached instance is this old, retrieving the cached instance will trigger a new instance to be created asynchronously.  The existing object will still be returned without delay.</param>
 		/// <param name="maxAge">Maximum age.  After the cached instance is this old, it can no longer be returned.  Requests for a cached instance will block until an object newer than this is available.</param>
-		public CachedObject(Func<T> createNewObjectFunc, TimeSpan minAge, TimeSpan maxAge)
+		/// <param name="ReportException">An action that will be called if an exception is thrown while reloading the cached object in a background thread.  If null, uses Logger.Debug.</param>
+		public CachedObject(Func<T> createNewObjectFunc, TimeSpan minAge, TimeSpan maxAge, Action<Exception> ReportException = null)
 		{
 			updateTimer.Start();
 			this.createNewObjectFunc = createNewObjectFunc;
 			this.minAgeMs = (long)Math.Round(minAge.TotalMilliseconds);
 			this.maxAgeMs = (long)Math.Round(maxAge.TotalMilliseconds);
+			this.ReportException = ReportException ?? (ex => Logger.Debug(ex));
 		}
 
 		/// <summary>
@@ -54,17 +56,24 @@ namespace BPUtil
 		private long minAgeMs;
 		private long maxAgeMs;
 		private Func<T> createNewObjectFunc;
+		private Action<Exception> ReportException;
 
 		/// <summary>
-		/// Returns the most recent copy of the object.  The first get may be slow, as the object will need to be created.  You should not work directly with this property, as it may change to a new instance at any time.  Make a local reference to the instance.
+		/// Returns the most recent copy of the object.  The first get may be slow, as the object will need to be created.  You should not expect repeated calls to this method to always return the same instance.  Make a local reference to the instance.
 		/// </summary>
-		public T Instance
+		public T GetInstance()
 		{
-			get
-			{
-				RefreshIfNecessary();
-				return current.instance;
-			}
+			RefreshIfNecessary();
+			return current.instance;
+		}
+
+		/// <summary>
+		/// Reloads the cached object now without regard for the current age. Returns a reference to the object created by this method.
+		/// </summary>
+		public T Reload()
+		{
+			CachedInstance ci = current = new CachedInstance(createNewObjectFunc(), updateTimer);
+			return ci.instance;
 		}
 
 		private void RefreshIfNecessary()
@@ -76,7 +85,7 @@ namespace BPUtil
 				{
 					ci = current;
 					if (ci == null || updateTimer.ElapsedMilliseconds - ci.createdAt >= maxAgeMs)
-						current = new CachedInstance(createNewObjectFunc(), updateTimer);
+						Reload();
 				}
 			}
 			else if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
@@ -90,12 +99,10 @@ namespace BPUtil
 						{
 							ci = current;
 							if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
-							{
-								current = new CachedInstance(createNewObjectFunc(), updateTimer);
-							}
+								Reload();
 						}
 					}
-				}, 0);
+				}, 0, ReportException);
 			}
 		}
 	}
