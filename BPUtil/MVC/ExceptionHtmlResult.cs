@@ -29,7 +29,7 @@ namespace BPUtil.MVC
 			sb.AppendLine("</pre>");
 			sb.AppendLine("</body>");
 			sb.AppendLine("</html>");
-			this.Body = Encoding.UTF8.GetBytes(sb.ToString());
+			this.BodyStr = sb.ToString();
 		}
 	}
 }

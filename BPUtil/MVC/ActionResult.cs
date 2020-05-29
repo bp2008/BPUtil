@@ -8,9 +8,9 @@ namespace BPUtil.MVC
 	public class ActionResult
 	{
 		/// <summary>
-		/// The response body for an HTTP response.
+		/// The response body for an HTTP response. This property may be overridden by derived ActionResult types and should not be assumed to be efficient (it may not be simply backed by a field).
 		/// </summary>
-		public byte[] Body;
+		public virtual byte[] Body { get; set; }
 
 		/// <summary>
 		/// A collection of HTTP headers for an HTTP response.
@@ -155,15 +155,45 @@ namespace BPUtil.MVC
 	public class StringResult : ActionResult
 	{
 		/// <summary>
+		/// The string result. This property may be overridden by derived StringResult types and should not be assumed to be efficient (it may not be simply backed by a field).
+		/// </summary>
+		public virtual string BodyStr { get; set; }
+
+		public override byte[] Body
+		{
+			get
+			{
+				string str = BodyStr;
+				if (str == null)
+					return null;
+				return ByteUtil.Utf8NoBOM.GetBytes(str);
+			}
+			set
+			{
+				byte[] ba = value;
+				if (ba == null)
+					BodyStr = null;
+				else
+					BodyStr = ByteUtil.Utf8NoBOM.GetString(ba);
+			}
+		}
+		/// <summary>
+		/// Constructs a StringResult where the body is a UTF8-encoded string.
+		/// </summary>
+		/// <param name="contentType">The Content-Type of the response.</param>
+		public StringResult(string contentType) : base(contentType)
+		{
+			Compress = true;
+		}
+		/// <summary>
 		/// Constructs a StringResult where the body is a UTF8-encoded string.
 		/// </summary>
 		/// <param name="str">The string to send in the response.</param>
 		/// <param name="contentType">The Content-Type of the response.</param>
-		public StringResult(string str, string contentType) : base(contentType)
+		public StringResult(string str, string contentType) : this(contentType)
 		{
 			if (str != null)
-				Body = Encoding.UTF8.GetBytes(str);
-			Compress = true;
+				BodyStr = str;
 		}
 	}
 	/// <summary>
@@ -234,10 +264,36 @@ namespace BPUtil.MVC
 	public class JsonResult : StringResult
 	{
 		/// <summary>
+		/// The object to serialize as JSON.
+		/// </summary>
+		public virtual object BodyObj { get; set; }
+
+		public override string BodyStr
+		{
+			get
+			{
+				object obj = BodyObj;
+				if (obj == null)
+					return null;
+				return MvcJson.SerializeObject(obj);
+			}
+			set
+			{
+				string json = value;
+				if (json == null)
+					BodyObj = null;
+				else
+					BodyObj = MvcJson.DeserializeObject(json);
+			}
+		}
+		/// <summary>
 		/// Constructs a JsonResult where the body is text containing JSON markup.
 		/// </summary>
-		/// <param name="json">JSON markup.</param>
-		public JsonResult(string json) : base(json, "application/json") { }
+		/// <param name="obj">Object to serialize as JSON.</param>
+		public JsonResult(object obj) : base("application/json")
+		{
+			BodyObj = obj;
+		}
 	}
 	/// <summary>
 	/// A result where the body is a plain-text error message and the response status has a custom value.

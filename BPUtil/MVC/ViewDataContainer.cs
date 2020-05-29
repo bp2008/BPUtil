@@ -19,13 +19,16 @@ namespace BPUtil.MVC
 		/// Sets the specified key/value pair.
 		/// </summary>
 		/// <param name="key">Key</param>
-		/// <param name="value">Value</param>
+		/// <param name="value">Value. If null, the key is removed from the collection.</param>
 		public void Set(string key, string value)
 		{
 			data[key] = value;
 		}
 		/// <summary>
-		/// Retrieves the value with the specified key. Returns null if the key is not found.
+		/// <para>Retrieves the value with the specified key.</para>
+		/// <para>
+		/// Returns null if the key is not found, and also if the stored value was null. To differentiate between the cases, use <see cref="TryGet(string, out string)"/>.
+		/// </para>
 		/// </summary>
 		/// <param name="key">Key</param>
 		/// <returns></returns>
@@ -44,6 +47,14 @@ namespace BPUtil.MVC
 		public bool TryGet(string key, out string value)
 		{
 			return data.TryGetValue(key, out value);
+		}
+		/// <summary>
+		/// Deletes the specified key (and its value) from the collection, returning true if an item was deleted.
+		/// </summary>
+		/// <param name="key">Key</param>
+		public bool Delete(string key)
+		{
+			return data.TryRemove(key, out string ignored);
 		}
 	}
 }

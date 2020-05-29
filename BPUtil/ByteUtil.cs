@@ -169,6 +169,23 @@ namespace BPUtil
 			}
 			return Encoding.ASCII.GetString(data.ToArray());
 		}
+		/// <summary>
+		/// Converts a byte array to a hexidecimal string using either upper or lower case letters.
+		/// </summary>
+		/// <param name="buffer">The byte array to convert.</param>
+		/// <param name="capitalLetters">If true, letters will be upper case.</param>
+		/// <returns></returns>
+		public static string ToHex(byte[] buffer, bool capitalLetters = true)
+		{
+			StringBuilder sBuilder = new StringBuilder();
+			if (capitalLetters)
+				for (int i = 0; i < buffer.Length; i++)
+					sBuilder.Append(buffer[i].ToString("X2"));
+			else
+				for (int i = 0; i < buffer.Length; i++)
+					sBuilder.Append(buffer[i].ToString("x2"));
+			return sBuilder.ToString();
+		}
 		#region ReadNBytes
 		/// <summary>
 		/// Reads a specific number of bytes from the stream, returning a byte array.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.

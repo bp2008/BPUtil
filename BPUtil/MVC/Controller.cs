@@ -23,7 +23,7 @@ namespace BPUtil.MVC
 		/// </summary>
 		public readonly ViewDataContainer ViewData = new ViewDataContainer();
 		/// <summary>
-		/// A wrapper around ViewData which can have key/value pairs added and read as dy namic properties.
+		/// A wrapper around ViewData which can have key/value pairs added and read as dynamic properties.
 		/// </summary>
 		public readonly dynamic ViewBag;
 
@@ -40,6 +40,11 @@ namespace BPUtil.MVC
 		{
 			return true;
 		}
+
+		/// <summary>
+		/// When overridden in a derived class, this method may modify any ActionResult before it is sent to the client.
+		/// </summary>
+		public virtual void PreprocessResult(ActionResult result) { }
 
 		/// <summary>
 		/// Returns a BinaryResult where the body is binary data.
@@ -153,10 +158,10 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// Returns a JsonResult where the body is text containing JSON markup.
 		/// </summary>
-		/// <param name="json">JSON markup.</param>
-		protected virtual JsonResult Json(string json)
+		/// <param name="obj">Object to be returned as JSON markup.</param>
+		protected virtual JsonResult Json(object obj)
 		{
-			return new JsonResult(json);
+			return new JsonResult(obj);
 		}
 
 		/// <summary>
@@ -166,6 +171,15 @@ namespace BPUtil.MVC
 		protected virtual StatusCodeResult StatusCode(string responseStatus)
 		{
 			return new StatusCodeResult(responseStatus);
+		}
+
+		/// <summary>
+		/// Returns a ViewResult created from the specified text file.  This controller instance's <see cref="ViewData"/> will be used for view processing.
+		/// </summary>
+		/// <param name="filePath">Path to a text file containing the view content.</param>
+		protected virtual ViewResult View(string filePath)
+		{
+			return new ViewResult(filePath, ViewData);
 		}
 	}
 }

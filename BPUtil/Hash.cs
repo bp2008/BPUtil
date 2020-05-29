@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Security.Cryptography;
+using System.IO;
 
 namespace BPUtil
 {
@@ -146,6 +147,13 @@ namespace BPUtil
 		{
 			return Convert.ToBase64String(GetSHA1Bytes(s));
 		}
+		/// <summary>
+		/// Computes the MD5 hash of the specified string, optionally appending a binary salt value.
+		/// An MD5 hash is 16 bytes (128 bits) long.
+		/// </summary>
+		/// <param name="s">The string to hash.</param>
+		/// <param name="salt">The salt value to append to the string before hashing.</param>
+		/// <returns></returns>
 		public static byte[] GetMD5Bytes(string s, byte[] salt = null)
 		{
 			byte[] data = utf8NoBOM.GetBytes(s);
@@ -171,6 +179,33 @@ namespace BPUtil
 		public static string GetMD5Hex(string s)
 		{
 			return BitConverter.ToString(GetMD5Bytes(s)).Replace("-", "").ToLower();
+		}
+		/// <summary>
+		/// Calculates the MD5 hash of the file contents.
+		/// The hash is returned as a lower-case hexidecimal string 32 characters long.
+		/// </summary>
+		/// <param name="path">The path to the file to compute the hash of.</param>
+		/// <returns></returns>
+		public static string GetMD5HexOfFile(string path)
+		{
+			using (HashAlgorithm hasher = new MD5CryptoServiceProvider())
+			{
+				using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+				{
+					byte[] buffer = new byte[65536];
+					long totalRead = 0;
+					int read = 1;
+					while (read > 0)
+					{
+						read = fs.Read(buffer, 0, buffer.Length);
+						totalRead += read;
+						if (read > 0)
+							hasher.TransformBlock(buffer, 0, read, null, 0);
+					}
+					hasher.TransformFinalBlock(new byte[0], 0, 0);
+					return ByteUtil.ToHex(hasher.Hash, false);
+				}
+			}
 		}
 	}
 }

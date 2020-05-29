@@ -51,9 +51,8 @@ namespace BPUtil
 		public bool canceled = false;
 
 		/// <summary>
-		/// Returns the response in string format.
+		/// Returns the response in string format. The response is assumed to be UTF8-formatted string data.
 		/// </summary>
-		/// <remarks>The response is assumed to be UTF8-formatted string data.</remarks>
 		public string str
 		{
 			get

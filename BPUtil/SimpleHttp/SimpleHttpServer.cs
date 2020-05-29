@@ -800,7 +800,7 @@ namespace BPUtil.SimpleHttp
 		{
 			get
 			{
-				string acceptEncoding = GetHeaderValue("Accept-Encoding");
+				string acceptEncoding = GetHeaderValue("Accept-Encoding", "");
 				string[] types = acceptEncoding.Split(',');
 				foreach (string type in types)
 					if (type.Trim().ToLower() == "gzip")
@@ -1472,8 +1472,8 @@ namespace BPUtil.SimpleHttp
 
 			if (this.secure_port > -1)
 			{
-				if (certificateSelector == null)
-					certificateSelector = SimpleCertificateSelector.FromCertificate(HttpServer.GetSelfSignedCertificate());
+				if (this.certificateSelector == null)
+					this.certificateSelector = SimpleCertificateSelector.FromCertificate(HttpServer.GetSelfSignedCertificate());
 				thrHttps = new Thread(listen);
 				thrHttps.IsBackground = true;
 				thrHttps.Name = "HttpsServer Thread";

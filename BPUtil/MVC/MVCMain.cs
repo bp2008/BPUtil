@@ -22,14 +22,17 @@ namespace BPUtil.MVC
 		/// The Namespace containing the controllers for this instance.
 		/// </summary>
 		public string Namespace { get; protected set; }
+		public Action<Exception> ErrorHandler { get; protected set; }
 		/// <summary>
 		/// Creates a new API from a namespace.
 		/// </summary>
 		/// <param name="assembly">The assembly where the API controller classes are located. e.g. Assembly.GetExecutingAssembly()</param>
 		/// <param name="namespaceStr">The namespace containing all the API controller classes. e.g. typeof(SomeAPIHandler).Namespace</param>
-		public MVCMain(Assembly assembly, string namespaceStr)
+		/// <param name="ErrorHandler">A function accepting an exception for logging purposes.</param>
+		public MVCMain(Assembly assembly, string namespaceStr, Action<Exception> ErrorHandler = null)
 		{
 			this.Namespace = namespaceStr;
+			this.ErrorHandler = ErrorHandler;
 			IEnumerable<Type> controllerTypes = assembly.GetTypes().Where(IsController);
 			foreach (Type t in controllerTypes)
 				controllerInfoMap[t.Name] = new ControllerInfo(t);
@@ -66,26 +69,44 @@ namespace BPUtil.MVC
 			if (actionResult == null)
 				return false; // This could mean the method was not found, or that it decided to not provide a response.
 
-			if (actionResult.Body == null)
+			byte[] body = null;
+
+			try
+			{
+				body = actionResult.Body;
+			}
+			catch (Exception ex)
+			{
+				actionResult = GenerateErrorPage(httpProcessor, ex);
+				body = actionResult.Body;
+			}
+
+			if (body == null)
 			{
 				httpProcessor.writeSuccess(actionResult.ContentType, 0, actionResult.ResponseStatus);
 			}
 			else
 			{
-				List<KeyValuePair<string, string>> additionalHeaders = null;
-				if (actionResult.Compress && actionResult.Body.Length >= 32 && httpProcessor.ClientRequestsGZipCompression)
+				List<KeyValuePair<string, string>> additionalHeaders = new List<KeyValuePair<string, string>>();
+				if (actionResult.Compress && body.Length >= 32 && httpProcessor.ClientRequestsGZipCompression)
 				{
-					byte[] compressed = Compression.GZipCompress(actionResult.Body);
-					if (compressed.Length < actionResult.Body.Length)
+					byte[] compressed = Compression.GZipCompress(body);
+					if (compressed.Length < body.Length)
 					{
-						additionalHeaders = new List<KeyValuePair<string, string>>();
 						additionalHeaders.Add(new KeyValuePair<string, string>("Content-Encoding", "gzip"));
-						actionResult.Body = compressed;
+						body = compressed;
 					}
 				}
-				httpProcessor.writeSuccess(actionResult.ContentType, actionResult.Body.Length, actionResult.ResponseStatus, additionalHeaders);
+				foreach (HttpHeader header in actionResult.headers)
+				{
+					if (!header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+					{
+						additionalHeaders.Add(new KeyValuePair<string, string>(header.Name, header.Value));
+					}
+				}
+				httpProcessor.writeSuccess(actionResult.ContentType, body.Length, actionResult.ResponseStatus, additionalHeaders);
 				httpProcessor.outputStream.Flush();
-				httpProcessor.tcpStream.Write(actionResult.Body, 0, actionResult.Body.Length);
+				httpProcessor.tcpStream.Write(body, 0, body.Length);
 			}
 			return true;
 		}
@@ -109,6 +130,14 @@ namespace BPUtil.MVC
 		/// <returns></returns>
 		private ActionResult GenerateErrorPage(HttpProcessor httpProcessor, Exception ex)
 		{
+			if (ErrorHandler == null)
+			{
+				try
+				{
+					ErrorHandler(ex);
+				}
+				catch { }
+			}
 			if (MVCGlobals.RemoteClientsMaySeeExceptionDetails || httpProcessor.IsLocalConnection)
 				return new ExceptionHtmlResult(ex);
 			else

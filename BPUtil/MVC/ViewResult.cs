@@ -28,7 +28,7 @@ namespace BPUtil.MVC
 			ProcessView(text, ViewData);
 		}
 		/// <summary>
-		/// Processes the specified text as a view and sets this result body.
+		/// Processes the specified text as a view and sets this result body. Do not call this unless the constructor you used says to do so.
 		/// </summary>
 		/// <param name="viewText">The view's text.</param>
 		/// <param name="ViewData">A ViewDataContainer containing values for expressions found within the view.</param>
@@ -40,6 +40,7 @@ namespace BPUtil.MVC
 				StringBuilder sb = new StringBuilder(viewText.Length);
 				StringBuilder expressionBuffer = new StringBuilder();
 				ViewParseState state = ViewParseState.HTML;
+				bool expressionStartedWithParenthesis = false;
 				foreach (char c in viewText)
 				{
 					if (state == ViewParseState.HTML)
@@ -65,6 +66,13 @@ namespace BPUtil.MVC
 								sb.Append(ProcessExpression(expressionBuffer, ViewData));
 							}
 						}
+						else if (expressionBuffer.Length == 0 && c == '(')
+						{
+							// Expressions can be within parenthesis in order 
+							// to mark their end to allow for cases like:
+							//    "@(AppRoot)images/icon.jpg"
+							expressionStartedWithParenthesis = true;
+						}
 						else if ((c >= 'a' && c <= 'z')
 							|| (c >= 'A' && c <= 'Z')
 							|| (c >= '0' && c <= '9')
@@ -76,10 +84,14 @@ namespace BPUtil.MVC
 						}
 						else
 						{
+							if (expressionStartedWithParenthesis && c != ')')
+								throw new Exception("Expression began with opening parenthesis but did not end with closing parenthesis.");
 							// This character ends the expression.
 							state = ViewParseState.HTML;
 							sb.Append(ProcessExpression(expressionBuffer, ViewData));
-							sb.Append(c);
+							if (!expressionStartedWithParenthesis)
+								sb.Append(c);
+							expressionStartedWithParenthesis = false;
 						}
 					}
 				}
@@ -87,7 +99,7 @@ namespace BPUtil.MVC
 					sb.Append(ProcessExpression(expressionBuffer, ViewData));
 				viewText = sb.ToString();
 			}
-			Body = Encoding.UTF8.GetBytes(viewText);
+			BodyStr = viewText;
 		}
 
 		private string ProcessExpression(StringBuilder expressionBuffer, ViewDataContainer ViewData)
@@ -98,9 +110,8 @@ namespace BPUtil.MVC
 				expressionBuffer.Clear();
 
 				string[] parts = expression.Split(':');
-				string value = ViewData.Get(parts[parts.Length - 1]);
-				if (string.IsNullOrEmpty(value))
-					return "";
+				if (!ViewData.TryGet(parts[parts.Length - 1], out string value))
+					throw new Exception("A view expression referred to a key that does not exist in the view data.");
 				for (int i = parts.Length - 2; i >= 0; i--)
 					value = PerformExpressionMethod(parts[i], value);
 				return value;
