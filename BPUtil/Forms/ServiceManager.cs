@@ -334,9 +334,9 @@ namespace BPUtil.Forms
 			// sc create ServiceName binPath= "%~dp0Service.exe" start= auto
 			// sc failure ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000
 			string std, err;
-			RunProcessAndWait("sc", "create \"" + ServiceName + "\" binPath= \"" + Application.ExecutablePath + "\" start= auto", out std, out err);
+			ProcessRunner.RunProcessAndWait("sc", "create \"" + ServiceName + "\" binPath= \"" + Application.ExecutablePath + "\" start= auto", out std, out err);
 			statusStr = std + Environment.NewLine + err;
-			RunProcessAndWait("sc", "failure \"" + ServiceName + "\" reset= 0 actions= restart/60000/restart/60000/restart/60000", out std, out err);
+			ProcessRunner.RunProcessAndWait("sc", "failure \"" + ServiceName + "\" reset= 0 actions= restart/60000/restart/60000/restart/60000", out std, out err);
 			statusStr = std + Environment.NewLine + err;
 			servicePath = "";
 		}
@@ -344,7 +344,7 @@ namespace BPUtil.Forms
 		private void UninstallService()
 		{
 			string std, err;
-			RunProcessAndWait("sc", "delete \"" + ServiceName + "\"", out std, out err);
+			ProcessRunner.RunProcessAndWait("sc", "delete \"" + ServiceName + "\"", out std, out err);
 			statusStr = std + Environment.NewLine + err;
 			servicePath = "";
 		}
@@ -352,47 +352,15 @@ namespace BPUtil.Forms
 		private void StartService()
 		{
 			string std, err;
-			RunProcessAndWait("NET", "START \"" + ServiceName + "\"", out std, out err);
+			ProcessRunner.RunProcessAndWait("NET", "START \"" + ServiceName + "\"", out std, out err);
 			statusStr = std + Environment.NewLine + err;
 		}
 
 		private void StopService()
 		{
 			string std, err;
-			RunProcessAndWait("NET", "STOP \"" + ServiceName + "\"", out std, out err);
+			ProcessRunner.RunProcessAndWait("NET", "STOP \"" + ServiceName + "\"", out std, out err);
 			statusStr = std + Environment.NewLine + err;
-		}
-
-		private int RunProcessAndWait(string fileName, string arguments, out string output, out string errorOutput)
-		{
-			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
-			psi.UseShellExecute = false;
-			psi.CreateNoWindow = true;
-			psi.RedirectStandardOutput = true;
-			psi.RedirectStandardError = true;
-
-			StringBuilder sbOutput = new StringBuilder();
-			StringBuilder sbError = new StringBuilder();
-
-			Process p = Process.Start(psi);
-
-			p.OutputDataReceived += (sender, e) =>
-			{
-				sbOutput.AppendLine(e.Data);
-			};
-			p.ErrorDataReceived += (sender, e) =>
-			{
-				sbError.AppendLine(e.Data);
-			};
-			p.BeginOutputReadLine();
-			p.BeginErrorReadLine();
-
-			p.WaitForExit();
-
-			output = sbOutput.ToString();
-			errorOutput = sbError.ToString();
-
-			return p.ExitCode;
 		}
 	}
 	public class ButtonDefinition

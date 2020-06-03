@@ -33,13 +33,10 @@ namespace BPUtil.MVC
 		}
 
 		/// <summary>
-		/// When overridden in a derived class, this method may return false to disallow access to the controller.
+		/// When overridden in a derived class, this method may allow or disallow access to the controller.  This is called before the client-specified action method is called.
 		/// </summary>
-		/// <returns>True if the controller is usable in the current request context.  False if the controller must not be used.</returns>
-		public virtual bool OnAuthorization()
-		{
-			return true;
-		}
+		/// <param name="result">If authorization fails, this should be set to an appropriate result such as an HTTP 403 Forbidden response. If null, authorization will be assumed to have succeeded.</param>
+		public virtual void OnAuthorization(ref ActionResult result) { }
 
 		/// <summary>
 		/// When overridden in a derived class, this method may modify any ActionResult before it is sent to the client.

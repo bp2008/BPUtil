@@ -49,8 +49,10 @@ namespace BPUtil.MVC
 			}
 			Controller controller = (Controller)Activator.CreateInstance(ControllerType);
 			controller.Context = context;
-			if (!controller.OnAuthorization())
-				return null;
+			ActionResult authResult = null;
+			controller.OnAuthorization(ref authResult);
+			if (authResult != null)
+				return authResult;
 			return CallActionMethod(controller, methodInfo);
 		}
 		/// <summary>

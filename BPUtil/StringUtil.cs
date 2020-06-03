@@ -93,6 +93,54 @@ namespace BPUtil
 				}
 			return sb.ToString();
 		}
+
+		/// <summary>
+		/// Returns true if the string contains only characters from the set: A-Z, a-z,0-9.
+		/// </summary>
+		/// <param name="str">String to test.</param>
+		/// <returns></returns>
+		public static bool IsAlphaNumeric(string str)
+		{
+			if (str == null)
+				return true;
+			foreach (char c in str)
+			{
+				if ((c >= 'a' && c <= 'z')
+					|| (c >= 'A' && c <= 'Z')
+					|| (c >= '0' && c <= '9'))
+				{
+					// Character is OK
+				}
+				else
+					return false;
+			}
+			return true;
+		}
+
+		/// <summary>
+		/// Returns true if the string contains only characters from the set: A-Z, a-z,0-9,_.
+		/// </summary>
+		/// <param name="str">String to test.</param>
+		/// <returns></returns>
+		public static bool IsAlphaNumericOrUnderscore(string str)
+		{
+			if (str == null)
+				return true;
+			foreach (char c in str)
+			{
+				if ((c >= 'a' && c <= 'z')
+					|| (c >= 'A' && c <= 'Z')
+					|| (c >= '0' && c <= '9')
+					|| c == '_')
+				{
+					// Character is OK
+				}
+				else
+					return false;
+			}
+			return true;
+		}
+
 		/// <summary>
 		/// <para>Encodes a string so it can be safely placed into a JavaScript string literal.</para>
 		/// <para>From .NET reference source.</para>
