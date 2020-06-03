@@ -35,7 +35,7 @@ namespace UnitTests
 
 			for (int n = 1; n <= 50; n++)
 			{
-				Assert.AreEqual(n, co.Instance.id);
+				Assert.AreEqual(n, co.GetInstance().id);
 			}
 
 			// Test that the object is created only once when expiration dates are long.
@@ -47,14 +47,14 @@ namespace UnitTests
 				TimeSpan.FromMinutes(1),
 				TimeSpan.FromMinutes(2));
 
-			Assert.AreEqual(1, co.Instance.id);
-			Assert.AreEqual(1, co.Instance.id);
-			Assert.AreEqual(1, co.Instance.id);
+			Assert.AreEqual(1, co.GetInstance().id);
+			Assert.AreEqual(1, co.GetInstance().id);
+			Assert.AreEqual(1, co.GetInstance().id);
 
 			if (allowSlowTest)
 			{
 				Thread.Sleep(100);
-				Assert.AreEqual(1, co.Instance.id);
+				Assert.AreEqual(1, co.GetInstance().id);
 				Thread.Sleep(100);
 
 				// Test short minAge
@@ -66,23 +66,23 @@ namespace UnitTests
 				TimeSpan.FromMilliseconds(50),
 				TimeSpan.FromMinutes(2));
 
-				Assert.AreEqual(1, co.Instance.id);
-				Assert.AreEqual(1, co.Instance.id);
-				Assert.AreEqual(1, co.Instance.id);
+				Assert.AreEqual(1, co.GetInstance().id);
+				Assert.AreEqual(1, co.GetInstance().id);
+				Assert.AreEqual(1, co.GetInstance().id);
 				Thread.Sleep(100);
-				Assert.AreEqual(1, co.Instance.id);
+				Assert.AreEqual(1, co.GetInstance().id);
 				Thread.Sleep(25);
-				Assert.AreEqual(2, co.Instance.id);
-				Assert.AreEqual(2, co.Instance.id);
+				Assert.AreEqual(2, co.GetInstance().id);
+				Assert.AreEqual(2, co.GetInstance().id);
 				Thread.Sleep(100);
-				Assert.AreEqual(2, co.Instance.id);
+				Assert.AreEqual(2, co.GetInstance().id);
 				Thread.Sleep(25);
-				Assert.AreEqual(3, co.Instance.id);
-				Assert.AreEqual(3, co.Instance.id);
+				Assert.AreEqual(3, co.GetInstance().id);
+				Assert.AreEqual(3, co.GetInstance().id);
 				Thread.Sleep(100);
-				Assert.AreEqual(3, co.Instance.id);
+				Assert.AreEqual(3, co.GetInstance().id);
 				Thread.Sleep(100);
-				Assert.AreEqual(4, co.Instance.id);
+				Assert.AreEqual(4, co.GetInstance().id);
 				Thread.Sleep(100);
 
 				// Test short maxAge
@@ -94,21 +94,21 @@ namespace UnitTests
 				TimeSpan.FromMinutes(1),
 				TimeSpan.FromMilliseconds(50));
 
-				Assert.AreEqual(1, co.Instance.id);
-				Assert.AreEqual(1, co.Instance.id);
-				Assert.AreEqual(1, co.Instance.id);
+				Assert.AreEqual(1, co.GetInstance().id);
+				Assert.AreEqual(1, co.GetInstance().id);
+				Assert.AreEqual(1, co.GetInstance().id);
 				Thread.Sleep(100);
-				Assert.AreEqual(2, co.Instance.id);
-				Assert.AreEqual(2, co.Instance.id);
-				Assert.AreEqual(2, co.Instance.id);
+				Assert.AreEqual(2, co.GetInstance().id);
+				Assert.AreEqual(2, co.GetInstance().id);
+				Assert.AreEqual(2, co.GetInstance().id);
 				Thread.Sleep(100);
-				Assert.AreEqual(3, co.Instance.id);
-				Assert.AreEqual(3, co.Instance.id);
-				Assert.AreEqual(3, co.Instance.id);
+				Assert.AreEqual(3, co.GetInstance().id);
+				Assert.AreEqual(3, co.GetInstance().id);
+				Assert.AreEqual(3, co.GetInstance().id);
 				Thread.Sleep(100);
-				Assert.AreEqual(4, co.Instance.id);
+				Assert.AreEqual(4, co.GetInstance().id);
 				Thread.Sleep(100);
-				Assert.AreEqual(5, co.Instance.id);
+				Assert.AreEqual(5, co.GetInstance().id);
 
 			}
 		}

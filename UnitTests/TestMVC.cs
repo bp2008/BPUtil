@@ -53,9 +53,15 @@ namespace UnitTests
 		public void TestMVCViewUnknownVariables()
 		{
 			string input = "<html><head><title>@HtmlEncode:TITLE</title></head><body>@BODY</body>@Body</html>";
-			string output = ProcessView(input, BuildViewData());
-			string expectedOutput = "<html><head><title></title></head><body></body><div>Test text is the best text.</div><div><a href=\"mailto:me@example.com\">Mail</a></div></html>";
-			Assert.AreEqual(expectedOutput, output);
+			try
+			{
+				ProcessView(input, BuildViewData());
+				Assert.Fail("Expected exception");
+			}
+			catch (Exception) { }
+
+			//string expectedOutput = "<html><head><title></title></head><body></body><div>Test text is the best text.</div><div><a href=\"mailto:me@example.com\">Mail</a></div></html>";
+			//Assert.AreEqual(expectedOutput, output);
 		}
 		[TestMethod]
 		public void TestMVCViewNoExpressions()
@@ -139,6 +145,14 @@ namespace UnitTests
 			}
 			catch (Exception) { threw = true; }
 			Assert.IsTrue(threw, "Test did not throw exception as expected due to empty expression after 3 escaped '@' characters: \"<title>@@@@@@@</title>\"");
+		}
+		[TestMethod]
+		public void TestMVCParenthesis()
+		{
+			string input = "<html>\r\n<head><title>@(HtmlEncode:Title)</title></head>\r\n<body>@(Body)</body>\r\n</html>";
+			string output = ProcessView(input, BuildViewData());
+			string expectedOutput = "<html>\r\n<head><title>An &lt;html&gt; View Test</title></head>\r\n<body><div>Test text is the best text.</div><div><a href=\"mailto:me@example.com\">Mail</a></div></body>\r\n</html>";
+			Assert.AreEqual(expectedOutput, output);
 		}
 	}
 }
