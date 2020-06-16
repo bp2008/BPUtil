@@ -130,7 +130,7 @@ namespace BPUtil.MVC
 		/// <returns></returns>
 		private ActionResult GenerateErrorPage(HttpProcessor httpProcessor, Exception ex)
 		{
-			if (ErrorHandler == null)
+			if (ErrorHandler != null)
 			{
 				try
 				{
