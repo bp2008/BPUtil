@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 
 namespace BPUtil
 {
+	/// <summary>
+	/// Provides utilities for working with strings.
+	/// </summary>
 	public static class StringUtil
 	{
 		/// <summary>
@@ -95,7 +98,7 @@ namespace BPUtil
 		}
 
 		/// <summary>
-		/// Returns true if the string contains only characters from the set: A-Z, a-z,0-9.
+		/// Returns true if the string contains only characters from the set: A-Z, a-z, 0-9. Null returns true.
 		/// </summary>
 		/// <param name="str">String to test.</param>
 		/// <returns></returns>
@@ -118,7 +121,7 @@ namespace BPUtil
 		}
 
 		/// <summary>
-		/// Returns true if the string contains only characters from the set: A-Z, a-z,0-9,_.
+		/// Returns true if the string contains only characters from the set: A-Z, a-z, 0-9,_. Null returns true.
 		/// </summary>
 		/// <param name="str">String to test.</param>
 		/// <returns></returns>
@@ -139,6 +142,35 @@ namespace BPUtil
 					return false;
 			}
 			return true;
+		}
+
+		/// <summary>
+		/// Returns true if the string meets minimum reasonable criteria for a printable display name, meaning it consists of at least one alphanumeric character among any number of spaces or other ASCII-printable characters.
+		/// </summary>
+		/// <param name="str">String to test.</param>
+		/// <returns></returns>
+		public static bool IsPrintableName(string str)
+		{
+			if (str == null)
+				return false;
+			bool containsAlphaNumeric = false;
+			foreach (char c in str)
+			{
+				if ((c >= 'a' && c <= 'z')
+					|| (c >= 'A' && c <= 'Z')
+					|| (c >= '0' && c <= '9'))
+				{
+					containsAlphaNumeric = true;
+					// Character is OK
+				}
+				else if (c >= 32 && c <= 126)
+				{
+					// Character is OK
+				}
+				else
+					return false;
+			}
+			return containsAlphaNumeric;
 		}
 
 		/// <summary>

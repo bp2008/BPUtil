@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 
 namespace BPUtil
 {
+	/// <summary>
+	/// Provides methods for working with JavaScript-compatible unix epoch timestamps.
+	/// </summary>
 	public static class TimeUtil
 	{
 		private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
