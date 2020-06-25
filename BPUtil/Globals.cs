@@ -53,7 +53,7 @@ namespace BPUtil
 			executableNameWithoutExtension = executableNameWithExtension.Substring(0, executableNameWithExtension.Length - fiExe.Extension.Length);
 			applicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
 			applicationDirectoryBase = applicationRoot + "/";
-			writableDirectoryBase = applicationDirectoryBase + writablePath.TrimStart('\\', '/').Replace('\\', '/');
+			writableDirectoryBase = applicationDirectoryBase + writablePath.Trim('\\', '/').Replace('\\', '/') + '/';
 			configFilePath = writableDirectoryBase + "Config.cfg";
 			errorFilePath = writableDirectoryBase + executableNameWithoutExtension + "Errors.txt";
 		}
@@ -72,6 +72,19 @@ namespace BPUtil
 			if (CreateWritableDir)
 				Directory.CreateDirectory(writableDirectoryBase);
 		}
+
+		/// <summary>
+		/// Call this after Globals initialization to change the writable directory path. The specified folder will be created if it does not already exist.
+		/// </summary>
+		/// <param name="writableDirectoryAbsolutePath">Absolute path for the writable directory. E.g. @"C:\MyApp\Data" or "/home/user/MyApp/Data"</param>
+		public static void SetWritableDirectory(string writableDirectoryAbsolutePath)
+		{
+			DirectoryInfo diWritable = new DirectoryInfo(writableDirectoryAbsolutePath);
+			if (!diWritable.Exists)
+				diWritable = Directory.CreateDirectory(diWritable.FullName);
+			writableDirectoryBase = diWritable.FullName.TrimEnd('\\', '/').Replace('\\', '/') + '/';
+		}
+
 		private static string executablePath;
 		private static string executableNameWithExtension;
 		/// <summary>

@@ -33,6 +33,25 @@ namespace BPUtil
 			return true;
 		}
 		/// <summary>
+		/// Returns true if <paramref name="thisBytes"/> starts with <paramref name="thatBytes"/>.
+		/// </summary>
+		/// <param name="thisBytes">Base byte array</param>
+		/// <param name="thatBytes">Byte array to look for at the start of the base byte array.</param>
+		/// <returns></returns>
+		public static bool StartsWith(byte[] thisBytes, byte[] thatBytes)
+		{
+			if (thisBytes == null)
+				return thatBytes == null;
+			for (int i = 0; i < thatBytes.Length; i += 1)
+			{
+				if (i == thisBytes.Length)
+					return false;
+				if (thisBytes[i] != thatBytes[i])
+					return false;
+			}
+			return true;
+		}
+		/// <summary>
 		/// <para>Returns true if the specified byte arrays `a` and `b` are the same length and if every bit which is set in `mask` is the same between `a` and `b`.</para>
 		/// <para>e.g.</para>
 		/// <para>a = 01</para>

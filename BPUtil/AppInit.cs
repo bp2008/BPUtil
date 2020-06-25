@@ -19,7 +19,7 @@ namespace BPUtil
 		/// <para>Call this from your Main() function, and it takes care of all initialization for a Windows Service app with the following features:</para>
 		/// <list type="bullet">
 		/// <item>Logs separated by month in <see cref="Globals.WritableDirectoryBase"/> + "Logs/"</item>
-		/// <item><see cref="Environment.CurrentDirectory"/> set to <see cref="Globals.WritableDirectoryBase"/> + "Logs/"</item>
+		/// <item><see cref="Environment.CurrentDirectory"/> set to <see cref="Globals.WritableDirectoryBase"/></item>
 		/// <item>Unhandled exceptions logged.</item>
 		/// <item>(Windows Only) Service Manager GUI with "Open Data Folder" button which opens <see cref="Globals.WritableDirectoryBase"/> in Explorer.</item>
 		/// <item>(Windows Only) A temporary instance of the service is automatically started if the debugger is attached.</item>
@@ -27,6 +27,7 @@ namespace BPUtil
 		/// </list>
 		/// <para>Notice that some assumptions are made about the architecture of the application.</para>
 		/// <para>When running on linux, this class simply starts the service.</para>
+		/// <para>You may initialize <see cref="Globals"/> with custom values, if desired, before calling this method.</para>
 		/// </summary>
 		/// <typeparam name="ServiceType">Type of Service class.</typeparam>
 		/// <param name="options">Optional options for service initialization.</param>
