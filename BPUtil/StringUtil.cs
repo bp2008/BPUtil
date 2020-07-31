@@ -356,5 +356,39 @@ namespace BPUtil
 			// Return final value
 			return (negative ? "-" : "") + (input / Math.Pow(factor, unitIndex)).ToString(decimalStringFormat.ToString()) + ' ' + sizes[unitIndex];
 		}
+		/// <summary>
+		/// Performs multiple character-to-character replacements on a string.
+		/// </summary>
+		/// <param name="source">The string to perform replacements on.</param>
+		/// <param name="replacements">A dictionary of replacement mappings.</param>
+		/// <returns></returns>
+		public static string ReplaceMultiple(string source, IDictionary<char, char> replacements)
+		{
+			StringBuilder sb = new StringBuilder();
+			char replacement;
+			foreach (char c in source)
+			{
+				if (replacements.TryGetValue(c, out replacement))
+					sb.Append(replacement);
+				else
+					sb.Append(c);
+			}
+			return sb.ToString();
+		}
+		/// <summary>
+		/// Repairs Base64 padding by appending '=' characters to the end of the string until its length is divisible by 4.
+		/// </summary>
+		/// <param name="b64">A base64 string which may be missing its padding characters.</param>
+		/// <returns></returns>
+		public static string RepairBase64Padding(string b64)
+		{
+			int rem = b64.Length % 4;
+			if (rem == 2)
+				return b64 + "==";
+			else if (rem == 3)
+				return b64 + "=";
+			else
+				return b64; // If remainder is 0, the base64 string needs no padding. If remainder is 1, the base64 string is invalid.
+		}
 	}
 }

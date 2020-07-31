@@ -49,8 +49,11 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="TestBase64UrlMod.cs" />
     <Compile Include="TestByteUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TestSignatureFactory.cs" />
+    <Compile Include="TestEncryption.cs" />
     <Compile Include="TestExceptionExtensions.cs" />
     <Compile Include="TestMVC.cs" />
     <Compile Include="TestCachedObject.cs" />
