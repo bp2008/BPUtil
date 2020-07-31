@@ -22,14 +22,14 @@ namespace BPUtil.MVC
 		/// The Namespace containing the controllers for this instance.
 		/// </summary>
 		public string Namespace { get; protected set; }
-		public Action<Exception> ErrorHandler { get; protected set; }
+		public Action<RequestContext, Exception> ErrorHandler { get; protected set; }
 		/// <summary>
 		/// Creates a new API from a namespace.
 		/// </summary>
 		/// <param name="assembly">The assembly where the API controller classes are located. e.g. Assembly.GetExecutingAssembly()</param>
 		/// <param name="namespaceStr">The namespace containing all the API controller classes. e.g. typeof(SomeAPIHandler).Namespace</param>
-		/// <param name="ErrorHandler">A function accepting an exception for logging purposes.</param>
-		public MVCMain(Assembly assembly, string namespaceStr, Action<Exception> ErrorHandler = null)
+		/// <param name="ErrorHandler">A function accepting a RequestContext and an Exception for logging purposes.</param>
+		public MVCMain(Assembly assembly, string namespaceStr, Action<RequestContext, Exception> ErrorHandler = null)
 		{
 			this.Namespace = namespaceStr;
 			this.ErrorHandler = ErrorHandler;
@@ -60,7 +60,7 @@ namespace BPUtil.MVC
 			}
 			catch (Exception ex)
 			{
-				actionResult = GenerateErrorPage(httpProcessor, ex);
+				actionResult = GenerateErrorPage(context, ex);
 			}
 
 			if (httpProcessor.responseWritten) // Controller methods may handle their own response, in which case we will ignore the result.
@@ -77,7 +77,7 @@ namespace BPUtil.MVC
 			}
 			catch (Exception ex)
 			{
-				actionResult = GenerateErrorPage(httpProcessor, ex);
+				actionResult = GenerateErrorPage(context, ex);
 				body = actionResult.Body;
 			}
 
@@ -125,20 +125,20 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// Returns an error page showing details of an exception that was thrown.
 		/// </summary>
-		/// <param name="httpProcessor"></param>
+		/// <param name="context"></param>
 		/// <param name="ex"></param>
 		/// <returns></returns>
-		private ActionResult GenerateErrorPage(HttpProcessor httpProcessor, Exception ex)
+		private ActionResult GenerateErrorPage(RequestContext context, Exception ex)
 		{
 			if (ErrorHandler != null)
 			{
 				try
 				{
-					ErrorHandler(ex);
+					ErrorHandler(context, ex);
 				}
 				catch { }
 			}
-			if (MVCGlobals.RemoteClientsMaySeeExceptionDetails || httpProcessor.IsLocalConnection)
+			if (MVCGlobals.RemoteClientsMaySeeExceptionDetails || context.httpProcessor.IsLocalConnection)
 				return new ExceptionHtmlResult(ex);
 			else
 				return new ExceptionHtmlResult(null);

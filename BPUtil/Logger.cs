@@ -171,6 +171,22 @@ namespace BPUtil
 				Logger.Debug(e.Exception);
 			};
 		}
+
+		/// <summary>
+		/// Registers handlers for <see cref="Application.ThreadException"/> and AppDomain.CurrentDomain.UnhandledException, assigned to call the given callback.
+		/// </summary>
+		/// <param name="callback">A callback method where the first argument is the name of the exception catcher which caught the exception, and the second argument is the exception that was caught.</param>
+		public static void CatchAll(Action<string, Exception> callback)
+		{
+			AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+			{
+				callback("AppDomain.CurrentDomain.UnhandledException", e.ExceptionObject as Exception);
+			};
+			Application.ThreadException += (sender, e) =>
+			{
+				callback("Application.ThreadException", e.Exception);
+			};
+		}
 	}
 	public class HttpLogger : SimpleHttp.ILogger
 	{

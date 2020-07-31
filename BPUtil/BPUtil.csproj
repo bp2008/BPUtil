@@ -60,6 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BPQueue.cs" />
+    <Compile Include="CertificateValidation.cs" />
     <Compile Include="IO\BasicDataStream.cs" />
     <Compile Include="MVC\Json.cs" />
     <Compile Include="NativeWin\Admin.cs" />
