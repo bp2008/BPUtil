@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace BPUtil
@@ -167,13 +168,14 @@ namespace BPUtil
 
 		class CacheItem
 		{
+			private static Stopwatch stopwatch = Stopwatch.StartNew();
 			public TValue Value;
-			public DateTime Created;
+			public TimeSpan Created;
 			public int Size;
 			public CacheItem(TValue Value)
 			{
 				this.Value = Value;
-				this.Created = DateTime.UtcNow;
+				this.Created = stopwatch.Elapsed;
 			}
 			public bool Expired(TimeSpan maxAge)
 			{
@@ -183,7 +185,7 @@ namespace BPUtil
 			{
 				get
 				{
-					return DateTime.UtcNow - Created;
+					return stopwatch.Elapsed - Created;
 				}
 			}
 		}
