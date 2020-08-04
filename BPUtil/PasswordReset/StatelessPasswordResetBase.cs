@@ -63,6 +63,8 @@ namespace BPUtil.PasswordReset
 			if (account == null || string.IsNullOrWhiteSpace(account.Email))
 				return null; // Specified account is not eligible for password resets.
 
+			account.Type = accountType; // In case the derived class forgets to set this.
+
 			if (SecureToken.VerifyToken(account, token))
 			{
 				string newPassword = GenerateNewPassword();

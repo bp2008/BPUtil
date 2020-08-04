@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -435,8 +436,8 @@ namespace BPUtil.SimpleHttp
 							{
 								if (srv.IsTrustedProxyServer(originalRemoteIp))
 								{
-									IPAddress addr;
-									if (IPAddress.TryParse(headerValue, out addr))
+									headerValue = headerValue.Trim();
+									if (IPAddress.TryParse(headerValue, out IPAddress addr))
 										remoteIpAddress = addr;
 								}
 							}
@@ -448,9 +449,13 @@ namespace BPUtil.SimpleHttp
 							{
 								if (srv.IsTrustedProxyServer(originalRemoteIp))
 								{
-									IPAddress addr;
-									if (IPAddress.TryParse(headerValue, out addr))
-										remoteIpAddress = addr;
+									headerValue = headerValue.Split(',').FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+									if (headerValue != null)
+									{
+										headerValue = headerValue.Trim();
+										if (IPAddress.TryParse(headerValue, out IPAddress addr))
+											remoteIpAddress = addr;
+									}
 								}
 							}
 						}
