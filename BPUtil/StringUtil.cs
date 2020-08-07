@@ -174,6 +174,37 @@ namespace BPUtil
 		}
 
 		/// <summary>
+		/// Returns a copy of the string that has certain special characters replaced with special visualizing characters.
+		/// Note that it is possible for these replacement characters to also exist in the source string and thereby cause some ambiguity.
+		/// </summary>
+		/// <param name="str">A string which may contain special characters.</param>
+		/// <returns>A string with certain special characters replaced.</returns>
+		public static string VisualizeSpecialCharacters(string str)
+		{
+			if (str == null)
+				return null;
+			StringBuilder sb = new StringBuilder(str.Length);
+			foreach (char c in str)
+			{
+				if (c == 0) // Null
+					sb.Append('␀');
+				else if (c == '\t') // Horizontal Tab (Dec 9)
+					sb.Append('→');
+				else if (c == '\r' || c == '\n') // CR, LF
+					sb.Append(c);
+				else if (c == 8) // Backspace
+					sb.Append('⌫');
+				else if (c == 127) // Delete
+					sb.Append('⌦');
+				else if (c >= 1 && c <= 31) // Other ASCII non-printable characters without special case above.
+					sb.Append('�');
+				else
+					sb.Append(c);
+			}
+			return sb.ToString();
+		}
+
+		/// <summary>
 		/// <para>Encodes a string so it can be safely placed into a JavaScript string literal.</para>
 		/// <para>From .NET reference source.</para>
 		/// </summary>
