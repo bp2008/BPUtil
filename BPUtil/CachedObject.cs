@@ -57,6 +57,10 @@ namespace BPUtil
 		private long maxAgeMs;
 		private Func<T> createNewObjectFunc;
 		private Action<Exception> ReportException;
+		/// <summary>
+		/// The number of [Reload] calls currently active, useful for when we want to avoid multiple concurrent reloads.
+		/// </summary>
+		private int updateCounter = 0;
 
 		/// <summary>
 		/// Returns the most recent copy of the object.  The first get may be slow, as the object will need to be created.  You should not expect repeated calls to this method to always return the same instance.  Make a local reference to the instance.
@@ -72,37 +76,53 @@ namespace BPUtil
 		/// </summary>
 		public T Reload()
 		{
-			CachedInstance ci = current = new CachedInstance(createNewObjectFunc(), updateTimer);
-			return ci.instance;
+			Interlocked.Increment(ref updateCounter);
+			try
+			{
+				CachedInstance ci = current = new CachedInstance(createNewObjectFunc(), updateTimer);
+				return ci.instance;
+			}
+			finally
+			{
+				Interlocked.Decrement(ref updateCounter);
+			}
+		}
+
+		private bool NeedsUpdate(long ageLimitMs)
+		{
+			CachedInstance ci = current;
+			return ci == null || updateTimer.ElapsedMilliseconds - ci.createdAt >= ageLimitMs;
 		}
 
 		private void RefreshIfNecessary()
 		{
-			CachedInstance ci = current;
-			if (ci == null || updateTimer.ElapsedMilliseconds - ci.createdAt >= maxAgeMs)
+			if (NeedsUpdate(maxAgeMs))
 			{
 				lock (myLock)
 				{
-					ci = current;
-					if (ci == null || updateTimer.ElapsedMilliseconds - ci.createdAt >= maxAgeMs)
+					if (NeedsUpdate(maxAgeMs))
 						Reload();
 				}
 			}
-			else if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
+			else if (NeedsUpdate(minAgeMs))
 			{
-				SetTimeout.OnBackground(() =>
+				if (updateCounter == 0)
 				{
-					ci = current;
-					if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
+					SetTimeout.OnBackground(() =>
 					{
-						lock (myLock)
+						if (NeedsUpdate(minAgeMs))
 						{
-							ci = current;
-							if (updateTimer.ElapsedMilliseconds - ci.createdAt >= minAgeMs)
-								Reload();
+							if (updateCounter == 0)
+							{
+								lock (myLock)
+								{
+									if (NeedsUpdate(minAgeMs))
+										Reload();
+								}
+							}
 						}
-					}
-				}, 0, ReportException);
+					}, 0, ReportException);
+				}
 			}
 		}
 	}
