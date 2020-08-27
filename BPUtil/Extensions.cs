@@ -123,6 +123,37 @@ namespace BPUtil
 			}
 			return null;
 		}
+		/// <summary>
+		/// Returns the exception messages from this exception and all inner exceptions in a text-only tree format. Stack traces are not included.
+		/// </summary>
+		/// <param name="ex">Exception to extract messages from.</param>
+		/// <returns></returns>
+		public static string FlattenMessages(this Exception ex)
+		{
+			StringBuilder sb = new StringBuilder();
+			FlattenMessages(ex, sb, 0);
+			return sb.ToString();
+		}
+		private static void FlattenMessages(Exception ex, StringBuilder sb, int level)
+		{
+			if (ex == null)
+				return;
+			if (level > 0)
+			{
+				sb.AppendLine();
+				sb.Append(new string('\t', level)).Append('→');
+			}
+			sb.Append(ex.Message);
+			if (ex is AggregateException) // ex may be, or inherit from, AggregateException
+			{
+				AggregateException agg = ex as AggregateException;
+				if (agg.InnerExceptions != null)
+					foreach (Exception inner in agg.InnerExceptions)
+						FlattenMessages(ex.InnerException, sb, level + 1);
+			}
+			else
+				FlattenMessages(ex.InnerException, sb, level + 1);
+		}
 		#endregion
 		/// <summary>
 		/// Returns true if the collection contains the specified string.
