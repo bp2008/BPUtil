@@ -67,6 +67,8 @@
     <Compile Include="IO\BasicDataStream.cs" />
     <Compile Include="MVC\Json.cs" />
     <Compile Include="NativeWin\Admin.cs" />
+    <Compile Include="NativeWin\Audio.cs" />
+    <Compile Include="NativeWin\AudioManager.cs" />
     <Compile Include="ObjectCache.cs" />
     <Compile Include="ObjectSize.cs" />
     <Compile Include="PasswordReset\AccountInfo.cs" />
