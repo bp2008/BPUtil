@@ -59,6 +59,7 @@
     <Compile Include="TestCachedObject.cs" />
     <Compile Include="TestObjectCache.cs" />
     <Compile Include="TestObjectSize.cs" />
+    <Compile Include="TestCompass.cs" />
     <Compile Include="TestStringCache.cs" />
   </ItemGroup>
   <ItemGroup>

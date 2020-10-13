@@ -63,6 +63,7 @@
     <Compile Include="Base64UrlMod.cs" />
     <Compile Include="BPQueue.cs" />
     <Compile Include="CertificateValidation.cs" />
+    <Compile Include="Compass.cs" />
     <Compile Include="Encryption.cs" />
     <Compile Include="IO\BasicDataStream.cs" />
     <Compile Include="MVC\Json.cs" />
