@@ -19,12 +19,13 @@ namespace BPUtil
 		/// </summary>
 		public SignatureFactory()
 		{
+			// Valid key sizes are 256, 384, and 521 bits.
 			dsa = new ECDsaCng(521);
 		}
 		/// <summary>
 		/// Creates a new SignatureFactory from the specified key.
 		/// </summary>
-		/// <param name="key">XML key.</param>
+		/// <param name="key">Base64 string previously exported from a SignatureFactory.</param>
 		public SignatureFactory(string key)
 		{
 			dsa = new ECDsaCng(CngKey.Import(Convert.FromBase64String(key), CngKeyBlobFormat.EccPrivateBlob));
@@ -45,7 +46,7 @@ namespace BPUtil
 				return dsa.SignData(data);
 		}
 		/// <summary>
-		/// T
+		/// Verifies a signature.
 		/// </summary>
 		/// <param name="data">The data that was signed.</param>
 		/// <param name="signature">The signature data to be verified.</param>
