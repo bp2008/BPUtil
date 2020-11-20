@@ -197,6 +197,7 @@
     <Compile Include="UdpBroadcaster.cs" />
     <Compile Include="WaitProgressivelyLonger.cs" />
     <Compile Include="WebRequestUtility.cs" />
+    <Compile Include="xxHash.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Forms\InputDialog.resx">
