@@ -7,6 +7,9 @@ using BPUtil.SimpleHttp;
 
 namespace BPUtil
 {
+	/// <summary>
+	/// A simple thread pool with limits for min/max thread count.
+	/// </summary>
 	public class SimpleThreadPool
 	{
 		/// <summary>
@@ -133,15 +136,19 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Prevents the creation of new threads and prevents new actions from being enqueued.  This cannot be undone.
+		/// Prevents the creation of new threads and prevents new actions from being enqueued.  Existing queued actions remain queued.  This cannot be undone.
 		/// </summary>
 		public void Stop()
 		{
 			abort = true;
 		}
+		/// <summary>
+		/// Adds the specified action to the queue, to be called as soon as possible by a thread from the pool.
+		/// </summary>
+		/// <param name="action"></param>
 		public void Enqueue(Action action)
 		{
-			if (abort)
+			if (abort || action == null)
 				return;
 			bool startNewThread = CurrentIdleThreads < 1;
 			actionQueue.Enqueue(action);
@@ -167,7 +174,7 @@ namespace BPUtil
 						catch (ThreadAbortException) { throw; }
 						catch (Exception ex)
 						{
-							logErrorAction(ex, "Error on " + Thread.CurrentThread.Name);
+							logErrorAction?.Invoke(ex, "Error on " + Thread.CurrentThread.Name);
 						}
 						finally
 						{
@@ -186,7 +193,7 @@ namespace BPUtil
 			catch (ThreadAbortException) { }
 			catch (Exception ex)
 			{
-				logErrorAction(ex, "Fatal error on \"" + Thread.CurrentThread.Name + "\" indicating a programming error.");
+				logErrorAction?.Invoke(ex, "Fatal error on \"" + Thread.CurrentThread.Name + "\" indicating a programming error.");
 			}
 			finally
 			{
