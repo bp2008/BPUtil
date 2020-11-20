@@ -213,7 +213,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public async Task<BpWebResponse> GETAsync(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
 		{
-			return await internal_GET_or_POST(url, null, null, headers, earlyTerminationBytes).ConfigureAwait(false);
+			return await internal_send(HttpMethod.Get, url, null, null, headers, earlyTerminationBytes).ConfigureAwait(false);
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending key and value strings to the server using the content type "application/x-www-form-urlencoded".
@@ -266,7 +266,7 @@ namespace BPUtil
 				string content = string.Join("&", args);
 				postBody = Encoding.UTF8.GetBytes(content);
 			}
-			return await internal_GET_or_POST(url, postBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
+			return await internal_send(HttpMethod.Post, url, postBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending the specified body content.
@@ -284,6 +284,34 @@ namespace BPUtil
 			return task.Result;
 		}
 		/// <summary>
+		/// Performs an HTTP PUT request, sending the specified body content.
+		/// </summary>
+		/// <param name="url">The url to PUT.</param>
+		/// <param name="putBody">The content to upload.</param>
+		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="contentType">The value of the content-type header to set.</param>
+		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <returns></returns>
+		public async Task<BpWebResponse> PUTAsync(string url, byte[] putBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		{
+			return await internal_send(HttpMethod.Put, url, putBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
+		}
+		/// <summary>
+		/// Performs an HTTP PUT request, sending the specified body content.
+		/// </summary>
+		/// <param name="url">The url to PUT.</param>
+		/// <param name="putBody">The content to upload.</param>
+		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="contentType">The value of the content-type header to set.</param>
+		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <returns></returns>
+		public BpWebResponse PUT(string url, byte[] putBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		{
+			Task<BpWebResponse> task = PUTAsync(url, putBody, contentType, headers, earlyTerminationBytes);
+			task.Wait();
+			return task.Result;
+		}
+		/// <summary>
 		/// Performs an HTTP POST request, sending the specified body content.
 		/// </summary>
 		/// <param name="url">The url to POST.</param>
@@ -294,13 +322,13 @@ namespace BPUtil
 		/// <returns></returns>
 		public async Task<BpWebResponse> POSTAsync(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
 		{
-			return await internal_GET_or_POST(url, postBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
+			return await internal_send(HttpMethod.Post, url, postBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
 		}
-		protected virtual async Task<BpWebResponse> internal_GET_or_POST(string url, byte[] postBody, string contentType, string[] headers, int earlyTerminationBytes)
+		protected virtual async Task<BpWebResponse> internal_send(HttpMethod method, string url, byte[] uploadBody, string contentType, string[] headers, int earlyTerminationBytes)
 		{
 			BpWebResponse response = new BpWebResponse();
 
-			HttpRequestMessage requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
+			HttpRequestMessage requestMessage = new HttpRequestMessage(method, url);
 			if (headers != null)
 			{
 				for (int i = 0; i + 1 < headers.Length; i += 2)
@@ -310,13 +338,12 @@ namespace BPUtil
 					requestMessage.Headers.TryAddWithoutValidation(key, value);
 				}
 			}
-			if (postBody != null && postBody.Length > 1 && !string.IsNullOrWhiteSpace(contentType))
+			if (uploadBody != null && uploadBody.Length > 1 && !string.IsNullOrWhiteSpace(contentType))
 			{
-				ByteArrayContent postBodyContent = new ByteArrayContent(postBody);
-				postBodyContent.Headers.Add("Content-Type", contentType);
-				//postBodyContent.Headers.Add("Content-Length", postBody.Length.ToString());
-				requestMessage.Method = HttpMethod.Post;
-				requestMessage.Content = postBodyContent;
+				ByteArrayContent uploadBodyContent = new ByteArrayContent(uploadBody);
+				uploadBodyContent.Headers.Add("Content-Type", contentType);
+				//uploadBodyContent.Headers.Add("Content-Length", uploadBody.Length.ToString());
+				requestMessage.Content = uploadBodyContent;
 			}
 			try
 			{
