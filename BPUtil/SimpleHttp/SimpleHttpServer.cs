@@ -90,9 +90,9 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public string http_protocol_versionstring;
 		/// <summary>
-		/// The path to and name of the requested page, not including the first '/'
-		/// 
-		/// For example, if the URL was "/articles/science/moon.html?date=2011-10-21", requestedPage would be "articles/science/moon.html"
+		/// <para>The path to and name of the requested page, not including the first '/'.</para>
+		/// <para>For example, if the URL was "/articles/science/moon.html?date=2011-10-21", requestedPage would be "articles/science/moon.html".</para>
+		/// <para>URL-encoded characters remain url-encoded. E.g. "File%20Name.jpg".</para>
 		/// </summary>
 		public string requestedPage;
 		/// <summary>
@@ -296,6 +296,9 @@ namespace BPUtil.SimpleHttp
 		}
 		#endregion
 
+		/// <summary>
+		/// If true, the connection is secure.
+		/// </summary>
 		public readonly bool secure_https;
 		private ICertificateSelector certificateSelector;
 		/// <summary>
@@ -649,7 +652,7 @@ namespace BPUtil.SimpleHttp
 				while (pos < line.Length && line[pos] == ' ')
 					pos++; // strip any spaces
 
-				string value = line.Substring(pos, line.Length - pos);
+				string value = line.Substring(pos);
 				AddOrUpdateHeaderValue(name, value);
 			}
 		}
@@ -918,7 +921,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		public virtual void writeFullResponseUTF8(string body, string contentType, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
 		{
-			writeFullResponseBytes(ByteUtil.Utf8NoBOM.GetBytes(body), contentType, responseCode);
+			writeFullResponseBytes(ByteUtil.Utf8NoBOM.GetBytes(body), contentType, responseCode, additionalHeaders);
 		}
 
 		/// <summary>
@@ -1180,7 +1183,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="key">A case insensitive key.</param>
 		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
 		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public double GetDoubleParam(string key, int defaultValue = 0)
+		public double GetDoubleParam(string key, double defaultValue = 0)
 		{
 			return GetQSDoubleParam(key, defaultValue);
 		}
@@ -1188,7 +1191,7 @@ namespace BPUtil.SimpleHttp
 		/// Returns the value of the Query String parameter with the specified key.
 		/// </summary>
 		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
+		/// <returns>The value of the key. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
 		public bool GetBoolParam(string key)
 		{
 			return GetQSBoolParam(key);
@@ -1256,7 +1259,7 @@ namespace BPUtil.SimpleHttp
 		/// Returns the value of the Query String parameter with the specified key.
 		/// </summary>
 		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
+		/// <returns>The value of the key. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
 		public bool GetQSBoolParam(string key)
 		{
 			string param = GetQSParam(key);
@@ -1327,7 +1330,7 @@ namespace BPUtil.SimpleHttp
 		/// Returns the value of a parameter sent via POST with MIME type "application/x-www-form-urlencoded".
 		/// </summary>
 		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
+		/// <returns>The value of the key. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
 		public bool GetPostBoolParam(string key)
 		{
 			string param = GetPostParam(key);
@@ -1390,7 +1393,7 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 		/// <summary>
-		/// The actual port the http server is listening on.  Will be -1 if not listening.
+		/// The actual port the https server is listening on.  Will be -1 if not listening.
 		/// </summary>
 		public int Port_https
 		{
@@ -1920,8 +1923,7 @@ namespace BPUtil.SimpleHttp
 		{
 			if (name == null)
 				return;
-			name = name.ToLower();
-			cookieCollection[name] = new Cookie(name, value, expireTime);
+			cookieCollection[name.ToLower()] = new Cookie(name, value, expireTime);
 		}
 		/// <summary>
 		/// Gets the cookie with the specified name.  If the cookie is not found, null is returned;
@@ -1931,7 +1933,7 @@ namespace BPUtil.SimpleHttp
 		public Cookie Get(string name)
 		{
 			Cookie cookie;
-			if (!cookieCollection.TryGetValue(name, out cookie))
+			if (!cookieCollection.TryGetValue(name.ToLower(), out cookie))
 				cookie = null;
 			return cookie;
 		}

@@ -88,7 +88,7 @@ namespace BPUtil.NativeWin.AudioController
         }
 
         /// <summary>
-        /// Increments or decrements the current volume level by the <see cref="stepAmount"/>.
+        /// Increments or decrements the current volume level by the [stepAmount].
         /// </summary>
         /// <param name="stepAmount">Value between -100 and 100 indicating the desired step amount. Use negative numbers to decrease
         /// the volume and positive numbers to increase it.</param>

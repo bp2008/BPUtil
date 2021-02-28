@@ -65,6 +65,8 @@
     <Compile Include="CertificateValidation.cs" />
     <Compile Include="Compass.cs" />
     <Compile Include="Encryption.cs" />
+    <Compile Include="FileUtil.cs" />
+    <Compile Include="ImageFile.cs" />
     <Compile Include="IO\BasicDataStream.cs" />
     <Compile Include="MVC\Json.cs" />
     <Compile Include="NativeWin\Admin.cs" />

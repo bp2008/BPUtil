@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace BPUtil
@@ -74,6 +75,109 @@ namespace BPUtil
 				return result;
 			return defaultValue;
 		}
+
+		#region First Number
+		private static Regex rxFindSignedInteger = new Regex("(-?\\d+)", RegexOptions.Compiled);
+		/// <summary>
+		/// Returns the first 16-bit integer found inside the string, or null if none are found.  Note that hyphens may be incorrectly interpreted as minus signs.
+		/// </summary>
+		/// <param name="str">str</param>
+		/// <returns></returns>
+		public static short? FirstShort(string str)
+		{
+			Match m = rxFindSignedInteger.Match(str);
+			if (m.Success && short.TryParse(m.Groups[1].Value, out short result))
+				return result;
+			return null;
+		}
+		/// <summary>
+		/// Returns the first 32-bit integer found inside the string, or null if none are found.  Note that hyphens may be incorrectly interpreted as minus signs.
+		/// </summary>
+		/// <param name="str">str</param>
+		/// <returns></returns>
+		public static int? FirstInt(string str)
+		{
+			Match m = rxFindSignedInteger.Match(str);
+			if (m.Success && int.TryParse(m.Groups[1].Value, out int result))
+				return result;
+			return null;
+		}
+		/// <summary>
+		/// Returns the first 64-bit signed integer found inside the string, or null if none are found.  Note that hyphens may be incorrectly interpreted as minus signs.
+		/// </summary>
+		/// <param name="str">str</param>
+		/// <returns></returns>
+		public static long? FirstLong(string str)
+		{
+			Match m = rxFindSignedInteger.Match(str);
+			if (m.Success && long.TryParse(m.Groups[1].Value, out long result))
+				return result;
+			return null;
+		}
+		private static Regex rxFindUnsignedInteger = new Regex("(\\d+)", RegexOptions.Compiled);
+		/// <summary>
+		/// Returns the first 16-bit unsigned integer found inside the string, or null if none are found.
+		/// </summary>
+		/// <param name="str">str</param>
+		/// <returns></returns>
+		public static ushort? FirstUShort(string str)
+		{
+			Match m = rxFindUnsignedInteger.Match(str);
+			if (m.Success && ushort.TryParse(m.Groups[1].Value, out ushort result))
+				return result;
+			return null;
+		}
+		/// <summary>
+		/// Returns the first 32-bit unsigned integer found inside the string, or null if none are found.
+		/// </summary>
+		/// <param name="str">str</param>
+		/// <returns></returns>
+		public static uint? FirstUInt(string str)
+		{
+			Match m = rxFindUnsignedInteger.Match(str);
+			if (m.Success && uint.TryParse(m.Groups[1].Value, out uint result))
+				return result;
+			return null;
+		}
+		/// <summary>
+		/// Returns the first 64-bit unsigned integer found inside the string, or null if none are found.
+		/// </summary>
+		/// <param name="str">str</param>
+		/// <returns></returns>
+		public static ulong? FirstULong(string str)
+		{
+			Match m = rxFindUnsignedInteger.Match(str);
+			if (m.Success && ulong.TryParse(m.Groups[1].Value, out ulong result))
+				return result;
+			return null;
+		}
+		private static Regex rxFindFloat = new Regex("(-?\\d+(\\.\\d+)?)", RegexOptions.Compiled);
+		/// <summary>
+		/// Returns the first 32-bit floating point number found inside the string, or null if none are found.
+		/// </summary>
+		/// <param name="str">str</param>
+		/// <returns></returns>
+		public static float? FirstFloat(string str)
+		{
+			Match m = rxFindFloat.Match(str);
+			if (m.Success && float.TryParse(m.Groups[1].Value, out float result))
+				return result;
+			return null;
+		}
+		/// <summary>
+		/// Returns the first 64-bit floating point number found inside the string, or null if none are found.
+		/// </summary>
+		/// <param name="str">str</param>
+		/// <returns></returns>
+		public static double? FirstDouble(string str)
+		{
+			Match m = rxFindFloat.Match(str);
+			if (m.Success && double.TryParse(m.Groups[1].Value, out double result))
+				return result;
+			return null;
+		}
+		#endregion
+
 		/// <summary>
 		/// Converts the specified number of bytes to GiB (Gibibytes -- used in RAM and DISK sizes mostly).
 		/// </summary>
