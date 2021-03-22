@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BPUtil
@@ -159,6 +161,94 @@ namespace BPUtil
 
 			return new ProcessRunnerHandle(p);
 		}
+
+		/// <summary>
+		/// Asynchronously run the specified process in the background with the specified arguments.
+		/// The contents of the std (binary) and err (string) output streams are provided to callback functions.
+		/// </summary>
+		/// <param name="fileName">The path to the process to start.</param>
+		/// <param name="arguments">Arguments for the process.</param>
+		/// <param name="std">Binary data buffers read from standard output stream are sent to this callback.</param>
+		/// <param name="err">Lines read from standard error stream are sent to this callback.</param>
+		/// <returns>An object containing the Process instance and helper functions.</returns>
+		public static ProcessRunnerHandle RunProcess_StdBinary_ErrString(string fileName, string arguments, Action<byte[]> std, Action<string> err)
+		{
+			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
+			psi.UseShellExecute = false;
+			psi.CreateNoWindow = true;
+			psi.RedirectStandardOutput = true;
+			psi.RedirectStandardError = true;
+
+			Process p = Process.Start(psi);
+
+			p.ErrorDataReceived += (sender, e) =>
+			{
+				err(e.Data);
+			};
+			p.BeginErrorReadLine();
+
+			return new ProcessRunnerHandle(p)
+			{
+				stdoutReader = new ProcessStreamBinaryReader(p.StandardOutput.BaseStream, std)
+			};
+		}
+
+		/// <summary>
+		/// Asynchronously run the specified process in the background with the specified arguments.
+		/// The contents of the std (string) and err (binary) output streams are provided to callback functions.
+		/// </summary>
+		/// <param name="fileName">The path to the process to start.</param>
+		/// <param name="arguments">Arguments for the process.</param>
+		/// <param name="std">Lines read from standard output stream are sent to this callback.</param>
+		/// <param name="err">Binary data buffers read from standard error stream are sent to this callback.</param>
+		/// <returns>An object containing the Process instance and helper functions.</returns>
+		public static ProcessRunnerHandle RunProcess_StdString_ErrBinary(string fileName, string arguments, Action<string> std, Action<byte[]> err)
+		{
+			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
+			psi.UseShellExecute = false;
+			psi.CreateNoWindow = true;
+			psi.RedirectStandardOutput = true;
+			psi.RedirectStandardError = true;
+
+			Process p = Process.Start(psi);
+
+			p.OutputDataReceived += (sender, e) =>
+			{
+				std(e.Data);
+			};
+			p.BeginOutputReadLine();
+
+			return new ProcessRunnerHandle(p)
+			{
+				stderrReader = new ProcessStreamBinaryReader(p.StandardError.BaseStream, err)
+			};
+		}
+
+		/// <summary>
+		/// Asynchronously run the specified process in the background with the specified arguments.
+		/// The contents of the std (binary) and err (binary) output streams are provided to callback functions.
+		/// </summary>
+		/// <param name="fileName">The path to the process to start.</param>
+		/// <param name="arguments">Arguments for the process.</param>
+		/// <param name="std">Binary data buffers read from standard output stream are sent to this callback.</param>
+		/// <param name="err">Binary data buffers from standard error stream are sent to this callback.</param>
+		/// <returns>An object containing the Process instance and helper functions.</returns>
+		public static ProcessRunnerHandle RunProcess_StdBinary_ErrBinary(string fileName, string arguments, Action<byte[]> std, Action<byte[]> err)
+		{
+			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
+			psi.UseShellExecute = false;
+			psi.CreateNoWindow = true;
+			psi.RedirectStandardOutput = true;
+			psi.RedirectStandardError = true;
+
+			Process p = Process.Start(psi);
+
+			return new ProcessRunnerHandle(p)
+			{
+				stdoutReader = new ProcessStreamBinaryReader(p.StandardOutput.BaseStream, std),
+				stderrReader = new ProcessStreamBinaryReader(p.StandardError.BaseStream, err)
+			};
+		}
 	}
 
 	/// <summary>
@@ -170,6 +260,16 @@ namespace BPUtil
 		/// Reference to the process that was started.
 		/// </summary>
 		public Process process;
+
+		/// <summary>
+		/// Can contain a reference to a ProcessStreamBinaryReader for stdout.
+		/// </summary>
+		internal ProcessStreamBinaryReader stdoutReader;
+
+		/// <summary>
+		/// Can contain a reference to a ProcessStreamBinaryReader for stderr.
+		/// </summary>
+		internal ProcessStreamBinaryReader stderrReader;
 
 		/// <summary>
 		/// Constructs a new ProcessRunnerHandle.
@@ -218,6 +318,38 @@ namespace BPUtil
 		{
 			this.Line = line;
 			this.AbortCallback = abortCallback;
+		}
+	}
+	/// <summary>
+	/// Reads binary data from a stream and sends each buffer to a callback method.
+	/// </summary>
+	public class ProcessStreamBinaryReader
+	{
+		private Stream stream;
+		private Action<byte[]> callback;
+		private Thread thrReadStream;
+		public ProcessStreamBinaryReader(Stream stream, Action<byte[]> callback)
+		{
+			this.stream = stream;
+			this.callback = callback;
+			thrReadStream = new Thread(ReadFromStream);
+			thrReadStream.Name = "ProcessStreamBinaryReader";
+			thrReadStream.IsBackground = true;
+			thrReadStream.Start();
+		}
+		private void ReadFromStream()
+		{
+			try
+			{
+				byte[] buffer = new byte[32768];
+				int read = stream.Read(buffer, 0, buffer.Length);
+				while (read > 0)
+				{
+					callback(ByteUtil.SubArray(buffer, 0, read));
+					read = stream.Read(buffer, 0, buffer.Length);
+				}
+			}
+			catch (EndOfStreamException) { }
 		}
 	}
 }

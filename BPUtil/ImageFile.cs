@@ -202,7 +202,7 @@ namespace BPUtil
 		/// <summary>
 		/// Saves the image to the stream using the specified format. Compared to using the native Image.Save() method, this method should provide better exception messages in the event of stream write failure.
 		/// </summary>
-		/// <param name="path">File path</param>
+		/// <param name="stream">Stream to save to</param>
 		/// <param name="format">Format to save in</param>
 		public void SaveToStream(Stream stream, ImageFormat format)
 		{
@@ -287,7 +287,7 @@ namespace BPUtil
 		/// Saves the image to the file using the specified format. Compared to using the native Image.Save() method, this method should provide better exception messages in the event of file write failure.
 		/// </summary>
 		/// <param name="img">Image instance</param>
-		/// <param name="path">File path</param>
+		/// <param name="stream">Stream to save to</param>
 		/// <param name="format">Format to save in</param>
 		public static void SaveExt(this Image img, Stream stream, ImageFormat format)
 		{

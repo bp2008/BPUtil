@@ -60,16 +60,39 @@ namespace BPUtil
 		/// <summary>
 		/// Returns the requested RegistryKey or null if the key does not exist.
 		/// </summary>
-		/// <param name="path">A path relative to HKEY_LOCAL_MACHINE.  E.g. "SOFTWARE\\Microsoft"</param>
+		/// <param name="path">A path relative to HKEY_CURRENT_USER.  E.g. "SOFTWARE\\Microsoft"</param>
 		/// <returns></returns>
 		public static RegistryKey GetHKCUKey(string path)
 		{
 			return HKCU.OpenSubKey(path);
 		}
 
+		/// <summary>
+		/// Gets the value of a registry key in HKEY_LOCAL_MACHINE.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <param name="path">A path relative to HKEY_LOCAL_MACHINE.  E.g. "SOFTWARE\\Microsoft"</param>
+		/// <param name="key">Key</param>
+		/// <param name="defaultValue">Value to return if the key does not exist.</param>
+		/// <returns></returns>
 		public static T GetHKLMValue<T>(string path, string key, T defaultValue)
 		{
 			object value = HKLM.OpenSubKey(path)?.GetValue(key);
+			if (value == null)
+				return defaultValue;
+			return (T)value;
+		}
+		/// <summary>
+		/// Gets the value of a registry key in HKEY_CURRENT_USER.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <param name="path">A path relative to HKEY_CURRENT_USER.  E.g. "SOFTWARE\\Microsoft"</param>
+		/// <param name="key">Key</param>
+		/// <param name="defaultValue">Value to return if the key does not exist.</param>
+		/// <returns></returns>
+		public static T GetHKCUValue<T>(string path, string key, T defaultValue)
+		{
+			object value = HKCU.OpenSubKey(path)?.GetValue(key);
 			if (value == null)
 				return defaultValue;
 			return (T)value;
@@ -78,7 +101,7 @@ namespace BPUtil
 		/// <summary>
 		/// Attempts to set the value of the specified registry key, throwing an exception if it fails.
 		/// </summary>
-		/// <param name="path">Path to the folder where the key is located.</param>
+		/// <param name="path">Path to the folder where the key is located, relative to HKEY_LOCAL_MACHINE.</param>
 		/// <param name="key">Name of the key to set the value of.</param>
 		/// <param name="value">Value to set.</param>
 		/// <param name="valueKind">The type of value stored in this registry key.</param>
@@ -90,11 +113,26 @@ namespace BPUtil
 				sk.SetValue(key, value);
 			sk.SetValue(key, value, valueKind);
 		}
+		/// <summary>
+		/// Attempts to set the value of the specified registry key, throwing an exception if it fails.
+		/// </summary>
+		/// <param name="path">Path to the folder where the key is located, relative to HKEY_CURRENT_USER.</param>
+		/// <param name="key">Name of the key to set the value of.</param>
+		/// <param name="value">Value to set.</param>
+		/// <param name="valueKind">The type of value stored in this registry key.</param>
+		/// <returns></returns>
+		public static void SetHKCUValue(string path, string key, object value, RegistryValueKind valueKind = RegistryValueKind.Unknown)
+		{
+			RegistryKey sk = HKCU.CreateSubKey(path);
+			if (valueKind == RegistryValueKind.Unknown)
+				sk.SetValue(key, value);
+			sk.SetValue(key, value, valueKind);
+		}
 
 		/// <summary>
 		/// Attempts to set the value of the specified registry key, returning true if successful or false if not.
 		/// </summary>
-		/// <param name="path">Path to the folder where the key is located.</param>
+		/// <param name="path">Path to the folder where the key is located, relative to HKEY_LOCAL_MACHINE.</param>
 		/// <param name="key">Name of the key to set the value of.</param>
 		/// <param name="value">Value to set.</param>
 		/// <param name="valueKind">The type of value stored in this registry key.</param>
@@ -104,6 +142,27 @@ namespace BPUtil
 			try
 			{
 				SetHKLMValue(path, key, value, valueKind);
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Attempts to set the value of the specified registry key, returning true if successful or false if not.
+		/// </summary>
+		/// <param name="path">Path to the folder where the key is located, relative to HKEY_CURRENT_USER.</param>
+		/// <param name="key">Name of the key to set the value of.</param>
+		/// <param name="value">Value to set.</param>
+		/// <param name="valueKind">The type of value stored in this registry key.</param>
+		/// <returns></returns>
+		public static bool SetHKCUValueSafe(string path, string key, object value, RegistryValueKind valueKind = RegistryValueKind.Unknown)
+		{
+			try
+			{
+				SetHKCUValue(path, key, value, valueKind);
 				return true;
 			}
 			catch
