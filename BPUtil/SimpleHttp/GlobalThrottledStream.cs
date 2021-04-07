@@ -249,6 +249,7 @@ namespace BPUtil.SimpleHttp
 				for (int i = 0; i < numberOfThrottlingRuleSetsToCreate; i++)
 					ruleSets.Add(new ThrottlingRuleSet());
 				thrIOScheduler = new Thread(ioSchedulerLoop);
+				thrIOScheduler.IsBackground = true;
 				thrIOScheduler.Start();
 				initialized = true;
 			}

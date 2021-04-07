@@ -79,6 +79,7 @@
     <Compile Include="PasswordReset\PasswordResetRequest.cs" />
     <Compile Include="PasswordReset\SecureToken.cs" />
     <Compile Include="PasswordReset\StatelessPasswordResetBase.cs" />
+    <Compile Include="Robust.cs" />
     <Compile Include="SignatureFactory.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ICertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ServerNameCertificateSelector.cs" />
