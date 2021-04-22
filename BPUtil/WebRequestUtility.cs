@@ -157,6 +157,20 @@ namespace BPUtil
 				httpClientHandler.PreAuthenticate = value != null;
 			}
 		}
+		/// <summary>
+		///  Gets or sets a value that indicates whether the handler should follow redirection responses. The default value is true.
+		/// </summary>
+		public bool AllowAutoRedirect
+		{
+			get
+			{
+				return httpClientHandler.AllowAutoRedirect;
+			}
+			set
+			{
+				httpClientHandler.AllowAutoRedirect = value;
+			}
+		}
 
 		protected HttpClient client;
 		protected HttpClientHandler httpClientHandler;
