@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -12,7 +13,7 @@ using System.Web;
 namespace BPUtil
 {
 	/// <summary>
-	/// Contains HTTP response data.  This is returned by GET and POST methods in <see cref="BPUtil.WebRequestUtility"/>.
+	/// Contains HTTP response data.  This is returned by methods in <see cref="BPUtil.WebRequestUtility"/>.
 	/// </summary>
 	public class BpWebResponse
 	{
@@ -207,10 +208,11 @@ namespace BPUtil
 		/// </para>
 		/// <code>new string[] { "HeaderNameOne", "Header Value One!", "HeaderNameTwo", "Header Value Two!", "User-Agent", "Mozilla" }</code></param>
 		/// <param name="earlyTerminationBytes">(Advanced use) If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
 		/// <returns></returns>
-		public BpWebResponse GET(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		public BpWebResponse GET(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			Task<BpWebResponse> task = GETAsync(url, headers, earlyTerminationBytes);
+			Task<BpWebResponse> task = GETAsync(url, headers, earlyTerminationBytes, fileDownloadPath);
 			task.Wait();
 			return task.Result;
 		}
@@ -224,10 +226,11 @@ namespace BPUtil
 		/// </para>
 		/// <code>new string[] { "HeaderNameOne", "Header Value One!", "HeaderNameTwo", "Header Value Two!", "User-Agent", "Mozilla" }</code></param>
 		/// <param name="earlyTerminationBytes">(Advanced use) If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
 		/// <returns></returns>
-		public async Task<BpWebResponse> GETAsync(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		public async Task<BpWebResponse> GETAsync(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			return await internal_send(HttpMethod.Get, url, null, null, headers, earlyTerminationBytes).ConfigureAwait(false);
+			return await internal_send(HttpMethod.Get, url, null, null, headers, earlyTerminationBytes, fileDownloadPath).ConfigureAwait(false);
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending key and value strings to the server using the content type "application/x-www-form-urlencoded".
@@ -244,10 +247,11 @@ namespace BPUtil
 		/// </para>
 		/// <code>new string[] { "HeaderNameOne", "Header Value One!", "HeaderNameTwo", "Header Value Two!", "User-Agent", "Mozilla" }</code></param>
 		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
 		/// <returns></returns>
-		public BpWebResponse POST(string url, string[] keysAndValues, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		public BpWebResponse POST(string url, string[] keysAndValues, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			Task<BpWebResponse> task = POSTAsync(url, keysAndValues, headers, earlyTerminationBytes);
+			Task<BpWebResponse> task = POSTAsync(url, keysAndValues, headers, earlyTerminationBytes, fileDownloadPath);
 			task.Wait();
 			return task.Result;
 		}
@@ -266,8 +270,9 @@ namespace BPUtil
 		/// </para>
 		/// <code>new string[] { "HeaderNameOne", "Header Value One!", "HeaderNameTwo", "Header Value Two!", "User-Agent", "Mozilla" }</code></param>
 		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
 		/// <returns></returns>
-		public async Task<BpWebResponse> POSTAsync(string url, string[] keysAndValues, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		public async Task<BpWebResponse> POSTAsync(string url, string[] keysAndValues, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
 			byte[] postBody = null;
 			string contentType = null;
@@ -280,7 +285,7 @@ namespace BPUtil
 				string content = string.Join("&", args);
 				postBody = Encoding.UTF8.GetBytes(content);
 			}
-			return await internal_send(HttpMethod.Post, url, postBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
+			return await internal_send(HttpMethod.Post, url, postBody, contentType, headers, earlyTerminationBytes, fileDownloadPath).ConfigureAwait(false);
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending the specified body content.
@@ -290,38 +295,11 @@ namespace BPUtil
 		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
 		/// <param name="contentType">The value of the content-type header to set.</param>
 		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
 		/// <returns></returns>
-		public BpWebResponse POST(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		public BpWebResponse POST(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			Task<BpWebResponse> task = POSTAsync(url, postBody, contentType, headers, earlyTerminationBytes);
-			task.Wait();
-			return task.Result;
-		}
-		/// <summary>
-		/// Performs an HTTP PUT request, sending the specified body content.
-		/// </summary>
-		/// <param name="url">The url to PUT.</param>
-		/// <param name="putBody">The content to upload.</param>
-		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
-		/// <param name="contentType">The value of the content-type header to set.</param>
-		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
-		/// <returns></returns>
-		public async Task<BpWebResponse> PUTAsync(string url, byte[] putBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
-		{
-			return await internal_send(HttpMethod.Put, url, putBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
-		}
-		/// <summary>
-		/// Performs an HTTP PUT request, sending the specified body content.
-		/// </summary>
-		/// <param name="url">The url to PUT.</param>
-		/// <param name="putBody">The content to upload.</param>
-		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
-		/// <param name="contentType">The value of the content-type header to set.</param>
-		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
-		/// <returns></returns>
-		public BpWebResponse PUT(string url, byte[] putBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
-		{
-			Task<BpWebResponse> task = PUTAsync(url, putBody, contentType, headers, earlyTerminationBytes);
+			Task<BpWebResponse> task = POSTAsync(url, postBody, contentType, headers, earlyTerminationBytes, fileDownloadPath);
 			task.Wait();
 			return task.Result;
 		}
@@ -333,13 +311,57 @@ namespace BPUtil
 		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
 		/// <param name="contentType">The value of the content-type header to set.</param>
 		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
 		/// <returns></returns>
-		public async Task<BpWebResponse> POSTAsync(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue)
+		public async Task<BpWebResponse> POSTAsync(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			return await internal_send(HttpMethod.Post, url, postBody, contentType, headers, earlyTerminationBytes).ConfigureAwait(false);
+			return await internal_send(HttpMethod.Post, url, postBody, contentType, headers, earlyTerminationBytes, fileDownloadPath).ConfigureAwait(false);
 		}
-		protected virtual async Task<BpWebResponse> internal_send(HttpMethod method, string url, byte[] uploadBody, string contentType, string[] headers, int earlyTerminationBytes)
+		/// <summary>
+		/// Performs an HTTP PUT request, sending the specified body content.
+		/// </summary>
+		/// <param name="url">The url to PUT.</param>
+		/// <param name="putBody">The content to upload.</param>
+		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="contentType">The value of the content-type header to set.</param>
+		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
+		/// <returns></returns>
+		public async Task<BpWebResponse> PUTAsync(string url, byte[] putBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
+			return await internal_send(HttpMethod.Put, url, putBody, contentType, headers, earlyTerminationBytes, fileDownloadPath).ConfigureAwait(false);
+		}
+		/// <summary>
+		/// Performs an HTTP PUT request, sending the specified body content.
+		/// </summary>
+		/// <param name="url">The url to PUT.</param>
+		/// <param name="putBody">The content to upload.</param>
+		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="contentType">The value of the content-type header to set.</param>
+		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
+		/// <returns></returns>
+		public BpWebResponse PUT(string url, byte[] putBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
+		{
+			Task<BpWebResponse> task = PUTAsync(url, putBody, contentType, headers, earlyTerminationBytes, fileDownloadPath);
+			task.Wait();
+			return task.Result;
+		}
+		/// <summary>
+		/// Sends the request and retrieves the response.
+		/// </summary>
+		/// <param name="method">The HTTP method to use for the request.</param>
+		/// <param name="url">The URL to access.</param>
+		/// <param name="uploadBody">The content to POST or PUT. Null if using GET.</param>
+		/// <param name="contentType">The value of the content-type header to set. Null if using GET.</param>
+		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
+		/// <returns></returns>
+		protected virtual async Task<BpWebResponse> internal_send(HttpMethod method, string url, byte[] uploadBody, string contentType, string[] headers, int earlyTerminationBytes, string fileDownloadPath)
+		{
+			TimeSpan timeout = RequestTimeout;
+			Stopwatch sw = Stopwatch.StartNew();
 			BpWebResponse response = new BpWebResponse();
 
 			HttpRequestMessage requestMessage = new HttpRequestMessage(method, url);
@@ -379,11 +401,15 @@ namespace BPUtil
 
 				if (earlyTerminationBytes == int.MaxValue)
 				{
-					response.data = await httpResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+					if (string.IsNullOrEmpty(fileDownloadPath))
+						response.data = await httpResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+					else
+						using (Stream stream = CreateStreamToSaveTo(fileDownloadPath))
+							await httpResponse.Content.CopyToAsync(stream).ConfigureAwait(false);
 				}
 				else
 				{
-					using (MemoryStream ms = new MemoryStream())
+					using (Stream ms = CreateStreamToSaveTo(fileDownloadPath))
 					{
 						using (Stream responseStream = await httpResponse.Content.ReadAsStreamAsync().ConfigureAwait(false))
 						{
@@ -395,14 +421,15 @@ namespace BPUtil
 								if (earlyTerminationBytes - ms.Length < buffer.Length)
 									buffer = new byte[earlyTerminationBytes - ms.Length];
 
-								bytesRead = responseStream.Read(buffer, 0, buffer.Length);
+								bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
 								if (bytesRead > 0)
 									ms.Write(buffer, 0, bytesRead);
 								if (ms.Length >= earlyTerminationBytes)
 									break;
 							}
 							// Dump the data into the byte array
-							response.data = ms.ToArray();
+							if (ms is MemoryStream)
+								response.data = (ms as MemoryStream).ToArray();
 						}
 					}
 				}
@@ -411,10 +438,28 @@ namespace BPUtil
 			{
 				response.StatusCode = 0;
 				response.ex = ex;
-				if (ex.GetExceptionWhere(e2 => e2 is ThreadAbortException || e2.Message.Contains("The request was aborted: The request was canceled")) != null)
+				Exception cancelEx = ex.GetExceptionWhere(e2 => e2 is ThreadAbortException || e2 is TaskCanceledException || e2.Message.Contains("The request was aborted: The request was canceled"));
+				if (cancelEx != null)
+				{
+					if (cancelEx is TaskCanceledException) // This utility doesn't support cancellation, and request timeouts look like cancellation..
+						response.ex = new Exception("The web request failed, likely having timed out (Execution Time: " + sw.Elapsed + ", Timeout: " + timeout + ")", cancelEx);
 					response.canceled = true;
+				}
 			}
 			return response;
+		}
+
+		/// <summary>
+		/// Creates a MemoryStream or a write-only FileStream depending on the [fileDownloadPath] argument. 
+		/// </summary>
+		/// <param name="fileDownloadPath">If null or empty, a MemoryStream is returned, otherwise a write-only FileStream pointing at this path.</param>
+		/// <returns></returns>
+		private Stream CreateStreamToSaveTo(string fileDownloadPath)
+		{
+			if (string.IsNullOrEmpty(fileDownloadPath))
+				return new MemoryStream();
+			else
+				return new FileStream(fileDownloadPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
 		}
 	}
 }
