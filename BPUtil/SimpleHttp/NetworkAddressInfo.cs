@@ -37,9 +37,7 @@ namespace BPUtil.SimpleHttp
 					if (addressInfo.Address.AddressFamily == AddressFamily.InterNetwork)
 					{
 						if (Platform.IsRunningOnMono())
-						{
 							AddV4AddressMono(addressInfo);
-						}
 						else
 							AddV4Address(addressInfo.Address.GetAddressBytes(), addressInfo.IPv4Mask.GetAddressBytes());
 					}
@@ -49,35 +47,32 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 
-		private static int monoIPv4MaskTestState = -1;
+		private static bool monoIPv4MaskNotImplemented = false;
 		/// <summary>
 		/// Works around a method that was not implemented in some mono versions.
 		/// </summary>
 		/// <param name="addressInfo"></param>
 		private void AddV4AddressMono(UnicastIPAddressInformation addressInfo)
 		{
-			if (monoIPv4MaskTestState == 0)
-				AddV4Address(addressInfo.Address.GetAddressBytes(), new byte[] { 255, 255, 255, 0 });
-			else if (monoIPv4MaskTestState == 1)
-				AddV4Address(addressInfo.Address.GetAddressBytes(), addressInfo.IPv4Mask.GetAddressBytes());
-			else
+			byte[] addr = addressInfo.Address.GetAddressBytes();
+			byte[] v4mask = new byte[] { 255, 255, 255, 0 };
+			if (!monoIPv4MaskNotImplemented)
 			{
-				if (monoIPv4MaskTestState != 0)
+				try
 				{
-					try
-					{
-						AddV4Address(addressInfo.Address.GetAddressBytes(), addressInfo.IPv4Mask.GetAddressBytes());
-						monoIPv4MaskTestState = 1;
-						return;
-					}
-					catch (NotImplementedException ex)
-					{
-						Logger.Debug(ex, "Your mono version is old, and does not support retrieving IPv4 Masks for your network interfaces. Assuming 255.255.255.0 from now on.");
-						monoIPv4MaskTestState = 0;
-						AddV4Address(addressInfo.Address.GetAddressBytes(), new byte[] { 255, 255, 255, 0 });
-					}
+					v4mask = addressInfo.IPv4Mask.GetAddressBytes();
+				}
+				catch (NotImplementedException ex)
+				{
+					Logger.Debug(ex, "Your mono version is old, and does not support retrieving IPv4 Masks for your network interfaces. Assuming 255.255.255.0 from now on.");
+					monoIPv4MaskNotImplemented = true;
+				}
+				catch (Exception ex)
+				{
+					Logger.Debug(ex, "Mono failed to retrieve IPv4 Mask for network interface " + string.Join(".", addr) + ". Assuming mask is 255.255.255.0.");
 				}
 			}
+			AddV4Address(addr, v4mask);
 		}
 
 		private void AddV4Address(byte[] address, byte[] mask)
