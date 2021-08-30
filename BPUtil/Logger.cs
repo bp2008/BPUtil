@@ -202,7 +202,8 @@ namespace BPUtil
 
 		void SimpleHttp.ILogger.LogRequest(DateTime time, string line)
 		{
-			itemsToLog.Enqueue(new Tuple<DateTime, string>(time, line));
+			if (itemsToLog.Count < 1000)
+				itemsToLog.Enqueue(new Tuple<DateTime, string>(time, line));
 		}
 
 		ConcurrentQueue<Tuple<DateTime, string>> itemsToLog = new ConcurrentQueue<Tuple<DateTime, string>>();
