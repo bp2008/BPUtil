@@ -19,12 +19,12 @@ namespace BPUtil
 		/// <param name="TheAction">The action to run.</param>
 		/// <param name="Timeout">(milliseconds) Values less than 0 are treated as 0.
 		/// If the Timeout value is 0 for an OnGui operation, the invoke process will start before this method returns, making it impossible to cancel the operation.</param>
-		/// <param name="formForInvoking">A System.Windows.Forms form, required to invoke your method on the GUI thread.</param>
+		/// <param name="contextForInvoking">A System.Windows.Forms control, required to invoke your method on the GUI thread.</param>
 		/// <param name="ReportException">An action that will be called if an exception occurs during action execution.  If null, uses Logger.Debug.</param>
 		/// <returns></returns>
-		public static TimeoutHandle OnGui(Action TheAction, int Timeout, Form formForInvoking, Action<Exception> ReportException = null)
+		public static TimeoutHandle OnGui(Action TheAction, int Timeout, Control contextForInvoking, Action<Exception> ReportException = null)
 		{
-			return _internal_setTimeout(TheAction, Timeout, true, formForInvoking, ReportException);
+			return _internal_setTimeout(TheAction, Timeout, true, contextForInvoking, ReportException);
 		}
 		/// <summary>
 		/// Invokes on a background thread the specified action after the specified timeout.
@@ -43,25 +43,25 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="TheAction">The action to run.</param>
 		/// <param name="Timeout">(milliseconds) Values less than 0 are treated as 0.</param>
-		/// <param name="formForInvoking">A System.Windows.Forms form, required to invoke your method on the GUI thread.</param>
+		/// <param name="contextForInvoking">A System.Windows.Forms control, required to invoke your method on the GUI thread.</param>
 		/// <param name="ReportException">An action that will be called if an exception occurs during action execution.  If null, uses Logger.Debug.</param>
 		/// <returns></returns>
-		public static void AfterGuiResumesThenOnBackground(Action TheAction, int Timeout, Form formForInvoking, Action<Exception> ReportException = null)
+		public static void AfterGuiResumesThenOnBackground(Action TheAction, int Timeout, Control contextForInvoking, Action<Exception> ReportException = null)
 		{
 			OnGui((Action)(() =>
 			{
 				OnBackground(TheAction, Timeout - 1, ReportException);
-			}), 1, formForInvoking, ReportException);
+			}), 1, contextForInvoking, ReportException);
 		}
-		private static TimeoutHandle _internal_setTimeout(Action TheAction, int Timeout, bool invokeOnGuiThread, Form formForInvoking, Action<Exception> ReportException)
+		private static TimeoutHandle _internal_setTimeout(Action TheAction, int Timeout, bool invokeOnGuiThread, Control contextForInvoking, Action<Exception> ReportException)
 		{
 			if (Timeout < 0)
 				Timeout = 0;
 			TimeoutHandle cancelHandle = new TimeoutHandle();
 			if (invokeOnGuiThread && Timeout == 0)
 			{
-				if (!formForInvoking.IsDisposed)
-					formForInvoking.Invoke(TheAction);
+				if (!contextForInvoking.IsDisposed)
+					contextForInvoking.Invoke(TheAction);
 			}
 			else
 			{
@@ -74,8 +74,8 @@ namespace BPUtil
 								return;
 							if (invokeOnGuiThread)
 							{
-								if (!formForInvoking.IsDisposed)
-									formForInvoking.Invoke(TheAction);
+								if (!contextForInvoking.IsDisposed)
+									contextForInvoking.Invoke(TheAction);
 							}
 							else
 								TheAction();

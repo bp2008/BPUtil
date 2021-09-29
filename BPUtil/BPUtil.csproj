@@ -65,6 +65,7 @@
     <Compile Include="CertificateValidation.cs" />
     <Compile Include="Compass.cs" />
     <Compile Include="Encryption.cs" />
+    <Compile Include="EnumHelper.cs" />
     <Compile Include="FileUtil.cs" />
     <Compile Include="ImageFile.cs" />
     <Compile Include="IO\BasicDataStream.cs" />
@@ -72,6 +73,7 @@
     <Compile Include="NativeWin\Admin.cs" />
     <Compile Include="NativeWin\Audio.cs" />
     <Compile Include="NativeWin\AudioManager.cs" />
+    <Compile Include="NativeWin\Mouse.cs" />
     <Compile Include="ObjectCache.cs" />
     <Compile Include="ObjectSize.cs" />
     <Compile Include="PasswordReset\AccountInfo.cs" />

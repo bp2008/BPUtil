@@ -119,6 +119,7 @@ namespace UnitTests
 			// Expected: ((ref size) + 16 + 1 + (ref size) + 4 + 4 + 4 + 4 + 4) = 36 + (ref size) + (ref size)
 			Assert.AreEqual(37 + (ObjectSize.ReferenceSize * 2), ObjectSize.SizeOf(new InternalClass1()));
 		}
+#pragma warning disable CS0414
 		class InternalClass1
 		{
 			public string f1 = "tests";
@@ -126,16 +127,19 @@ namespace UnitTests
 			protected InternalClass2 f3 = new InternalClass2();
 			internal InternalStruct1 f4 = new InternalStruct1() { f1 = 234190, f2 = float.MinValue };
 		}
+#pragma warning restore
 		class InternalClass2
 		{
 			public int f1 = 234190;
 			public float f2 = float.MinValue;
 		}
+#pragma warning disable CS0169
 		struct InternalStruct1
 		{
 			public int f1;
 			public float f2;
 			private int f3;
 		}
+#pragma warning restore
 	}
 }

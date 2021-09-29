@@ -155,6 +155,7 @@ namespace BPUtil
 				FlattenMessages(ex.InnerException, sb, level + 1);
 		}
 		#endregion
+		#region IEnumerable<string>
 		/// <summary>
 		/// Returns true if the collection contains the specified string.
 		/// </summary>
@@ -174,5 +175,6 @@ namespace BPUtil
 			});
 
 		}
+		#endregion
 	}
 }

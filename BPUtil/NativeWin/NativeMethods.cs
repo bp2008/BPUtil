@@ -466,5 +466,35 @@ namespace BPUtil.NativeWin
 			INHERIT_PARENT_AFFINITY = 0x00010000
 		}
 		#endregion
+		#region NativeMethods for Thread Manipulation
+		/// <summary>
+		/// Sets the execution state of the current thread and returns the previous state.
+		/// </summary>
+		/// <param name="esFlags">New executation state.</param>
+		/// <returns></returns>
+		[DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+		private static extern ExecutionState SetThreadExecutionState(ExecutionState esFlags);
+
+		[Flags]
+		public enum ExecutionState : uint
+		{
+			/// <summary>
+			/// Prevent idle-to-sleep
+			/// </summary>
+			ES_AWAYMODE_REQUIRED = 0x00000040,
+			/// <summary>
+			/// Allow monitor power down
+			/// </summary>
+			ES_CONTINUOUS = 0x80000000,
+			/// <summary>
+			/// Prevent monitor power down
+			/// </summary>
+			ES_DISPLAY_REQUIRED = 0x00000002,
+			/// <summary>
+			/// Keep system awake
+			/// </summary>
+			ES_SYSTEM_REQUIRED = 0x00000001
+		}
+		#endregion
 	}
 }
