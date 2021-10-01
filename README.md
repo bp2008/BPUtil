@@ -11,4 +11,4 @@ Includes:
 * Generic object pool
 * Simple code timing class
 * more ...
-* A generic, extensible "service manager" GUI using Windows Forms.  Easily adds install/uninstall/start/stop buttons to any Windows Service project.  To use this, the service project should be marked as requiring administrator, using an app manifest file.  See this file for usage example: https://github.com/bp2008/DahuaSunriseSunset/blob/master/DahuaSunriseSunset/Program.cs
+* A generic, extensible "service manager" GUI using Windows Forms.  Easily adds install/uninstall/start/stop buttons to any Windows Service project.  See this file for usage example: https://github.com/bp2008/DahuaSunriseSunset/blob/master/DahuaSunriseSunset/Program.cs
