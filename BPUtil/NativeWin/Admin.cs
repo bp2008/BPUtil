@@ -31,7 +31,7 @@ namespace BPUtil.NativeWin
 		/// <returns></returns>
 		public static bool StartSelfAsAdmin(string args = null)
 		{
-			return StartAsAdmin(Application.ExecutablePath, args);
+			return StartAsAdmin(Application.ExecutablePath, args, System.IO.Directory.GetCurrentDirectory());
 		}
 		/// <summary>
 		/// Attempts to start a process as administrator, probably showing a UAC prompt. Returns true if the process starts successfully.
@@ -39,11 +39,13 @@ namespace BPUtil.NativeWin
 		/// <param name="filePath">Path to the executable.</param>
 		/// <param name="args">Optional arguments to pass to the process.</param>
 		/// <returns></returns>
-		public static bool StartAsAdmin(string filePath, string args = null)
+		public static bool StartAsAdmin(string filePath, string args = null, string workingDirectory = null)
 		{
 			ProcessStartInfo processInfo = new ProcessStartInfo();
 			processInfo.Verb = "runas";
-			processInfo.FileName = Application.ExecutablePath;
+			processInfo.FileName = filePath;
+			if (!string.IsNullOrWhiteSpace(workingDirectory))
+				processInfo.WorkingDirectory = workingDirectory;
 			if (!string.IsNullOrEmpty(args))
 				processInfo.Arguments = args;
 			try
