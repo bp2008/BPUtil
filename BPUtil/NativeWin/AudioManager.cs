@@ -92,7 +92,7 @@ namespace BPUtil.NativeWin.AudioController
         /// </summary>
         /// <param name="stepAmount">Value between -100 and 100 indicating the desired step amount. Use negative numbers to decrease
         /// the volume and positive numbers to increase it.</param>
-        /// <returns>the new volume level assigned</returns>
+        /// <returns>the new volume level assigned, or -1 if failed.</returns>
         public static float StepMasterVolume(float stepAmount)
         {
             IAudioEndpointVolume masterVol = null;
@@ -126,19 +126,19 @@ namespace BPUtil.NativeWin.AudioController
         }
 
         /// <summary>
-        /// Mute or unmute the master volume
+        /// Mute or unmute the master volume. Returns true if successful.
         /// </summary>
         /// <param name="isMuted">true to mute the master volume, false to unmute</param>
-        public static void SetMasterVolumeMute(bool isMuted)
+        public static bool SetMasterVolumeMute(bool isMuted)
         {
             IAudioEndpointVolume masterVol = null;
             try
             {
                 masterVol = GetMasterVolumeObject();
                 if (masterVol == null)
-                    return;
+                    return false;
 
-                masterVol.SetMute(isMuted, Guid.Empty);
+               return masterVol.SetMute(isMuted, Guid.Empty) >= 0;
             }
             finally
             {
@@ -184,6 +184,8 @@ namespace BPUtil.NativeWin.AudioController
 
                 Guid IID_IAudioEndpointVolume = typeof(IAudioEndpointVolume).GUID;
                 object o;
+                if (speakers == null)
+                    return null;
                 speakers.Activate(ref IID_IAudioEndpointVolume, 0, IntPtr.Zero, out o);
                 IAudioEndpointVolume masterVol = (IAudioEndpointVolume)o;
 

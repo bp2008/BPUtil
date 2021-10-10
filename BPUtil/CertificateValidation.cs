@@ -65,5 +65,17 @@ namespace BPUtil
 					return true;
 			return false;
 		}
+		/// <summary>
+		/// An example validation callback which simply returns true.  Registering this callback will effectively disable certificate validation.
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="certificate"></param>
+		/// <param name="chain"></param>
+		/// <param name="sslPolicyErrors"></param>
+		/// <returns></returns>
+		public static bool DoNotValidate_ValidationCallback(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+		{
+			return true;
+		}
 	}
 }
