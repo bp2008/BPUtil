@@ -559,5 +559,12 @@ namespace BPUtil.NativeWin
 		[DllImport("user32.dll")]
 		[return: MarshalAs(UnmanagedType.Bool)]
 		public static extern bool SetForegroundWindow(IntPtr hWnd);
+		/// <summary>
+		/// Switches focus to the window specified by the handle.  Optionally switches as though Alt + Tab were used.  One way causes the window to move to the foreground.  The other does not.
+		/// </summary>
+		/// <param name="hWnd"></param>
+		/// <param name="fAltTab"></param>
+		[DllImport("user32.dll", SetLastError = true)]
+		static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
 	}
 }

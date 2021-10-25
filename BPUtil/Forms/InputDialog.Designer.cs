@@ -29,64 +29,63 @@
 		private void InitializeComponent()
 		{
 			this.txtInput = new System.Windows.Forms.TextBox();
-			this.label1 = new System.Windows.Forms.Label();
-			this.btnOk = new System.Windows.Forms.Button();
-			this.btnCancel = new System.Windows.Forms.Button();
+			this.lblTextInputPrompt = new System.Windows.Forms.Label();
+			this.BtnOk = new System.Windows.Forms.Button();
+			this.BtnCancel = new System.Windows.Forms.Button();
 			this.SuspendLayout();
 			// 
 			// txtInput
 			// 
-			this.txtInput.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-			this.txtInput.Location = new System.Drawing.Point(12, 29);
+			this.txtInput.Location = new System.Drawing.Point(16, 29);
 			this.txtInput.Name = "txtInput";
-			this.txtInput.Size = new System.Drawing.Size(213, 20);
+			this.txtInput.Size = new System.Drawing.Size(280, 20);
 			this.txtInput.TabIndex = 0;
 			// 
-			// label1
+			// lblTextInputPrompt
 			// 
-			this.label1.AutoSize = true;
-			this.label1.Location = new System.Drawing.Point(12, 9);
-			this.label1.Name = "label1";
-			this.label1.Size = new System.Drawing.Size(40, 13);
-			this.label1.TabIndex = 1;
-			this.label1.Text = "LABEL";
+			this.lblTextInputPrompt.AutoSize = true;
+			this.lblTextInputPrompt.Location = new System.Drawing.Point(13, 13);
+			this.lblTextInputPrompt.Name = "lblTextInputPrompt";
+			this.lblTextInputPrompt.Size = new System.Drawing.Size(143, 13);
+			this.lblTextInputPrompt.TabIndex = 1;
+			this.lblTextInputPrompt.Text = "Label text set in code behind";
 			// 
-			// btnOk
+			// BtnOk
 			// 
-			this.btnOk.Location = new System.Drawing.Point(69, 55);
-			this.btnOk.Name = "btnOk";
-			this.btnOk.Size = new System.Drawing.Size(75, 23);
-			this.btnOk.TabIndex = 2;
-			this.btnOk.Text = "OK";
-			this.btnOk.UseVisualStyleBackColor = true;
-			this.btnOk.Click += new System.EventHandler(this.BtnOk_Click);
+			this.BtnOk.Location = new System.Drawing.Point(140, 55);
+			this.BtnOk.Name = "BtnOk";
+			this.BtnOk.Size = new System.Drawing.Size(75, 23);
+			this.BtnOk.TabIndex = 3;
+			this.BtnOk.Text = "OK";
+			this.BtnOk.UseVisualStyleBackColor = true;
+			this.BtnOk.Click += new System.EventHandler(this.BtnOk_Click);
 			// 
-			// btnCancel
+			// BtnCancel
 			// 
-			this.btnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-			this.btnCancel.Location = new System.Drawing.Point(150, 55);
-			this.btnCancel.Name = "btnCancel";
-			this.btnCancel.Size = new System.Drawing.Size(75, 23);
-			this.btnCancel.TabIndex = 3;
-			this.btnCancel.Text = "Cancel";
-			this.btnCancel.UseVisualStyleBackColor = true;
-			this.btnCancel.Click += new System.EventHandler(this.BtnCancel_Click);
+			this.BtnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
+			this.BtnCancel.Location = new System.Drawing.Point(221, 55);
+			this.BtnCancel.Name = "BtnCancel";
+			this.BtnCancel.Size = new System.Drawing.Size(75, 23);
+			this.BtnCancel.TabIndex = 4;
+			this.BtnCancel.Text = "Cancel";
+			this.BtnCancel.UseVisualStyleBackColor = true;
+			this.BtnCancel.Click += new System.EventHandler(this.BtnCancel_Click);
 			// 
 			// InputDialog
 			// 
-			this.AcceptButton = this.btnOk;
-			this.CancelButton = this.btnCancel;
-			this.ClientSize = new System.Drawing.Size(237, 85);
-			this.Controls.Add(this.btnCancel);
-			this.Controls.Add(this.btnOk);
-			this.Controls.Add(this.label1);
+			this.AcceptButton = this.BtnOk;
+			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+			this.CancelButton = this.BtnCancel;
+			this.ClientSize = new System.Drawing.Size(308, 90);
+			this.Controls.Add(this.BtnCancel);
+			this.Controls.Add(this.BtnOk);
+			this.Controls.Add(this.lblTextInputPrompt);
 			this.Controls.Add(this.txtInput);
 			this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
 			this.Name = "InputDialog";
-			this.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
 			this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-			this.Text = "InputDialog";
+			this.Text = "Input Dialog";
 			this.ResumeLayout(false);
 			this.PerformLayout();
 
@@ -95,8 +94,8 @@
 		#endregion
 
 		private System.Windows.Forms.TextBox txtInput;
-		private System.Windows.Forms.Label label1;
-		private System.Windows.Forms.Button btnOk;
-		private System.Windows.Forms.Button btnCancel;
+		private System.Windows.Forms.Label lblTextInputPrompt;
+		private System.Windows.Forms.Button BtnOk;
+		private System.Windows.Forms.Button BtnCancel;
 	}
 }

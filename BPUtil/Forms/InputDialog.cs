@@ -32,7 +32,7 @@ namespace BPUtil.Forms
 		{
 			InitializeComponent();
 			this.Text = title;
-			this.label1.Text = label;
+			this.lblTextInputPrompt.Text = label;
 			this.txtInput.Text = defaultValue;
 		}
 
