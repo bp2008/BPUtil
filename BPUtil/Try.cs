@@ -14,7 +14,7 @@ namespace BPUtil
 		/// <summary>
 		/// Runs the specified Action inside a try block and swallows all exceptions.
 		/// </summary>
-		/// <param name="actionToTry"></param>
+		/// <param name="actionToTry">A method to invoke.</param>
 		public static void Swallow(Action actionToTry)
 		{
 			try
@@ -28,7 +28,7 @@ namespace BPUtil
 		/// <summary>
 		/// Runs the specified Func inside a try block and swallows all exceptions.  Returns default(T) in the event of an exception, otherwise whatever the Func returned.
 		/// </summary>
-		/// <param name="funcToTry"></param>
+		/// <param name="funcToTry">A method to invoke.</param>
 		public static T Swallow<T>(Func<T> funcToTry)
 		{
 			try
@@ -43,7 +43,7 @@ namespace BPUtil
 		/// <summary>
 		/// Runs the specified Func (returning bool) inside a try block and swallows all exceptions.  Returns false in the event of an exception, otherwise whatever the Func returned.
 		/// </summary>
-		/// <param name="funcBoolToTry"></param>
+		/// <param name="funcBoolToTry">A method to invoke.</param>
 		public static bool SwallowBool(Func<bool> funcBoolToTry)
 		{
 			try
@@ -58,7 +58,7 @@ namespace BPUtil
 		/// <summary>
 		/// Runs the specified Action inside a try block and logs all exceptions.
 		/// </summary>
-		/// <param name="actionToTry"></param>
+		/// <param name="actionToTry">A method to invoke.</param>
 		public static void Catch(Action actionToTry)
 		{
 			try
@@ -71,7 +71,7 @@ namespace BPUtil
 		/// <summary>
 		/// Runs the specified Func inside a try block and logs all exceptions.  Returns default(T) in the event of an exception, otherwise whatever the Func returned.
 		/// </summary>
-		/// <param name="funcToTry"></param>
+		/// <param name="funcToTry">A method to invoke.</param>
 		public static T Catch<T>(Func<T> funcToTry)
 		{
 			try
@@ -86,7 +86,7 @@ namespace BPUtil
 		/// <summary>
 		/// Runs the specified Action inside a try block and logs all exceptions except ThreadAbortException, which is rethrown without being logged.
 		/// </summary>
-		/// <param name="actionToTry"></param>
+		/// <param name="actionToTry">A method to invoke.</param>
 		public static void Catch_RethrowThreadAbort(Action actionToTry)
 		{
 			try
@@ -101,7 +101,7 @@ namespace BPUtil
 		/// <summary>
 		/// Runs the specified Func (returning bool) inside a try block and logs all exceptions.  Returns false in the event of an exception, otherwise whatever the Func returned.
 		/// </summary>
-		/// <param name="funcBoolToTry"></param>
+		/// <param name="funcBoolToTry">A method to invoke.</param>
 		public static bool CatchBool(Func<bool> funcBoolToTry)
 		{
 			try
