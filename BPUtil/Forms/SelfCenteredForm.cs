@@ -9,7 +9,7 @@ using System.Windows.Forms;
 namespace BPUtil.Forms
 {
 	/// <summary>
-	/// This extension of Form simply positions itself at the center of its owner, upon being shown.
+	/// This extension of Form simply positions itself at the center of its owner, upon being shown. It will be offset by approximately 1 centimeter to down and to the right for each form the owner owns.
 	/// </summary>
 	public class SelfCenteredForm : Form
 	{

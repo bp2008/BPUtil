@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace BPUtil
 {
@@ -174,6 +176,106 @@ namespace BPUtil
 				return false;
 			});
 
+		}
+		#endregion
+		#region System.Drawing.Point
+		/// <summary>
+		/// Returns the distance between this point and another point.
+		/// </summary>
+		/// <param name="point">This point.</param>
+		/// <param name="otherPoint">Second point from which to calculate distance.</param>
+		/// <returns></returns>
+		public static double DistanceFrom(this Point point, Point otherPoint)
+		{
+			int A = point.X - otherPoint.X;
+			int B = point.Y - otherPoint.Y;
+			return Math.Sqrt((A * A) + (B * B));
+		}
+		#endregion
+		#region System.Windows.Forms.Form
+		/// <summary>
+		/// Sets the location of the form to be near the mouse pointer, preferably not directly on top of the mouse pointer, but entirely on-screen if possible.
+		/// </summary>
+		/// <param name="form">The form.</param>
+		public static void SetLocationNearMouse(this Form form)
+		{
+			int offset = 10;
+			int x = 0, y = 0;
+			Point cursor = Cursor.Position;
+			Screen screen = Screen.FromPoint(cursor);
+			Rectangle workspace = screen.WorkingArea;
+			Point centerScreen = new Point(workspace.X + (workspace.Width / 2), workspace.Y + (workspace.Height / 2));
+
+			// Position the form near the cursor, extending away from the cursor toward the center of the screen.
+			if (cursor.X <= centerScreen.X)
+			{
+				if (cursor.Y <= centerScreen.Y)
+				{
+					// Upper-left quadrant
+					x = cursor.X + offset;
+					y = cursor.Y + offset;
+				}
+				else
+				{
+					// Lower-left quadrant
+					x = cursor.X + offset;
+					y = cursor.Y - offset - form.Height;
+				}
+			}
+			else
+			{
+				if (cursor.Y <= centerScreen.Y)
+				{
+					// Upper-right quadrant
+					x = cursor.X - offset - form.Width;
+					y = cursor.Y + offset;
+				}
+				else
+				{
+					// Lower-right quadrant
+					x = cursor.X - offset - form.Width;
+					y = cursor.Y - offset - form.Height;
+				}
+			}
+
+			// Screen bounds check.  Keep form entirely within this screen if possible, but ensure that the top left corner is visible if all else fails.
+			if (x >= workspace.X + (workspace.Width - form.Width))
+				x = workspace.X + (workspace.Width - form.Width);
+			if (x < workspace.X)
+				x = workspace.X;
+			if (y >= workspace.Y + (workspace.Height - form.Height))
+				y = workspace.Y + (workspace.Height - form.Height);
+			if (y < workspace.Y)
+				y = workspace.Y;
+
+			// Assign location
+			form.StartPosition = FormStartPosition.Manual;
+			form.Location = new Point(x, y);
+		}
+		#endregion
+		#region System.Windows.Forms.ProgressBar
+		/// <summary>
+		/// FROM: https://derekwill.com/2014/06/24/combating-the-lag-of-the-winforms-progressbar/
+		/// Sets the progress bar value, without using 'Windows Aero' animation.
+		/// This is to work around a known WinForms issue where the progress bar 
+		/// is slow to update. 
+		/// </summary>
+		public static void SetProgressNoAnimation(this ProgressBar pb, int value)
+		{
+			// To get around the progressive animation, we need to move the 
+			// progress bar backwards.
+			if (value == pb.Maximum)
+			{
+				// Special case as value can't be set greater than Maximum.
+				pb.Maximum = value + 1;     // Temporarily Increase Maximum
+				pb.Value = value + 1;       // Move past
+				pb.Maximum = value;         // Reset maximum
+			}
+			else
+			{
+				pb.Value = value + 1;       // Move past
+			}
+			pb.Value = value;               // Move to correct value
 		}
 		#endregion
 	}
