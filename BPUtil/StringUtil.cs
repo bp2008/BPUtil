@@ -421,5 +421,49 @@ namespace BPUtil
 			else
 				return b64; // If remainder is 0, the base64 string needs no padding. If remainder is 1, the base64 string is invalid.
 		}
+
+		/// <summary>
+		/// These characters are not allowed in file names on any common platform (Windows has the most restricted characters).
+		/// </summary>
+		private static HashSet<char> InvalidFileNameChars = GetInvalidFileNameChars();
+		/// <summary>
+		/// These file names are not allowed on Windows, either by themselves or with any extension, in any character case.
+		/// </summary>
+		private static HashSet<string> InvalidWindowsFileNames = new HashSet<string>(new string[] { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" });
+		private static HashSet<char> GetInvalidFileNameChars()
+		{
+			HashSet<char> invalid = new HashSet<char>("\\/<>:\"|?*".ToCharArray());
+			foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+				invalid.Add(c);
+			for (int i = 0; i <= 31; i++)
+				invalid.Add((char)i);
+			return invalid;
+		}
+
+		/// <summary>
+		/// Returns a copy of the string that should be valid for use as a file name on any platform.
+		/// Based on https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names?rq=1
+		/// </summary>
+		/// <param name="text">A string that may not be safe to use as a file name.</param>
+		/// <param name="replacementStr">Invalid characters should be replaced with this string. May be empty string.</param>
+		/// <returns></returns>
+		public static string MakeSafeForFileName(string text, string replacementStr = "")
+		{
+			if (replacementStr == null)
+				replacementStr = "";
+			StringBuilder sb = new StringBuilder();
+			foreach (char c in text)
+			{
+				if (InvalidFileNameChars.Contains(c))
+					sb.Append(replacementStr);
+				else
+					sb.Append(c);
+			}
+			string fileName = sb.ToString().TrimEnd('.', ' '); // dot and space characters are not allowed at the end of a Windows filename.
+			string nameNoExt = fileName.Substring(0, fileName.Length - System.IO.Path.GetExtension(fileName).Length);
+			if (InvalidWindowsFileNames.Contains(nameNoExt.ToUpper()))
+				fileName = (!string.IsNullOrWhiteSpace(replacementStr) ? replacementStr : "_") + fileName;
+			return fileName;
+		}
 	}
 }
