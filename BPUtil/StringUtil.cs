@@ -465,5 +465,15 @@ namespace BPUtil
 				fileName = (!string.IsNullOrWhiteSpace(replacementStr) ? replacementStr : "_") + fileName;
 			return fileName;
 		}
+		/// <summary>
+		/// Creates a Data URI from a given mime type string and data blob.
+		/// </summary>
+		/// <param name="mime">Mime Type (e.g. "image/jpeg")</param>
+		/// <param name="data">Data to encode into the Data URI.</param>
+		/// <returns></returns>
+		public static string CreateDataUri(string mime, byte[] data)
+		{
+			return "data:" + mime + ";base64," + Convert.ToBase64String(data);
+		}
 	}
 }
