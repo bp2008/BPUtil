@@ -97,6 +97,23 @@ namespace BPUtil
 		{
 			return string.Join(separator, events) + (currentEvent == null ? "" : separator + new TimedEvent(currentEvent + " (ongoing)", watch.Elapsed, numberFormatString).ToString());
 		}
+		/// <summary>
+		/// Produces a string that can be set in HTTP response header "Server-Timing" to allow browser developer tools to show these results among other request timing info.
+		/// </summary>
+		/// <returns></returns>
+		public string ToServerTimingHeader()
+		{
+			StringBuilder sb = new StringBuilder();
+			for (int i = 0; i < events.Count; i++)
+			{
+				bool isFirst = i == 0;
+				if (!isFirst)
+					sb.Append(",");
+				double durationMs = Math.Round(events[i].time.TotalMilliseconds * 10) / 10.0; // Duration in milliseconds with precision of 0.1 ms
+				sb.Append("e" + i + ";desc=\"" + events[i].name.Replace('"', '\'') + "\";dur=" + durationMs);
+			}
+			return sb.ToString();
+		}
 		private class TimedEvent
 		{
 			public string name;
