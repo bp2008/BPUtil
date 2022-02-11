@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -151,11 +154,78 @@ namespace BPUtil
 				AggregateException agg = ex as AggregateException;
 				if (agg.InnerExceptions != null)
 					foreach (Exception inner in agg.InnerExceptions)
-						FlattenMessages(ex.InnerException, sb, level + 1);
+						FlattenMessages(inner, sb, level + 1);
 			}
 			else
 				FlattenMessages(ex.InnerException, sb, level + 1);
 		}
+		/// <summary>
+		/// Returns a string representation of the exception using an indented hierarchical format such that each inner exception is indented for easier readability.
+		/// </summary>
+		/// <param name="ex">Exception to print in indented hierarchical format.</param>
+		/// <returns></returns>
+		public static string ToHierarchicalString(this Exception ex)
+		{
+			StringBuilder sb = new StringBuilder();
+			sb.Append(ex.GetType().ToString());
+			if (ex.Message != null)
+				sb.Append(": " + ex.Message);
+		
+			if (ex is AggregateException)
+			{
+				AggregateException agg = ex as AggregateException;
+				if (agg.InnerExceptions != null)
+				{
+					sb.AppendLine();
+					sb.AppendLine("Inner Exceptions:").AppendLine("[");
+					bool first = true;
+					foreach (Exception inner in agg.InnerExceptions)
+					{
+						if (!first)
+							sb.AppendLine(",");
+						first = false;
+						sb.Append(StringUtil.Indent("{" + Environment.NewLine + StringUtil.Indent(inner.ToHierarchicalString()) + Environment.NewLine + "}"));
+					}
+					sb.AppendLine();
+					sb.AppendLine("]");
+				}
+			}
+			else if (ex.InnerException != null)
+			{
+				sb.AppendLine();
+				sb.AppendLine("Inner Exception:").AppendLine("{" + Environment.NewLine + StringUtil.Indent(ex.InnerException.ToHierarchicalString()) + Environment.NewLine + "}");
+			}
+			if (!string.IsNullOrWhiteSpace(ex.StackTrace))
+			{
+				if (sb[sb.Length - 1] != '\r' && sb[sb.Length - 1] != '\n')
+					sb.AppendLine();
+				sb.Append(ex.StackTrace.Trim('\r', '\n'));
+			}
+			return sb.ToString();
+		}
+		/// <summary>
+		/// Sets the stack trace for this Exception.
+		/// </summary>
+		/// <param name="target">The Exception</param>
+		/// <param name="stack">The stack trace to assign to the Exception.</param>
+		/// <returns></returns>
+		public static Exception SetStackTrace(this Exception target, StackTrace stack) => _SetStackTrace(target, stack);
+	
+		/// <summary>
+		/// Returns a function that efficiently sets an exception's stack trace. From https://stackoverflow.com/a/63685720/814569
+		/// </summary>
+		private static readonly Func<Exception, StackTrace, Exception> _SetStackTrace = new Func<Func<Exception, StackTrace, Exception>>(() =>
+		{
+			ParameterExpression target = Expression.Parameter(typeof(Exception));
+			ParameterExpression stack = Expression.Parameter(typeof(StackTrace));
+			Type traceFormatType = typeof(StackTrace).GetNestedType("TraceFormat", BindingFlags.NonPublic);
+			MethodInfo toString = typeof(StackTrace).GetMethod("ToString", BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { traceFormatType }, null);
+			object normalTraceFormat = Enum.GetValues(traceFormatType).GetValue(0);
+			MethodCallExpression stackTraceString = Expression.Call(stack, toString, Expression.Constant(normalTraceFormat, traceFormatType));
+			FieldInfo stackTraceStringField = typeof(Exception).GetField("_stackTraceString", BindingFlags.NonPublic | BindingFlags.Instance);
+			BinaryExpression assign = Expression.Assign(Expression.Field(target, stackTraceStringField), stackTraceString);
+			return Expression.Lambda<Func<Exception, StackTrace, Exception>>(Expression.Block(assign, target), target, stack).Compile();
+		})();
 		#endregion
 		#region IEnumerable<string>
 		/// <summary>
@@ -190,6 +260,30 @@ namespace BPUtil
 			int A = point.X - otherPoint.X;
 			int B = point.Y - otherPoint.Y;
 			return Math.Sqrt((A * A) + (B * B));
+		}
+		#endregion
+		#region System.IO.FileInfo
+		/// <summary>
+		/// Returns the file name without its extension.  If the file name has no traditional extension such as "config" or ".gitignore" then the entire file name is returned.
+		/// </summary>
+		/// <param name="fi"></param>
+		/// <returns></returns>
+		public static string NameWithoutExtension(this System.IO.FileInfo fi)
+		{
+			if (fi.Name.Length <= fi.Extension.Length || fi.Extension.Length == 0)
+				return fi.Name;
+			return fi.Name.Remove(fi.Name.Length - fi.Extension.Length);
+		}
+		/// <summary>
+		/// Returns [FullName] with its extension removed.  If the file name has no traditional extension such as "config" or ".gitignore" then the entire file name is returned.
+		/// </summary>
+		/// <param name="fi"></param>
+		/// <returns></returns>
+		public static string FullNameWithoutExtension(this System.IO.FileInfo fi)
+		{
+			if (fi.Name.Length <= fi.Extension.Length || fi.Extension.Length == 0)
+				return fi.FullName;
+			return fi.FullName.Remove(fi.FullName.Length - fi.Extension.Length);
 		}
 		#endregion
 		#region System.Windows.Forms.Form

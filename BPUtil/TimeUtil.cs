@@ -38,5 +38,33 @@ namespace BPUtil
 		{
 			return (long)date.ToUniversalTime().Subtract(UnixEpoch).TotalMilliseconds;
 		}
+		/// <summary>
+		/// Converts a TimeSpan to a compact unambiguous string format with precision to the second. E.g. "1d20h0m5s" or "1m30s" or "0s" or "-1m30s".
+		/// </summary>
+		/// <param name="span">A TimeSpan instance.</param>
+		/// <returns></returns>
+		public static string ToDHMS(TimeSpan span)
+		{
+			StringBuilder sb = new StringBuilder();
+			if (span.Days > 0)
+				sb.Append(span.Days).Append("d");
+			if (sb.Length > 0 || span.Hours > 0)
+				sb.Append(span.Hours).Append("h");
+			if (sb.Length > 0 || span.Minutes > 0)
+				sb.Append(span.Minutes).Append("m");
+			sb.Append(span.Seconds).Append("s");
+			if (span.Ticks < 0)
+				return "-" + sb.ToString();
+			return sb.ToString();
+		}
+		/// <summary>
+		/// Converts a timespan in milliseconds to a compact unambiguous string format with precision to the second. E.g. "1d20h0m5s" or "1m30s" or "0s" or "-1m30s".
+		/// </summary>
+		/// <param name="timeMs">Time in milliseconds.</param>
+		/// <returns></returns>
+		public static string ToDHMS(long timeMs)
+		{
+			return ToDHMS(TimeSpan.FromMilliseconds(timeMs));
+		}
 	}
 }

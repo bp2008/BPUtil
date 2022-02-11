@@ -388,6 +388,25 @@ namespace BPUtil
 			return (negative ? "-" : "") + (input / Math.Pow(factor, unitIndex)).ToString(decimalStringFormat.ToString()) + ' ' + sizes[unitIndex];
 		}
 		/// <summary>
+		/// Performs multiple character-to-string replacements on a string.
+		/// </summary>
+		/// <param name="source">The string to perform replacements on.</param>
+		/// <param name="replacements">A dictionary of replacement mappings.</param>
+		/// <returns></returns>
+		public static string ReplaceMultiple(string source, IDictionary<char, string> replacements)
+		{
+			StringBuilder sb = new StringBuilder();
+			string replacement;
+			foreach (char c in source)
+			{
+				if (replacements.TryGetValue(c, out replacement))
+					sb.Append(replacement);
+				else
+					sb.Append(c);
+			}
+			return sb.ToString();
+		}
+		/// <summary>
 		/// Performs multiple character-to-character replacements on a string.
 		/// </summary>
 		/// <param name="source">The string to perform replacements on.</param>
@@ -474,6 +493,166 @@ namespace BPUtil
 		public static string CreateDataUri(string mime, byte[] data)
 		{
 			return "data:" + mime + ";base64," + Convert.ToBase64String(data);
+		}
+		/// <summary>
+		/// Splits the input string into an ordered list of substrings that could be concatenated together to recreate the original input string.  The produced strings will have a maximum length of [maxSegmentLength].  Instead of returning a list of strings, this method passes each substring into a callback method.
+		/// 
+		/// This method is designed to split a large text file into smaller chunks.
+		/// </summary>
+		/// <param name="fullText">The string to split.</param>
+		/// <param name="maxSegmentLength">Maximum length of each substring. Minimum value is 1.</param>
+		/// <param name="smartBreak">Try to end substrings early at characters ['\r', '\n', '.', '\t', ' '], to yield cleaner output.</param>
+		/// <param name="callback">A callback method that will receive each string that is split out of the original string.</param>
+		/// <returns></returns>
+		public static void SplitIntoSegments(string fullText, int maxSegmentLength, bool smartBreak, Action<string> callback)
+		{
+			if (maxSegmentLength < 1)
+				maxSegmentLength = 1;
+			int idxStart = 0;
+			while (idxStart < fullText.Length)
+			{
+				int subStrLength;
+				int remaining = fullText.Length - idxStart;
+				if (remaining <= maxSegmentLength)
+					subStrLength = remaining;
+				else
+				{
+					// More text remains than the max doc length.
+					if (smartBreak)
+					{
+						int idxEnd = fullText.LastIndexOfAny(new char[] { '\r', '\n' }, (idxStart + maxSegmentLength) - 1, maxSegmentLength);
+						if (idxEnd == -1)
+							idxEnd = fullText.LastIndexOfAny(new char[] { '.', '\t', ' ' }, (idxStart + maxSegmentLength) - 1, maxSegmentLength);
+						if (idxEnd > 0)
+						{
+							subStrLength = (idxEnd + 1) - idxStart;
+							if (subStrLength <= 0)
+								subStrLength = maxSegmentLength;
+						}
+						else
+							subStrLength = maxSegmentLength;
+					}
+					else
+						subStrLength = maxSegmentLength;
+				}
+				string text = fullText.Substring(idxStart, subStrLength);
+				callback(text);
+				idxStart += subStrLength;
+			}
+		}
+		/// <summary>
+		/// Splits the input string into an ordered list of substrings that could be concatenated together to recreate the original input string.  The produced strings will have a maximum length of [maxSegmentLength].
+		/// 
+		/// This method is designed to split a large text file into smaller chunks.
+		/// </summary>
+		/// <param name="fullText">The string to split.</param>
+		/// <param name="maxSegmentLength">Maximum length of each substring. Minimum value is 1.</param>
+		/// <param name="smartBreak">Try to end substrings early at characters ['\r', '\n', '.', '\t', ' '], to yield cleaner output.</param>
+		/// <returns></returns>
+		public static List<string> SplitIntoSegments(string fullText, int maxSegmentLength, bool smartBreak)
+		{
+			List<string> segments = new List<string>();
+			SplitIntoSegments(fullText, maxSegmentLength, smartBreak, s => segments.Add(s));
+			return segments;
+		}
+		/// <summary>
+		/// Adds the appropriate English suffix to the specified number.  i.e.
+		/// -3  ->  -3nd
+		/// -2  ->  -2nd
+		/// -1  ->  -1st
+		/// 0  ->  0th
+		/// 1  ->  1st
+		/// 2  ->  2nd
+		/// 3  ->  3rd
+		/// 4  ->  4th
+		/// 11 -> 11th
+		/// 12 -> 12th
+		/// 13 -> 13th
+		/// 14 -> 14th
+		/// 20 -> 20th
+		/// 21 -> 21st
+		/// 22 -> 22nd
+		/// 23 -> 23rd
+		/// 24 -> 24th
+		/// </summary>
+		/// <param name="baseNumber"></param>
+		/// <returns></returns>
+		public static string ToOrdinal(int baseNumber)
+		{
+			return baseNumber + GetOrdinalSuffix(baseNumber);
+		}
+		/// <summary>
+		/// Returns the appropriate English suffix for the specified number.  i.e.
+		/// 0  -> th
+		/// 1  -> st
+		/// 2  -> nd
+		/// 3  -> rd
+		/// 4  -> th
+		/// 11 -> th
+		/// 12 -> th
+		/// 13 -> th
+		/// 14 -> th
+		/// 20 -> th
+		/// 21 -> st
+		/// 22 -> nd
+		/// 23 -> rd
+		/// 24 -> th
+		/// </summary>
+		/// <param name="baseNumber"></param>
+		/// <returns></returns>
+		public static string GetOrdinalSuffix(int baseNumber)
+		{
+			int abs = Math.Abs(baseNumber);
+			int tensPlace = (abs / 10) % 10;
+			if (tensPlace == 1)
+				return "th";
+			int onesPlace = abs % 10;
+			switch (onesPlace)
+			{
+				case 1: return "st";
+				case 2: return "nd";
+				case 3: return "rd";
+				default: return "th";
+			}
+		}
+		/// <summary>
+		/// Removes the file extension from a path and appends a new extension.
+		/// </summary>
+		/// <param name="path">Path to change the file extension in, e.g. "C:\Folder\File.ext".</param>
+		/// <param name="newExtension">New extension, e.g. ".txt".</param>
+		/// <returns></returns>
+		public static string ReplaceFileExtension(string path, string newExtension)
+		{
+			string oldExtension = System.IO.Path.GetExtension(path);
+			return path.Substring(0, path.Length - oldExtension.Length) + newExtension;
+		}
+		/// <summary>
+		/// Indents each line of the given string.
+		/// </summary>
+		/// <param name="str">String that needs indented.</param>
+		/// <param name="indentationString">Indentation string to insert at the beginning of each line.</param>
+		/// <returns></returns>
+		public static string Indent(string str, string indentationString = "\t")
+		{
+			if (str == null)
+				throw new ArgumentException("Cannot indent a null string", "str");
+			StringBuilder sb = new StringBuilder();
+			sb.Append(indentationString);
+			for (int i = 0; i < str.Length; i++)
+			{
+				char c = str[i];
+				sb.Append(c);
+				if (c == '\r' || c == '\n')
+				{
+					if (c == '\r' && i + 1 < str.Length && str[i + 1] == '\n')
+					{
+						i++;
+						sb.Append('\n');
+					}
+					sb.Append(indentationString);
+				}
+			}
+			return sb.ToString();
 		}
 	}
 }

@@ -88,7 +88,7 @@ namespace BPUtil.NativeWin
 		/// Does the actual impersonation.
 		/// </summary>
 		/// <param name="userName">The name of the user to act as.</param>
-		/// <param name="domainName">The domain name of the user to act as.</param>
+		/// <param name="domain">The domain name of the user to act as.</param>
 		/// <param name="password">The password of the user to act as.</param>
 		private void ImpersonateValidUser(string userName, string domain, string password)
 		{

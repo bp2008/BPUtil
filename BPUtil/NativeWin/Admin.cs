@@ -38,6 +38,7 @@ namespace BPUtil.NativeWin
 		/// </summary>
 		/// <param name="filePath">Path to the executable.</param>
 		/// <param name="args">Optional arguments to pass to the process.</param>
+		/// <param name="workingDirectory">Optional working directory to start the process with.</param>
 		/// <returns></returns>
 		public static bool StartAsAdmin(string filePath, string args = null, string workingDirectory = null)
 		{
