@@ -20,6 +20,11 @@ namespace BPUtil
 		{
 			return filePath;
 		}
+		/// <summary>
+		/// Saves this instance to file.  Returns true if successful.
+		/// </summary>
+		/// <param name="filePath"></param>
+		/// <returns></returns>
 		public virtual bool Save(string filePath = null)
 		{
 			int tries = 0;
@@ -53,6 +58,11 @@ namespace BPUtil
 				}
 			return false;
 		}
+		/// <summary>
+		/// Saves this instance from file.  Returns true if successful.
+		/// </summary>
+		/// <param name="filePath"></param>
+		/// <returns></returns>
 		public virtual bool Load(string filePath = null)
 		{
 			int tries = 0;
@@ -110,10 +120,10 @@ namespace BPUtil
 			return false;
 		}
 		/// <summary>
-		/// (Thread-)Safely checks if the settings file exists, and if not, saves the current instance.
+		/// (Thread-)Safely checks if the settings file exists, and if not, saves the current instance.  Returns true if a file was saved.
 		/// </summary>
 		/// <param name="filePath"></param>
-		public virtual void SaveIfNoExist(string filePath = null)
+		public virtual bool SaveIfNoExist(string filePath = null)
 		{
 			if (filePath == null)
 				filePath = this.GetType().Name + ".cfg";
@@ -121,8 +131,9 @@ namespace BPUtil
 			lock (lockObj)
 			{
 				if (!File.Exists(filePath))
-					Save(filePath);
+					return Save(filePath);
 			}
+			return false;
 		}
 	}
 	public class SerializeProperties : Attribute
