@@ -136,6 +136,9 @@ namespace BPUtil
 			return false;
 		}
 	}
+	/// <summary>
+	/// Annotate the serializable object with this in order to load serialized properties (otherwise only fields are loaded from file).
+	/// </summary>
 	public class SerializeProperties : Attribute
 	{
 		public SerializeProperties() { }
