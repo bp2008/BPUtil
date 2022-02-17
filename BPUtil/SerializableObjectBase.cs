@@ -20,7 +20,7 @@ namespace BPUtil
 		{
 			return filePath;
 		}
-		public bool Save(string filePath = null)
+		public virtual bool Save(string filePath = null)
 		{
 			int tries = 0;
 			while (tries++ < 5)
@@ -53,7 +53,7 @@ namespace BPUtil
 				}
 			return false;
 		}
-		public bool Load(string filePath = null)
+		public virtual bool Load(string filePath = null)
 		{
 			int tries = 0;
 			while (tries++ < 5)
@@ -113,7 +113,7 @@ namespace BPUtil
 		/// (Thread-)Safely checks if the settings file exists, and if not, saves the current instance.
 		/// </summary>
 		/// <param name="filePath"></param>
-		public void SaveIfNoExist(string filePath = null)
+		public virtual void SaveIfNoExist(string filePath = null)
 		{
 			if (filePath == null)
 				filePath = this.GetType().Name + ".cfg";
