@@ -61,6 +61,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BackupRotate.cs" />
     <Compile Include="Base64UrlMod.cs" />
     <Compile Include="BPQueue.cs" />
     <Compile Include="CertificateValidation.cs" />
@@ -112,6 +113,7 @@
     <Compile Include="PasswordReset\SecureToken.cs" />
     <Compile Include="PasswordReset\StatelessPasswordResetBase.cs" />
     <Compile Include="Robust.cs" />
+    <Compile Include="SevenZip.cs" />
     <Compile Include="SignatureFactory.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ICertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ServerNameCertificateSelector.cs" />
@@ -127,6 +129,7 @@
     <Compile Include="SimpleHttp\TLS\TlsServerNameReader.cs" />
     <Compile Include="IO\UnreadableStream.cs" />
     <Compile Include="StringCache.cs" />
+    <Compile Include="StringParser.cs" />
     <Compile Include="StringSorting.cs" />
     <Compile Include="WaitingQueue.cs" />
     <Compile Include="CachedObject.cs" />

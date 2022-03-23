@@ -22,11 +22,12 @@ namespace BPUtil
 		/// <param name="arguments">Arguments for the process.</param>
 		/// <param name="std">(out) standard output stream text</param>
 		/// <param name="err">(out) standard error stream text</param>
+		/// <param name="options">(Optional) Additional options.</param>
 		/// <returns>The exit code of the process that ran.</returns>
-		public static int RunProcessAndWait(string fileName, string arguments, out string std, out string err)
+		public static int RunProcessAndWait(string fileName, string arguments, out string std, out string err, ProcessRunnerOptions options = null)
 		{
 			bool bThreadAbort = false;
-			return RunProcessAndWait(fileName, arguments, out std, out err, ref bThreadAbort);
+			return RunProcessAndWait(fileName, arguments, out std, out err, ref bThreadAbort, options);
 		}
 
 		/// <summary>
@@ -38,8 +39,9 @@ namespace BPUtil
 		/// <param name="std">(out) standard output stream text</param>
 		/// <param name="err">(out) standard error stream text</param>
 		/// <param name="bThreadAbort">Set to true from another thread to abort.</param>
+		/// <param name="options">(Optional) Additional options.</param>
 		/// <returns>The exit code of the process that ran.</returns>
-		public static int RunProcessAndWait(string fileName, string arguments, out string std, out string err, ref bool bThreadAbort)
+		public static int RunProcessAndWait(string fileName, string arguments, out string std, out string err, ref bool bThreadAbort, ProcessRunnerOptions options = null)
 		{
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
 			psi.UseShellExecute = false;
@@ -50,9 +52,11 @@ namespace BPUtil
 			StringBuilder sbOutput = new StringBuilder();
 			StringBuilder sbError = new StringBuilder();
 
+			options?.Apply(psi);
 			int exitCode;
 			using (Process p = Process.Start(psi))
 			{
+				options?.Apply(p);
 				p.OutputDataReceived += (sender, e) =>
 				{
 					sbOutput.AppendLine(e.Data);
@@ -94,8 +98,9 @@ namespace BPUtil
 		/// <param name="arguments">Arguments for the process.</param>
 		/// <param name="std">Lines read from standard output stream are sent to this callback.</param>
 		/// <param name="err">Lines read from standard error stream are sent to this callback.</param>
+		/// <param name="options">(Optional) Additional options.</param>
 		/// <returns>The exit code of the process that ran.</returns>
-		public static int RunProcessAndWait(string fileName, string arguments, Action<ProcessRunnerOutputEventArgs> std, Action<ProcessRunnerOutputEventArgs> err)
+		public static int RunProcessAndWait(string fileName, string arguments, Action<ProcessRunnerOutputEventArgs> std, Action<ProcessRunnerOutputEventArgs> err, ProcessRunnerOptions options = null)
 		{
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
 			psi.UseShellExecute = false;
@@ -103,8 +108,10 @@ namespace BPUtil
 			psi.RedirectStandardOutput = true;
 			psi.RedirectStandardError = true;
 
+			options?.Apply(psi);
 			using (Process p = Process.Start(psi))
 			{
+				options?.Apply(p);
 				Action abortCallback = () =>
 				{
 					p.CloseMainWindow();
@@ -137,8 +144,9 @@ namespace BPUtil
 		/// <param name="arguments">Arguments for the process.</param>
 		/// <param name="std">Lines read from standard output stream are sent to this callback.</param>
 		/// <param name="err">Lines read from standard error stream are sent to this callback.</param>
+		/// <param name="options">(Optional) Additional options.</param>
 		/// <returns>An object containing the Process instance and helper functions.</returns>
-		public static ProcessRunnerHandle RunProcess(string fileName, string arguments, Action<string> std, Action<string> err)
+		public static ProcessRunnerHandle RunProcess(string fileName, string arguments, Action<string> std, Action<string> err, ProcessRunnerOptions options = null)
 		{
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
 			psi.UseShellExecute = false;
@@ -146,7 +154,9 @@ namespace BPUtil
 			psi.RedirectStandardOutput = true;
 			psi.RedirectStandardError = true;
 
+			options?.Apply(psi);
 			Process p = Process.Start(psi);
+			options?.Apply(p);
 
 			p.OutputDataReceived += (sender, e) =>
 			{
@@ -170,8 +180,9 @@ namespace BPUtil
 		/// <param name="arguments">Arguments for the process.</param>
 		/// <param name="std">Binary data buffers read from standard output stream are sent to this callback.</param>
 		/// <param name="err">Lines read from standard error stream are sent to this callback.</param>
+		/// <param name="options">(Optional) Additional options.</param>
 		/// <returns>An object containing the Process instance and helper functions.</returns>
-		public static ProcessRunnerHandle RunProcess_StdBinary_ErrString(string fileName, string arguments, Action<byte[]> std, Action<string> err)
+		public static ProcessRunnerHandle RunProcess_StdBinary_ErrString(string fileName, string arguments, Action<byte[]> std, Action<string> err, ProcessRunnerOptions options = null)
 		{
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
 			psi.UseShellExecute = false;
@@ -179,7 +190,9 @@ namespace BPUtil
 			psi.RedirectStandardOutput = true;
 			psi.RedirectStandardError = true;
 
+			options?.Apply(psi);
 			Process p = Process.Start(psi);
+			options?.Apply(p);
 
 			p.ErrorDataReceived += (sender, e) =>
 			{
@@ -201,8 +214,9 @@ namespace BPUtil
 		/// <param name="arguments">Arguments for the process.</param>
 		/// <param name="std">Lines read from standard output stream are sent to this callback.</param>
 		/// <param name="err">Binary data buffers read from standard error stream are sent to this callback.</param>
+		/// <param name="options">(Optional) Additional options.</param>
 		/// <returns>An object containing the Process instance and helper functions.</returns>
-		public static ProcessRunnerHandle RunProcess_StdString_ErrBinary(string fileName, string arguments, Action<string> std, Action<byte[]> err)
+		public static ProcessRunnerHandle RunProcess_StdString_ErrBinary(string fileName, string arguments, Action<string> std, Action<byte[]> err, ProcessRunnerOptions options = null)
 		{
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
 			psi.UseShellExecute = false;
@@ -210,7 +224,9 @@ namespace BPUtil
 			psi.RedirectStandardOutput = true;
 			psi.RedirectStandardError = true;
 
+			options?.Apply(psi);
 			Process p = Process.Start(psi);
+			options?.Apply(p);
 
 			p.OutputDataReceived += (sender, e) =>
 			{
@@ -232,8 +248,9 @@ namespace BPUtil
 		/// <param name="arguments">Arguments for the process.</param>
 		/// <param name="std">Binary data buffers read from standard output stream are sent to this callback.</param>
 		/// <param name="err">Binary data buffers from standard error stream are sent to this callback.</param>
+		/// <param name="options">(Optional) Additional options.</param>
 		/// <returns>An object containing the Process instance and helper functions.</returns>
-		public static ProcessRunnerHandle RunProcess_StdBinary_ErrBinary(string fileName, string arguments, Action<byte[]> std, Action<byte[]> err)
+		public static ProcessRunnerHandle RunProcess_StdBinary_ErrBinary(string fileName, string arguments, Action<byte[]> std, Action<byte[]> err, ProcessRunnerOptions options = null)
 		{
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
 			psi.UseShellExecute = false;
@@ -241,13 +258,58 @@ namespace BPUtil
 			psi.RedirectStandardOutput = true;
 			psi.RedirectStandardError = true;
 
+			options?.Apply(psi);
 			Process p = Process.Start(psi);
+			options?.Apply(p);
 
 			return new ProcessRunnerHandle(p)
 			{
 				stdoutReader = new ProcessStreamBinaryReader(p.StandardOutput.BaseStream, std),
 				stderrReader = new ProcessStreamBinaryReader(p.StandardError.BaseStream, err)
 			};
+		}
+	}
+
+	/// <summary>
+	/// Options to customize the process runner.
+	/// </summary>
+	public class ProcessRunnerOptions
+	{
+		public ProcessPriorityClass? priority;
+		/// <summary>
+		/// Constructs an empty ProcessRunnerOptions.
+		/// </summary>
+		public ProcessRunnerOptions() { }
+		/// <summary>
+		/// Constructs a ProcessRunnerOptions.
+		/// </summary>
+		/// <param name="priority">Priority which the process should be set to just after it is started.</param>
+		public ProcessRunnerOptions(ProcessPriorityClass? priority)
+		{
+			this.priority = priority;
+		}
+		/// <summary>
+		/// Applies options from this class to the ProcessStartInfo object.
+		/// </summary>
+		/// <param name="psi">A ProcessStartInfo to apply the options to.</param>
+		internal void Apply(ProcessStartInfo psi)
+		{
+		}
+
+		/// <summary>
+		/// Applies options from this class to the Process object.
+		/// </summary>
+		/// <param name="p">A Process to apply the options to.</param>
+		internal void Apply(Process p)
+		{
+			if (priority.HasValue)
+			{
+				try
+				{
+					p.PriorityClass = priority.Value;
+				}
+				catch { }
+			}
 		}
 	}
 

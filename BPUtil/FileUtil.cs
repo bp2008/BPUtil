@@ -52,5 +52,32 @@ namespace BPUtil
 				}
 			}
 		}
+		/// <summary>
+		/// Returns true if the specified path refers to an existing directory.  Just call Directory.Exists.  I wrote this method so I would stop looking for it.
+		/// </summary>
+		/// <param name="path">Path to a file or directory which may exist.</param>
+		/// <returns></returns>
+		public static bool IsDirectory(string path)
+		{
+			return Directory.Exists(path);
+		}
+		/// <summary>
+		/// Returns true if the specified path refers to an existing file.  Just call File.Exists.  I wrote this method so I would stop looking for it.
+		/// </summary>
+		/// <param name="path">Path to a file or directory which may exist.</param>
+		/// <returns></returns>
+		public static bool IsFile(string path)
+		{
+			return File.Exists(path);
+		}
+		/// <summary>
+		/// Returns true if a file or directory exists at the specified path.
+		/// </summary>
+		/// <param name="path">Path to a file or directory which may exist.</param>
+		/// <returns></returns>
+		public static bool Exists(string path)
+		{
+			return Directory.Exists(path) || File.Exists(path);
+		}
 	}
 }
