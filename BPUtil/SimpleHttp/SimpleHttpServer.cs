@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
@@ -561,7 +562,7 @@ namespace BPUtil.SimpleHttp
 			return IsOrdinaryDisconnectException(ex);
 		}
 		/// <summary>
-		/// Returns true if the specified Exception is a SocketException or contains a SocketException within its InnerException tree.
+		/// Returns true if the specified Exception is a SocketException or HttpProtocolException or if one of these exception types is contained within the InnerException tree.
 		/// </summary>
 		/// <param name="ex">The exception.</param>
 		/// <returns></returns>
@@ -581,6 +582,8 @@ namespace BPUtil.SimpleHttp
 			//	}
 			//}
 			if (ex is SocketException)
+				return true;
+			if (ex is HttpProtocolException)
 				return true;
 			if (ex is AggregateException)
 			{
@@ -618,10 +621,10 @@ namespace BPUtil.SimpleHttp
 		{
 			string request = streamReadLine(tcpStream);
 			if (request == null)
-				throw new Exception("End of stream");
+				throw new HttpProtocolException("End of stream");
 			string[] tokens = request.Split(' ');
 			if (tokens.Length != 3)
-				throw new Exception("invalid http request line: " + request);
+				throw new HttpProtocolException("invalid http request line: " + request);
 			http_method = tokens[0].ToUpper();
 
 			if (tokens[1].StartsWith("http://") || tokens[1].StartsWith("https://"))
@@ -643,10 +646,10 @@ namespace BPUtil.SimpleHttp
 			while ((line = streamReadLine(tcpStream)) != "")
 			{
 				if (line == null)
-					throw new Exception("End of stream");
+					throw new HttpProtocolException("End of stream");
 				int separator = line.IndexOf(':');
 				if (separator == -1)
-					throw new Exception("invalid http header line: " + line);
+					throw new HttpProtocolException("invalid http header line: " + line);
 				string name = line.Substring(0, separator);
 				int pos = separator + 1;
 				while (pos < line.Length && line[pos] == ' ')
@@ -1367,6 +1370,26 @@ namespace BPUtil.SimpleHttp
 			{
 				return true; // The read poll returned false, so the connection is supposedly open with no data available to read, which is the normal state.
 			}
+		}
+	}
+
+	[Serializable]
+	internal class HttpProtocolException : Exception
+	{
+		public HttpProtocolException()
+		{
+		}
+
+		public HttpProtocolException(string message) : base(message)
+		{
+		}
+
+		public HttpProtocolException(string message, Exception innerException) : base(message, innerException)
+		{
+		}
+
+		protected HttpProtocolException(SerializationInfo info, StreamingContext context) : base(info, context)
+		{
 		}
 	}
 
