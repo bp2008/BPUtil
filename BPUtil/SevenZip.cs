@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -20,7 +21,8 @@ namespace BPUtil
 		/// <param name="outputDirectory">Path to a directory into which to extract the contents of the archive.</param>
 		/// <param name="threads">Number of threads the 7zip executable is allowed to use.</param>
 		/// <exception cref="Exception">Thrown if any of the input paths are invalid or if 7za.exe returns a nonzero result.</exception>
-		public static void Extract(string sevenZipCommandLineExePath, string archivePath, string outputDirectory, int threads = 2)
+		/// <param name="lowPriority">If true, the 7zip process will be assigned BelowNormal priority.</param>
+		public static void Extract(string sevenZipCommandLineExePath, string archivePath, string outputDirectory, int threads = 2, bool lowPriority = false)
 		{
 			if (!File.Exists(sevenZipCommandLineExePath))
 				throw new Exception("7zip command line executable not found in path \"" + sevenZipCommandLineExePath + "\"");
@@ -34,7 +36,7 @@ namespace BPUtil
 
 			threads = threads.Clamp(1, Environment.ProcessorCount);
 			string std, err;
-			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "x -mmt" + threads + " \"" + archivePath + "\" -o\"" + outputDirectory + "\"", out std, out err);
+			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "x -mmt" + threads + " \"" + archivePath + "\" -o\"" + outputDirectory + "\"", out std, out err, Options(lowPriority));
 			if (result != 0)
 				throw new Exception("7zip failed to extract files in archive \"" + archivePath + "\": " + std + " " + err);
 		}
@@ -43,8 +45,9 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="sevenZipCommandLineExePath">Path of 7za.exe.</param>
 		/// <param name="archivePath">Path to a 7zip-compatible archive (*.7z for example).</param>
+		/// <param name="lowPriority">If true, the 7zip process will be assigned BelowNormal priority.</param>
 		/// <returns></returns>
-		public static SevenZipFileData[] ListFiles(string sevenZipCommandLineExePath, string archivePath)
+		public static SevenZipFileData[] ListFiles(string sevenZipCommandLineExePath, string archivePath, bool lowPriority = false)
 		{
 			if (!File.Exists(sevenZipCommandLineExePath))
 				throw new Exception("7zip command line executable not found in path \"" + sevenZipCommandLineExePath + "\"");
@@ -53,7 +56,7 @@ namespace BPUtil
 				throw new Exception("Input file not found for 7zip list files: \"" + archivePath + "\"");
 
 			string std, err;
-			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "l -slt \"" + archivePath + "\"", out std, out err);
+			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "l -slt \"" + archivePath + "\"", out std, out err, Options(lowPriority));
 			if (result != 0)
 				throw new Exception("7zip failed to list files in archive \"" + archivePath + "\": " + std + " " + err);
 
@@ -104,11 +107,12 @@ namespace BPUtil
 		/// <param name="archivePath">Path to a 7zip-compatible archive (*.7z for example) that does not already exist.</param>
 		/// <param name="sourcePath">Path of a file or directory to put into the new archive.</param>
 		/// <param name="threads">Number of threads the 7zip executable is allowed to use.</param>
-		public static void Create7zArchive(string sevenZipCommandLineExePath, string archivePath, string sourcePath, int threads = 2)
+		/// <param name="lowPriority">If true, the 7zip process will be assigned BelowNormal priority.</param>
+		public static void Create7zArchive(string sevenZipCommandLineExePath, string archivePath, string sourcePath, int threads = 2, bool lowPriority = false)
 		{
 			if (FileUtil.Exists(archivePath))
 				throw new Exception("Cannot create 7z archive because an object already exists at the path \"" + archivePath + "\".");
-			if (FileUtil.Exists(sourcePath))
+			if (!FileUtil.Exists(sourcePath))
 				throw new Exception("Cannot create 7z archive because nothing was found at the source path \"" + sourcePath + "\".");
 
 			FileInfo outputFile = new FileInfo(archivePath);
@@ -122,9 +126,16 @@ namespace BPUtil
 
 			threads = threads.Clamp(1, Environment.ProcessorCount);
 			string std, err;
-			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "a -t7z -mmt" + threads + " \"" + archivePath + "\" \"" + sourcePath + "\"", out std, out err);
+			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "a -t7z -mmt" + threads + " \"" + archivePath + "\" \"" + sourcePath + "\"", out std, out err, Options(lowPriority));
 			if (result != 0)
 				throw new Exception("7zip failed to add path \"" + sourcePath + "\" to archive \"" + archivePath + "\": " + std + " " + err);
+		}
+		private static ProcessRunnerOptions Options(bool lowPriority)
+		{
+			if (lowPriority)
+				return new ProcessRunnerOptions(ProcessPriorityClass.BelowNormal);
+			else
+				return null;
 		}
 	}
 	/// <summary>
