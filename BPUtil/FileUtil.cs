@@ -116,6 +116,8 @@ namespace BPUtil
 		/// <returns></returns>
 		public static string GetDriveLetter(string absolutePath)
 		{
+			if (Platform.IsUnix())
+				return null;
 			int idxColon = absolutePath.IndexOf(':');
 			if (idxColon < 1)
 				return null;
