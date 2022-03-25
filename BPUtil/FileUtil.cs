@@ -53,6 +53,78 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
+		/// Moves a directory and its contents to a new location, overwriting existing content as necessary.
+		/// </summary>
+		/// <param name="sourceDirName">Path to the source directory.</param>
+		/// <param name="destDirName">Path to the destination directory.</param>
+		public static void DirectoryMove(string sourceDirName, string destDirName)
+		{
+			DirectoryInfo dir = new DirectoryInfo(sourceDirName);
+			if (!dir.Exists)
+				throw new DirectoryNotFoundException("Source directory does not exist or could not be found: " + sourceDirName);
+
+			Directory.CreateDirectory(destDirName);
+
+			FileInfo[] files = dir.GetFiles();
+			foreach (FileInfo file in files)
+			{
+				string tempPath = Path.Combine(destDirName, file.Name);
+				FileMove(file.FullName, tempPath);
+			}
+
+			DirectoryInfo[] dirs = dir.GetDirectories();
+			foreach (DirectoryInfo subdir in dirs)
+			{
+				string tempPath = Path.Combine(destDirName, subdir.Name);
+				DirectoryMove(subdir.FullName, tempPath);
+			}
+
+			dir.Delete();
+		}
+		/// <summary>
+		/// Moves a file to a new location, overwriting existing content as necessary.
+		/// </summary>
+		/// <param name="sourceFileName">Path to the source file.</param>
+		/// <param name="destFileName">Path to the destination file.</param>
+		public static void FileMove(string sourceFileName, string destFileName)
+		{
+			if (!File.Exists(sourceFileName))
+				throw new DirectoryNotFoundException("Source file does not exist or could not be found: " + sourceFileName);
+
+			FileInfo fiDest = new FileInfo(destFileName);
+			if (fiDest.Exists)
+			{
+				if (fiDest.IsReadOnly)
+					fiDest.IsReadOnly = false;
+				fiDest.Delete();
+			}
+
+			if (GetDriveLetter(sourceFileName) == GetDriveLetter(destFileName))
+			{
+				File.Move(sourceFileName, destFileName);
+			}
+			else
+			{
+				File.Copy(sourceFileName, destFileName, true);
+				File.Delete(sourceFileName);
+			}
+		}
+		/// <summary>
+		/// Returns the drive letter, capitalized, from the absolute Windows path ("c:/temp/file.txt" yields "C").  Returns null if a drive letter could not be identified.
+		/// </summary>
+		/// <param name="absolutePath"></param>
+		/// <returns></returns>
+		public static string GetDriveLetter(string absolutePath)
+		{
+			int idxColon = absolutePath.IndexOf(':');
+			if (idxColon < 1)
+				return null;
+			int idxSlash = absolutePath.IndexOfAny(new char[] { '/', '\\' });
+			if (idxSlash > -1 && idxSlash < idxColon)
+				return null;
+			return absolutePath.Substring(0, idxColon).ToUpper();
+		}
+		/// <summary>
 		/// Returns true if the specified path refers to an existing directory.  Just call Directory.Exists.  I wrote this method so I would stop looking for it.
 		/// </summary>
 		/// <param name="path">Path to a file or directory which may exist.</param>
