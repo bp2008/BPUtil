@@ -15,7 +15,10 @@ namespace BPUtil.Forms
 	{
 		protected override void OnShown(EventArgs e)
 		{
-			this.StartPosition = FormStartPosition.Manual;
+			if (Owner == null)
+				this.StartPosition = FormStartPosition.CenterParent;
+			else
+				this.StartPosition = FormStartPosition.Manual;
 			base.OnShown(e);
 			if (Owner != null && StartPosition == FormStartPosition.Manual)
 			{

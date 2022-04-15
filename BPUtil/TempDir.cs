@@ -36,6 +36,7 @@ namespace BPUtil
 						throw new Exception("Unable to construct a randomly named temporary directory.");
 				}
 			}
+			Directory.CreateDirectory(FullName);
 		}
 		/// <summary>
 		/// Constructs a TempDir using the specified unique directory name.
@@ -52,6 +53,7 @@ namespace BPUtil
 				else
 					throw new Exception("Temporary directory \"" + FullName + "\" already exists.");
 			}
+			Directory.CreateDirectory(FullName);
 		}
 
 		#region IDisposable
@@ -63,7 +65,11 @@ namespace BPUtil
 				if (disposing)
 				{
 					// dispose managed state (managed objects)
-					Directory.Delete(FullName, true);
+					try
+					{
+						Directory.Delete(FullName, true);
+					}
+					catch { }
 				}
 				disposedValue = true;
 			}

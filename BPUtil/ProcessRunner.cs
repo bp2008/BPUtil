@@ -275,7 +275,14 @@ namespace BPUtil
 	/// </summary>
 	public class ProcessRunnerOptions
 	{
+		/// <summary>
+		/// The priority to set for the process.  This may have no effect if we don't have permission to change the process priority.
+		/// </summary>
 		public ProcessPriorityClass? priority;
+		/// <summary>
+		/// Environment variables to set for the process.
+		/// </summary>
+		public Dictionary<string, string> environmentVariables = new Dictionary<string, string>();
 		/// <summary>
 		/// Constructs an empty ProcessRunnerOptions.
 		/// </summary>
@@ -294,6 +301,8 @@ namespace BPUtil
 		/// <param name="psi">A ProcessStartInfo to apply the options to.</param>
 		internal void Apply(ProcessStartInfo psi)
 		{
+			foreach (KeyValuePair<string, string> v in environmentVariables)
+				psi.EnvironmentVariables[v.Key] = v.Value;
 		}
 
 		/// <summary>

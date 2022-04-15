@@ -409,11 +409,14 @@ namespace BPUtil
 				iStart = 0;
 			return CppSubstr(strLocal, iStart, (int)n * 2);
 		}
+
+#pragma warning disable CS0419 // Ambiguous reference in cref attribute
 		/// <summary>
 		/// Sets the default length of context string used when no length is specified in <see cref="GetContextForErrorMessages"/>. This value is initialized to 40.
 		/// </summary>
 		/// <param name="defRadius">Maximum length of context string used when no length is specified in <see cref="GetContextForErrorMessages"/>.</param>
 		public void SetContextStringRadiusDefault(uint defRadius)
+#pragma warning restore CS0419 // Ambiguous reference in cref attribute
 		{
 			iContextStringRadiusDefault = defRadius;
 		}
