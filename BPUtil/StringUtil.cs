@@ -98,6 +98,24 @@ namespace BPUtil
 		}
 
 		/// <summary>
+		/// Encodes HTML-reserved characters as the appropriate entities so the string can appear safely in HTML source.
+		/// </summary>
+		/// <param name="str">String which may contain HTML-reserved characters.</param>
+		/// <returns></returns>
+		public static string HtmlEncode(string str)
+		{
+			return System.Web.HttpUtility.HtmlEncode(str);
+		}
+		/// <summary>
+		/// Decodes a string of HTML markup, returning the text representation.  Some information, such as HTML tags, can be lost in the conversion.
+		/// </summary>
+		/// <param name="str">String of HTML markup.</param>
+		/// <returns></returns>
+		public static string HtmlDecode(string str)
+		{
+			return System.Web.HttpUtility.HtmlDecode(str);
+		}
+		/// <summary>
 		/// Returns true if the string contains only characters from the set: A-Z, a-z, 0-9. Null returns true.
 		/// </summary>
 		/// <param name="str">String to test.</param>
