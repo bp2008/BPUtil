@@ -48,5 +48,49 @@ namespace BPUtil
 				idx = 0;
 			return (CompassDirection)idx;
 		}
+		/// <summary>
+		/// Returns the full text name for the given compass direction, e.g. NNE -> "north-northeast"
+		/// </summary>
+		/// <param name="d">Compass direction to get the name for.</param>
+		/// <returns></returns>
+		public static string GetCompassDirectionName(CompassDirection d)
+		{
+			switch (d)
+			{
+				case CompassDirection.N:
+					return "north";
+				case CompassDirection.NNE:
+					return "north-northeast";
+				case CompassDirection.NE:
+					return "northeast";
+				case CompassDirection.ENE:
+					return "east-northeast";
+				case CompassDirection.E:
+					return "east";
+				case CompassDirection.ESE:
+					return "east-southeast";
+				case CompassDirection.SE:
+					return "southeast";
+				case CompassDirection.SSE:
+					return "south-southeast";
+				case CompassDirection.S:
+					return "south";
+				case CompassDirection.SSW:
+					return "south-southwest";
+				case CompassDirection.SW:
+					return "southwest";
+				case CompassDirection.WSW:
+					return "west-southwest";
+				case CompassDirection.W:
+					return "west";
+				case CompassDirection.WNW:
+					return "west-northwest";
+				case CompassDirection.NW:
+					return "northwest";
+				case CompassDirection.NNW:
+					return "north-northwest";
+			}
+			return "unknown";
+		}
 	}
 }
