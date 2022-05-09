@@ -830,7 +830,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		/// <param name="keepAlive">(OPTIONAL) If true, sends the header "Connection: keep-alive" instead of "Connection: close". If you use keepAlive, you must either specify a contentLength (and honor it) or use chunked transfer encoding. If you specify keepAlive with a negative contentLength, the header "Transfer-Encoding: chunked" will automatically be added.</param>
-		public virtual void writeSuccess(string contentType = "text/html; charset=UTF-8", long contentLength = -1, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null, bool keepAlive = false)
+		public virtual void writeSuccess(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null, bool keepAlive = false)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
@@ -877,6 +877,7 @@ namespace BPUtil.SimpleHttp
 				throw new Exception("A response has already been written to this stream.");
 			responseWritten = true;
 			outputStream.WriteLineRN("HTTP/1.1 " + code);
+			outputStream.WriteLineRN("Content-Type: text/plain; charset=utf-8");
 			outputStream.WriteLineRN("Connection: close");
 			outputStream.WriteLineRN("");
 			if (description == null)
@@ -919,7 +920,7 @@ namespace BPUtil.SimpleHttp
 		/// Writes the specified response with the Content-Length header set appropriately.
 		/// </summary>
 		/// <param name="body">Data to send in the response. This string will be encoded as UTF8.</param>
-		/// <param name="contentType">Content-Type header value. e.g. "text/html; charset=UTF-8"</param>
+		/// <param name="contentType">Content-Type header value. e.g. "text/html; charset=utf-8"</param>
 		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		public virtual void writeFullResponseUTF8(string body, string contentType, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)

@@ -22,6 +22,31 @@ namespace BPUtil.MVC
 		public readonly string ControllerName;
 		public string ActionName { get; protected set; }
 		public string[] ActionArgs { get; protected set; }
+
+		internal List<KeyValuePair<string, string>> additionalResponseHeaders = new List<KeyValuePair<string, string>>();
+		/// <summary>
+		/// Gets a list of additional headers to include in the response. Getting the list is not thread safe, and using the list is also not thread safe.
+		/// </summary>
+		public List<KeyValuePair<string, string>> ResponseHeaders
+		{
+			get
+			{
+				if (additionalResponseHeaders == null)
+					additionalResponseHeaders = new List<KeyValuePair<string, string>>();
+				return additionalResponseHeaders;
+			}
+		}
+
+		/// <summary>
+		/// Adds a header to the ResponseHeaders list.  This is simply a convenience method.
+		/// </summary>
+		/// <param name="key">Header name.</param>
+		/// <param name="value">Header value.</param>
+		public void AddResponseHeader(string key, string value)
+		{
+			ResponseHeaders.Add(new KeyValuePair<string, string>(key, value));
+		}
+
 		public RequestContext(HttpProcessor httpProcessor, string requestPath)
 		{
 			this.httpProcessor = httpProcessor;

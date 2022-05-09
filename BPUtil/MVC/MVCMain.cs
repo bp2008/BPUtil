@@ -83,11 +83,13 @@ namespace BPUtil.MVC
 
 			if (body == null)
 			{
-				httpProcessor.writeSuccess(actionResult.ContentType, 0, actionResult.ResponseStatus, keepAlive: httpProcessor.keepAliveRequested);
+				httpProcessor.writeSuccess(actionResult.ContentType, 0, actionResult.ResponseStatus, context.additionalResponseHeaders, keepAlive: httpProcessor.keepAliveRequested);
 			}
 			else
 			{
 				List<KeyValuePair<string, string>> additionalHeaders = new List<KeyValuePair<string, string>>();
+				bool addedContentEncoding = false;
+				bool addedContentType = false;
 				if (actionResult.Compress && body.Length >= 32 && httpProcessor.ClientRequestsGZipCompression)
 				{
 					byte[] compressed = Compression.GZipCompress(body);
@@ -102,6 +104,18 @@ namespace BPUtil.MVC
 					if (!header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
 					{
 						additionalHeaders.Add(new KeyValuePair<string, string>(header.Name, header.Value));
+					}
+				}
+				if (context.additionalResponseHeaders != null)
+				{
+					foreach (KeyValuePair<string, string> header in context.additionalResponseHeaders)
+					{
+						if (addedContentEncoding && header.Key == "Content-Encoding")
+							continue;
+						else if (addedContentType && header.Key == "Content-Type")
+							continue;
+						else
+							additionalHeaders.Add(header);
 					}
 				}
 				httpProcessor.writeSuccess(actionResult.ContentType, body.Length, actionResult.ResponseStatus, additionalHeaders, keepAlive: httpProcessor.keepAliveRequested);
