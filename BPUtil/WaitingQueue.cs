@@ -15,6 +15,21 @@ namespace BPUtil
 	{
 		private ConcurrentQueue<T> innerQueue = new ConcurrentQueue<T>();
 		private SemaphoreSlim sem = new SemaphoreSlim(0, int.MaxValue);
+		private CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+		private CancellationToken cancellationToken;
+		public WaitingQueue()
+		{
+			cancellationToken = cancellationTokenSource.Token;
+		}
+
+		/// <summary>
+		/// Cancels all <see cref="TryDequeue"/> requests and prevents further blocking if <see cref="TryDequeue"/> is called again.
+		/// </summary>
+		public void CancelAllRequests()
+		{
+			if (!cancellationToken.IsCancellationRequested)
+				cancellationTokenSource.Cancel();
+		}
 
 		/// <summary>
 		/// Adds an object to the end of the <see cref="WaitingQueue{T}"/>.
@@ -36,7 +51,7 @@ namespace BPUtil
 		[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0034:Simplify 'default' expression", Justification = "Old syntax for VS2017 support")]
 		public bool TryDequeue(out T result, int millisecondsTimeout)
 		{
-			if (sem.Wait(millisecondsTimeout))
+			if (sem.Wait(millisecondsTimeout, cancellationToken))
 				return innerQueue.TryDequeue(out result);
 			else
 				result = default(T);

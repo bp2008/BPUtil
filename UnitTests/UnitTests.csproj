@@ -54,6 +54,7 @@
     <Compile Include="TestByteUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TestFileInfoExtensions.cs" />
+    <Compile Include="TestSimpleThreadPool.cs" />
     <Compile Include="TestSignatureFactory.cs" />
     <Compile Include="TestEncryption.cs" />
     <Compile Include="TestExceptionExtensions.cs" />

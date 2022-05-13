@@ -136,11 +136,15 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Prevents the creation of new threads and prevents new actions from being enqueued.  Existing queued actions remain queued.  This cannot be undone.
+		/// Prevents the creation of new threads and prevents new actions from being enqueued.  Existing running actions remain running.  This cannot be undone.
 		/// </summary>
 		public void Stop()
 		{
-			abort = true;
+			if (!abort)
+			{
+				abort = true;
+				actionQueue.CancelAllRequests();
+			}
 		}
 		/// <summary>
 		/// Adds the specified action to the queue, to be called as soon as possible by a thread from the pool.
@@ -161,10 +165,10 @@ namespace BPUtil
 			try
 			{
 				Interlocked.Increment(ref _currentIdleThreads);
-				while (true)
+				while (!abort)
 				{
 					// Check for queued actions to perform.
-					while (actionQueue.TryDequeue(out Action action, threadTimeoutMilliseconds))
+					while (!abort && actionQueue.TryDequeue(out Action action, threadTimeoutMilliseconds))
 					{
 						Interlocked.Decrement(ref _currentIdleThreads);
 						try
