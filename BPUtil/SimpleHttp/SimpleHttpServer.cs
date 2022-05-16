@@ -344,28 +344,26 @@ namespace BPUtil.SimpleHttp
 		{
 			int next_char;
 			bool endOfStream = false;
+			bool didRead = false;
 			StringBuilder data = new StringBuilder();
 			while (true)
 			{
 				next_char = inputStream.ReadByte();
-				if (next_char == '\n') { break; }
-				if (next_char == '\r') { continue; }
 				if (next_char == -1)
 				{
 					endOfStream = true;
 					break;
 				};
+				didRead = true;
+				if (next_char == '\n') { break; }
+				if (next_char == '\r') { continue; }
 				if (data.Length >= maxLength)
 					throw new HttpProcessorException("413 Entity Too Large");
 				data.Append(Convert.ToChar(next_char));
 			}
-			if (endOfStream && data.Length == 0)
+			if (endOfStream && !didRead)
 				return null;
 			return data.ToString();
-		}
-		private class HttpProcessorException : Exception
-		{
-			public HttpProcessorException(string message) : base(message) { }
 		}
 		/// <summary>
 		/// Processes the request.
@@ -411,6 +409,7 @@ namespace BPUtil.SimpleHttp
 						RawPostParams.Clear();
 						QueryString.Clear();
 						RawQueryString.Clear();
+						http_method = "";
 						postContentType = postFormDataRaw = "";
 						responseWritten = false;
 						keepAliveRequested = false;
@@ -466,73 +465,77 @@ namespace BPUtil.SimpleHttp
 						RawQueryString = ParseQueryStringArguments(this.request_url.Query, preserveKeyCharacterCase: true);
 						QueryString = ParseQueryStringArguments(this.request_url.Query);
 						requestCookies = Cookies.FromString(GetHeaderValue("Cookie", ""));
-						try
+
+						if (http_method.Equals("GET"))
 						{
-							if (http_method.Equals("GET"))
-							{
-								if (shouldLogRequestsToFile())
-									SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "GET", request_url.OriginalString);
-								handleGETRequest();
-							}
-							else if (http_method.Equals("POST"))
-							{
-								if (shouldLogRequestsToFile())
-									SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "POST", request_url.OriginalString);
-								handlePOSTRequest();
-							}
+							if (shouldLogRequestsToFile())
+								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "GET", request_url.OriginalString);
+							handleGETRequest();
 						}
-						catch (ThreadAbortException) { throw; }
-						catch (Exception e)
+						else if (http_method.Equals("POST"))
 						{
-							if (!IsOrdinaryDisconnectException(e))
-								SimpleHttpLogger.Log(e);
-							if (!responseWritten)
-								writeFailure("500 Internal Server Error");
-						}
-						finally
-						{
-							if (!responseWritten)
-								this.writeFailure();
+							if (shouldLogRequestsToFile())
+								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "POST", request_url.OriginalString);
+							handlePOSTRequest();
 						}
 					}
 					catch (ThreadAbortException) { throw; }
-					catch (HttpProcessorException e)
-					{
-						SimpleHttpLogger.LogVerbose(e);
-						if (shouldLogRequestsToFile())
-							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
-						if (!responseWritten)
-							this.writeFailure(e.Message);
-					}
 					catch (Exception e)
 					{
-						if (!IsOrdinaryDisconnectException(e))
-							SimpleHttpLogger.LogVerbose(e);
 						if (shouldLogRequestsToFile())
-							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url.OriginalString);
+							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url?.OriginalString);
+						if (IsOrdinaryDisconnectException(e))
+						{
+							SimpleHttpLogger.LogVerbose(e);
+							if (!responseWritten)
+								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request."); // This response should probably fail because the client has disconnected.
+							return;
+						}
+						else if (e.GetExceptionOfType<HttpProcessorException>() != null)
+						{
+							SimpleHttpLogger.LogVerbose(e);
+							if (!responseWritten)
+								this.writeFailure(e.Message);
+						}
+						else if (e.GetExceptionOfType<HttpProtocolException>() != null)
+						{
+							SimpleHttpLogger.LogVerbose(e);
+							if (!responseWritten)
+								this.writeFailure("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
+							return;
+						}
+						else
+						{
+							SimpleHttpLogger.Log(e);
+							if (!responseWritten)
+								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request.");
+						}
+					}
+					finally
+					{
 						if (!responseWritten)
-							this.writeFailure("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
+							this.writeFailure();
 					}
 					outputStream.Flush();
 					tcpStream.Flush();
 					// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
 					try
 					{
-						outputStream.Dispose();
+						outputStream.Dispose(); // Safe to dispose StreamWriter because it was created with the leaveOpen option.
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 					try
 					{
 						if (tcpStream is GZipStream)
-							tcpStream.Dispose();
+							tcpStream.Dispose(); // Safe to dispose GZipStream because it was created with the leaveOpen option.
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 					outputStream = null;
 					tcpStream = null;
 				}
-				while (keepAlive);
+				while (keepAlive && CheckIfStillConnected());
 			}
 			catch (ThreadAbortException) { throw; }
 			catch (Exception ex)
@@ -550,19 +553,8 @@ namespace BPUtil.SimpleHttp
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 			}
 		}
-
 		/// <summary>
-		/// Returns true if the specified Exception is a SocketException or contains a SocketException within its InnerException tree.
-		/// </summary>
-		/// <param name="ex">The exception.</param>
-		/// <returns></returns>
-		[Obsolete("Use the static method IsOrdinaryDisconnectException instead.", false)]
-		public bool isOrdinaryDisconnectException(Exception ex)
-		{
-			return IsOrdinaryDisconnectException(ex);
-		}
-		/// <summary>
-		/// Returns true if the specified Exception is a SocketException or HttpProtocolException or if one of these exception types is contained within the InnerException tree.
+		/// Returns true if the specified Exception is a SocketException or EndOfStreamException or if one of these exception types is contained within the InnerException tree.
 		/// </summary>
 		/// <param name="ex">The exception.</param>
 		/// <returns></returns>
@@ -583,7 +575,7 @@ namespace BPUtil.SimpleHttp
 			//}
 			if (ex is SocketException)
 				return true;
-			if (ex is HttpProtocolException)
+			if (ex is EndOfStreamException)
 				return true;
 			if (ex is AggregateException)
 			{
@@ -621,7 +613,7 @@ namespace BPUtil.SimpleHttp
 		{
 			string request = streamReadLine(tcpStream);
 			if (request == null)
-				throw new HttpProtocolException("End of stream");
+				throw new EndOfStreamException();
 			string[] tokens = request.Split(' ');
 			if (tokens.Length != 3)
 				throw new HttpProtocolException("invalid http request line: " + request);
@@ -646,7 +638,7 @@ namespace BPUtil.SimpleHttp
 			while ((line = streamReadLine(tcpStream)) != "")
 			{
 				if (line == null)
-					throw new HttpProtocolException("End of stream");
+					throw new EndOfStreamException();
 				int separator = line.IndexOf(':');
 				if (separator == -1)
 					throw new HttpProtocolException("invalid http header line: " + line);
@@ -758,7 +750,7 @@ namespace BPUtil.SimpleHttp
 					}
 					finally
 					{
-						sr.Dispose();
+						sr.Dispose(); // Disposes underlying MemoryStream because we did not construct the StreamReader with leaveOpen flag.
 					}
 				}
 				else
@@ -1044,6 +1036,8 @@ namespace BPUtil.SimpleHttp
 					catch (Exception ex)
 					{
 						if (ex.InnerException is ThreadAbortException)
+							return;
+						if (IsOrdinaryDisconnectException(ex))
 							return;
 						SimpleHttpLogger.LogVerbose(ex);
 					}
@@ -1372,25 +1366,32 @@ namespace BPUtil.SimpleHttp
 				return true; // The read poll returned false, so the connection is supposedly open with no data available to read, which is the normal state.
 			}
 		}
-	}
-
-	[Serializable]
-	internal class HttpProtocolException : Exception
-	{
-		public HttpProtocolException()
+		/// <summary>
+		/// An exception containing an HTTP response code and text.
+		/// </summary>
+		private class HttpProcessorException : Exception
 		{
+			/// <summary>
+			/// Constructs an exception containing an HTTP response code and text.
+			/// </summary>
+			/// <param name="message"></param>
+			public HttpProcessorException(string message) : base(message) { }
 		}
 
-		public HttpProtocolException(string message) : base(message)
+		/// <summary>
+		/// Occurs when the client committed a protocol violation.
+		/// </summary>
+		private class HttpProtocolException : Exception
 		{
+			public HttpProtocolException(string message) : base(message) { }
 		}
 
-		public HttpProtocolException(string message, Exception innerException) : base(message, innerException)
+		/// <summary>
+		/// Occurs when the end of stream is found during request processing. Inherits from <see cref="HttpProtocolException"/>.
+		/// </summary>
+		private class EndOfStreamException : HttpProtocolException
 		{
-		}
-
-		protected HttpProtocolException(SerializationInfo info, StreamingContext context) : base(info, context)
-		{
+			public EndOfStreamException() : base("End of stream") { }
 		}
 	}
 
