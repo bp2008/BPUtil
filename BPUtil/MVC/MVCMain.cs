@@ -149,7 +149,7 @@ namespace BPUtil.MVC
 		/// <returns></returns>
 		private ActionResult GenerateErrorPage(RequestContext context, Exception ex)
 		{
-			if (ErrorHandler != null)
+			if (!(ex is ClientException) && ErrorHandler != null)
 			{
 				try
 				{
