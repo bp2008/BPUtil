@@ -284,6 +284,11 @@ namespace BPUtil
 		/// </summary>
 		public Dictionary<string, string> environmentVariables = new Dictionary<string, string>();
 		/// <summary>
+		/// Working directory to set in the <see cref="ProcessStartInfo"/> (if not null).
+		/// </summary>
+		public string workingDirectory;
+
+		/// <summary>
 		/// Constructs an empty ProcessRunnerOptions.
 		/// </summary>
 		public ProcessRunnerOptions() { }
@@ -303,6 +308,8 @@ namespace BPUtil
 		{
 			foreach (KeyValuePair<string, string> v in environmentVariables)
 				psi.EnvironmentVariables[v.Key] = v.Value;
+			if (workingDirectory != null)
+				psi.WorkingDirectory = workingDirectory;
 		}
 
 		/// <summary>
@@ -359,8 +366,39 @@ namespace BPUtil
 		{
 			while (!process.HasExited)
 				process.WaitForExit(250);
-			process.WaitForExit();
+			process.WaitForExit(); // Sometimes necessary for finalization of the response streams?
 			return process.ExitCode;
+		}
+
+		/// <summary>
+		/// Waits for the process to exit, then returns true if the process exited in the allotted time.
+		/// </summary>
+		/// <param name="millisecondTimeout">Number of milliseconds to wait.  If this timeout expires, the method returns false.</param>
+		/// <param name="exitCode">The exit code returned by the process (only if the proxess exited in the allotted time).</param>
+		/// <returns></returns>
+		public bool WaitForExit(int millisecondTimeout, out int exitCode)
+		{
+			if (millisecondTimeout <= 0)
+				throw new ArgumentException("millisecondTimeout argument must be a positive number. " + millisecondTimeout + " is not accepted.", "millisecondTimeout");
+			Stopwatch sw = Stopwatch.StartNew();
+			while (!process.HasExited)
+			{
+				double remaining = millisecondTimeout - sw.ElapsedMilliseconds;
+				if (remaining <= 0)
+					break;
+				process.WaitForExit(((int)remaining).Clamp(1, 250));
+			}
+			if (process.HasExited)
+			{
+				process.WaitForExit(); // Sometimes necessary for finalization of the response streams?
+				exitCode = process.ExitCode;
+				return true;
+			}
+			else
+			{
+				exitCode = 0;
+				return false;
+			}
 		}
 	}
 	/// <summary>

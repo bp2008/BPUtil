@@ -35,22 +35,27 @@ namespace BPUtil.MVC
 			this.ErrorHandler = ErrorHandler;
 			IEnumerable<Type> controllerTypes = assembly.GetTypes().Where(IsController);
 			foreach (Type t in controllerTypes)
-				controllerInfoMap[t.Name] = new ControllerInfo(t);
+			{
+				if (controllerInfoMap.ContainsKey(t.Name.ToUpper()))
+					throw new Exception("Namespace \"" + Namespace + "\" defines multiple Controllers with the same name: \"" + t.Name + "\". This is unsupported.");
+				controllerInfoMap[t.Name.ToUpper()] = new ControllerInfo(t);
+			}
 		}
 
 		/// <summary>
 		/// Processes a request from a client, then returns true. Returns false if the request could not be processed. Exceptions thrown by a controller are caught here.
 		/// </summary>
 		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
-		/// <param name="requestPath">The path requested by the client, with leading '/' removed. (e.g. httpProcessor.requestedPage)</param>
+		/// <param name="requestPath">(Optional) The path requested by the client, with leading '/' removed. (defaults to httpProcessor.requestedPage)</param>
 		/// <returns></returns>
-		public bool ProcessRequest(HttpProcessor httpProcessor, string requestPath)
+		public bool ProcessRequest(HttpProcessor httpProcessor, string requestPath = null)
 		{
 			if (httpProcessor.responseWritten)
 				throw new Exception("MVCMain.ProcessRequest was called with an HttpProcessor that had already written a response.");
-
+			if (requestPath == null)
+				requestPath = httpProcessor.requestedPage;
 			RequestContext context = new RequestContext(httpProcessor, requestPath);
-			if (!controllerInfoMap.TryGetValue(context.ControllerName, out ControllerInfo controllerInfo))
+			if (!controllerInfoMap.TryGetValue(context.ControllerName.ToUpper(), out ControllerInfo controllerInfo))
 				return false;
 
 			ActionResult actionResult = null;
@@ -152,7 +157,7 @@ namespace BPUtil.MVC
 				}
 				catch { }
 			}
-			if (MVCGlobals.RemoteClientsMaySeeExceptionDetails || context.httpProcessor.IsLocalConnection)
+			if (MVCGlobals.RemoteClientsMaySeeExceptionDetails || context.httpProcessor.IsLocalConnection || ex is ClientException)
 				return new ExceptionHtmlResult(ex);
 			else
 				return new ExceptionHtmlResult(null);

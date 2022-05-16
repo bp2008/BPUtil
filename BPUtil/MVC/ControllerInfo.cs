@@ -28,9 +28,9 @@ namespace BPUtil.MVC
 			IEnumerable<MethodInfo> allMethods = controllerType.GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).Where(IsActionMethod);
 			foreach (MethodInfo methodInfo in allMethods)
 			{
-				if (this.methodMap.ContainsKey(methodInfo.Name))
+				if (this.methodMap.ContainsKey(methodInfo.Name.ToUpper()))
 					throw new Exception("Type \"" + controllerType.FullName + "\" defines multiple ActionMethods with the same name: \"" + methodInfo.Name + "\". This is unsupported.");
-				this.methodMap[methodInfo.Name] = methodInfo;
+				this.methodMap[methodInfo.Name.ToUpper()] = methodInfo;
 			}
 		}
 
@@ -41,10 +41,10 @@ namespace BPUtil.MVC
 		/// <returns></returns>
 		public ActionResult CallMethod(RequestContext context)
 		{
-			if (!methodMap.TryGetValue(context.ActionName, out MethodInfo methodInfo))
+			if (!methodMap.TryGetValue(context.ActionName.ToUpper(), out MethodInfo methodInfo))
 			{
 				context.AssumeActionNameIsArgumentForIndex();
-				if (!methodMap.TryGetValue(context.ActionName, out methodInfo))
+				if (!methodMap.TryGetValue(context.ActionName.ToUpper(), out methodInfo))
 					return null;
 			}
 			Controller controller = (Controller)Activator.CreateInstance(ControllerType);
@@ -71,7 +71,7 @@ namespace BPUtil.MVC
 			}
 			catch (Exception ex)
 			{
-				throw new Exception("Error processing arguments for method " + controller.GetType().FullName + "." + mi.Name + "(" + string.Join(", ", parameters.Select(p => p.ParameterType.Name)) + ")", ex);
+				throw new ClientException("Error processing arguments for method " + controller.GetType().FullName + "." + mi.Name + "(" + string.Join(", ", parameters.Select(p => p.ParameterType.Name)) + ")", ex);
 			}
 			return (ActionResult)mi.Invoke(controller, converted);
 		}
@@ -93,7 +93,7 @@ namespace BPUtil.MVC
 		/// <returns></returns>
 		private object[] ConvertInputParameters(ParameterInfo[] requiredParameters, string[] args)
 		{
-			if (requiredParameters.Length == 0)
+			if (requiredParameters.Length == 0 && args.Length == 1 && args[0] == "")
 				return null;
 			else if (requiredParameters.Length == 1 && requiredParameters[0].ParameterType == typeof(string[]))
 				return new object[] { args };

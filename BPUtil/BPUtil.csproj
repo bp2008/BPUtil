@@ -99,6 +99,7 @@
     </Compile>
     <Compile Include="ImageFile.cs" />
     <Compile Include="IO\BasicDataStream.cs" />
+    <Compile Include="MVC\ClientException.cs" />
     <Compile Include="MVC\Json.cs" />
     <Compile Include="NativeWin\Admin.cs" />
     <Compile Include="NativeWin\Audio.cs" />

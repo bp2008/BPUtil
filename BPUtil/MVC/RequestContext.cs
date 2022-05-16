@@ -19,8 +19,17 @@ namespace BPUtil.MVC
 		/// The "query" part of the URL.  E.g. for the url "Articles/Science/Moon.html?search=crater" the "query" part is "search=crater".
 		/// </summary>
 		public readonly string Query;
+		/// <summary>
+		/// Name of the controller as requested.
+		/// </summary>
 		public readonly string ControllerName;
+		/// <summary>
+		/// Action method name that was requested.
+		/// </summary>
 		public string ActionName { get; protected set; }
+		/// <summary>
+		/// Array of arguments (separated by '/' characters in the original path string).
+		/// </summary>
 		public string[] ActionArgs { get; protected set; }
 
 		internal List<KeyValuePair<string, string>> additionalResponseHeaders = new List<KeyValuePair<string, string>>();
