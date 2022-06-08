@@ -1374,7 +1374,7 @@ namespace BPUtil.SimpleHttp
 			/// <summary>
 			/// Constructs an exception containing an HTTP response code and text.
 			/// </summary>
-			/// <param name="message"></param>
+			/// <param name="message">Http response code and text, e.g. "413 Entity Too Large"</param>
 			public HttpProcessorException(string message) : base(message) { }
 		}
 
