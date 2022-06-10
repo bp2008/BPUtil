@@ -383,7 +383,7 @@ namespace BPUtil
 			}
 			try
 			{
-				HttpResponseMessage httpResponse = await client.SendAsync(requestMessage).ConfigureAwait(false);
+				HttpResponseMessage httpResponse = await client.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
 
 				response.StatusCode = (int)httpResponse.StatusCode;
 
@@ -399,7 +399,7 @@ namespace BPUtil
 				else
 					response.ContentType = "";
 
-				if (earlyTerminationBytes == int.MaxValue)
+				if (earlyTerminationBytes == int.MaxValue || earlyTerminationBytes < 0)
 				{
 					if (string.IsNullOrEmpty(fileDownloadPath))
 						response.data = await httpResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
@@ -415,7 +415,7 @@ namespace BPUtil
 						{
 							// Dump the response stream into the MemoryStream ms
 							int bytesRead = 1;
-							byte[] buffer = new byte[8000];
+							byte[] buffer = new byte[32768];
 							while (bytesRead > 0)
 							{
 								if (earlyTerminationBytes - ms.Length < buffer.Length)
@@ -459,7 +459,7 @@ namespace BPUtil
 			if (string.IsNullOrEmpty(fileDownloadPath))
 				return new MemoryStream();
 			else
-				return new FileStream(fileDownloadPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+				return new FileStream(fileDownloadPath, FileMode.Create, FileAccess.Write, FileShare.Read);
 		}
 	}
 }
