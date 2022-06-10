@@ -27,28 +27,33 @@ namespace BPUtil
 			catch { }
 		}
 		/// <summary>
-		/// Initializes via the static constructor, where [exePath] is determined by <see cref="Assembly.GetEntryAssembly"/>, and WritableDirectoryBase is a subdirectory of <see cref="Environment.SpecialFolder.CommonApplicationData"/>.  The directory pointed at by WritableDirectoryBase will not be created automatically, and the current working directory will not be changed.
+		/// This method does nothing, but allows initialization to occur via the static constructor, where [exePath] is determined by <see cref="Assembly.GetEntryAssembly"/>, and WritableDirectoryBase is a subdirectory of <see cref="Environment.SpecialFolder.CommonApplicationData"/>.  The directory pointed at by WritableDirectoryBase will not be created automatically, and the current working directory will not be changed.
 		/// </summary>
 		public static void Initialize()
 		{
 		}
 		/// <summary>
-		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is the same folder as the exe.
+		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is the parent folder of the exe.
 		/// </summary>
-		/// <param name="exePath">Pass in the path to the exe in the root directory of the application.  The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.  The exe name is used to create the CommonApplicationDataBase string.</param>
-		/// <param name="writablePath">A string to be appended to ApplicationDirectoryBase to create WritableDirectoryBase.  Example: "" or "writable/" or "somedir/writable/"</param>
+		/// <param name="exePath">
+		/// <para>Pass in the path to the exe in the root directory of the application. (if null/whitespace, then System.Windows.Forms.Application.ExecutablePath is used).</para>
+		/// <para>The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.</para>
+		/// <para>The exe name is used to create the CommonApplicationDataBase string.</para>
+		/// </param>
+		/// <param name="writablePath">A string to be appended to ApplicationDirectoryBase to form WritableDirectoryBase.  Example: "" or "writable/" or "somedir/writable/"</param>
 		public static void Initialize(string exePath, string writablePath = "")
 		{
-			executablePath = exePath.Replace('\\', '/');
-			FileInfo fiExe;
-			try
+			FileInfo fiExe = null;
+			if (!string.IsNullOrWhiteSpace(exePath))
 			{
-				fiExe = new FileInfo(executablePath);
+				try
+				{
+					fiExe = new FileInfo(exePath.Replace('\\', '/'));
+				}
+				catch { }
 			}
-			catch
-			{
+			if (fiExe == null)
 				fiExe = new FileInfo(System.Windows.Forms.Application.ExecutablePath);
-			}
 			executableNameWithExtension = fiExe.Name.Replace('\\', '/');
 			executableNameWithoutExtension = executableNameWithExtension.Substring(0, executableNameWithExtension.Length - fiExe.Extension.Length);
 			applicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
@@ -58,11 +63,19 @@ namespace BPUtil
 			errorFilePath = writableDirectoryBase + executableNameWithoutExtension + "Errors.txt";
 		}
 		/// <summary>
-		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is in <see cref="Environment.SpecialFolder.CommonApplicationData"/>.
+		/// Call this to initialize global static variables where the "WritableDirectoryBase" path is a subfolder of <see cref="Environment.SpecialFolder.CommonApplicationData"/>.
 		/// </summary>
-		/// <param name="exePath">Pass in the path to the exe in the root directory of the application.  The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.  The exe name is used to create the CommonApplicationDataBase string.</param>
-		/// <param name="programName">A globally unique program name that does not change and is unlikely to collide with other programs on the user's system.  This is used as part of the WritableDirectoryBase folder path, so you could pass in "MyApp" or to be even safer, "MyCompany/MyApp".</param>
-		/// <param name="CreateWritableDir">If true, writableDirectoryBase will be created if needed.</param>
+		/// <param name="exePath">
+		/// <para>Optionally pass in the path to the exe in the root directory of the application. (if null/whitespace, then System.Windows.Forms.Application.ExecutablePath is used).</para>
+		/// <para>The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.</para>
+		/// <para>The exe name is used in the error file name and exposed in <see cref="ExecutableNameWithExtension"/> and <see cref="ExecutableNameWithoutExtension"/> properties.</para>
+		/// </param>
+		/// <param name="programName">
+		/// <para>A globally unique program name that does not change and is unlikely to collide with other programs on the user's system.</para>
+		/// <para>This defines the subfolder(s) of CommonApplicationData where this app's WritableDirectoryBase will be located.</para>
+		/// <para>So you could pass in "MyApp" or to be even safer, "MyCompany/MyApp".</para>
+		/// </param>
+		/// <param name="CreateWritableDir">If true, the directory defined by WritableDirectoryBase will be created if needed.</param>
 		public static void InitializeProgram(string exePath, string programName, bool CreateWritableDir = false)
 		{
 			Initialize(exePath);
@@ -85,10 +98,9 @@ namespace BPUtil
 			writableDirectoryBase = diWritable.FullName.TrimEnd('\\', '/').Replace('\\', '/') + '/';
 		}
 
-		private static string executablePath;
 		private static string executableNameWithExtension;
 		/// <summary>
-		/// Gets the name of the executable file, including the extension.  e.g. "MyProgram.exe" => "MyProgram.exe"
+		/// Gets the name of the executable file, including the extension.  e.g. "MyProgram.exe"
 		/// </summary>
 		public static string ExecutableNameWithExtension
 		{

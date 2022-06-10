@@ -65,9 +65,10 @@ namespace BPUtil
 				LinuxWindowsService(myService, options, settingsObj);
 				return;
 			}
+			string serviceName = !string.IsNullOrWhiteSpace(options.ServiceName) ? options.ServiceName : myService.ServiceName;
 			if (Environment.UserInteractive)
 			{
-				string Title = myService.ServiceName + " " + Globals.AssemblyVersion + " Service Manager";
+				string Title = serviceName + " " + Globals.AssemblyVersion + " Service Manager";
 
 				List<ButtonDefinition> additionalButtons = new List<ButtonDefinition>();
 				if (options.ServiceManagerButtons_OpenDataFolder)
@@ -93,8 +94,7 @@ namespace BPUtil
 
 				try
 				{
-					System.Windows.Forms.Application.Run(new ServiceManager(Title, myService.ServiceName, additionalButtons.ToArray()));
-
+					System.Windows.Forms.Application.Run(new ServiceManager(Title, serviceName, additionalButtons.ToArray()));
 				}
 				finally
 				{
@@ -175,16 +175,20 @@ namespace BPUtil
 		/// </summary>
 		public bool RunForDebugging = false;
 		/// <summary>
-		/// If true, the "Open Data Folder" button will be added to the service manager.
+		/// If true, the "Open Data Folder" button will be added to the service manager. True by default.
 		/// </summary>
 		public bool ServiceManagerButtons_OpenDataFolder = true;
 		/// <summary>
-		/// If true, the "Update Settings File" button may be added to the service manager if other conditions are met.
+		/// If true, the "Update Settings File" button may be added to the service manager if other conditions are met. True by default.
 		/// </summary>
 		public bool ServiceManagerButtons_UpdateSettingsFile = true;
 		/// <summary>
 		/// Buttons to add to the service manager.
 		/// </summary>
 		public IEnumerable<ButtonDefinition> ServiceManagerButtons = null;
+		/// <summary>
+		/// If not null or whitespace, this service name will override what was defined in the service's designer file.
+		/// </summary>
+		public string ServiceName = null;
 	}
 }
