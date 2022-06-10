@@ -77,5 +77,22 @@ namespace BPUtil
 		{
 			return true;
 		}
+		/// <summary>
+		/// An example validation callback which approves the certificate without looking at it, if the target hostname is exactly "127.0.0.1".
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="certificate"></param>
+		/// <param name="chain"></param>
+		/// <param name="sslPolicyErrors"></param>
+		/// <returns></returns>
+		public static bool Allow_127_0_0_1_ValidationCallback(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+		{
+			if (sender is HttpWebRequest)
+			{
+				HttpWebRequest request = (HttpWebRequest)sender;
+				return request.Host == "127.0.0.1";
+			}
+			return false;
+		}
 	}
 }
