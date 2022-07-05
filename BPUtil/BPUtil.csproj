@@ -61,6 +61,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AsymmetricEncryption.cs" />
     <Compile Include="BackupRotate.cs" />
     <Compile Include="Base64UrlMod.cs" />
     <Compile Include="BPQueue.cs" />

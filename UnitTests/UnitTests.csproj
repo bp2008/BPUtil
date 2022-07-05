@@ -49,6 +49,7 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Helpers\IterateOverKeyContainers.cs" />
     <Compile Include="TestBackupRotate.cs" />
     <Compile Include="TestBase64UrlMod.cs" />
     <Compile Include="TestByteUtil.cs" />
