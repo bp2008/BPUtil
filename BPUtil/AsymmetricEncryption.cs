@@ -24,6 +24,11 @@ namespace BPUtil
 	/// <summary>
 	/// <para>Performs asymmetric encryption and decryption using RSACryptoServiceProvider and OAEP padding. This class is thread-safe.</para>
 	/// <para>This class can also be used to generate and export keys for later use.</para>
+	/// <para>Based on testing, the payload size limits are as follows:</para>
+	/// <para>* 1024-bit key: 86-byte payload limit</para>
+	/// <para>* 2048-bit key: 214-byte payload limit</para>
+	/// <para>* 3072-bit key: 342-byte payload limit</para>
+	/// <para>* 4096-bit key: 470-byte payload limit</para>
 	/// </summary>
 	public static class AsymmetricEncryption
 	{
