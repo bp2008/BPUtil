@@ -68,97 +68,81 @@ namespace UnitTests
 			byte[] decryptedBytes3 = AsymmetricEncryption.DecryptWithKey(privateKey, encryptedBytes);
 			Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes3));
 		}
+
+		[TestMethod]
+		public void TestAsymmetricEncryptionWithMachineKeystore()
+		{
+			TestAsymmetricEncryptionWithKeystore(Keystore.Machine, MachineKeyContainerName, Keystore.User, UserKeyContainerName);
+		}
+		[TestMethod]
+		public void TestAsymmetricEncryptionWithUserKeystore()
+		{
+			TestAsymmetricEncryptionWithKeystore(Keystore.User, UserKeyContainerName, Keystore.Machine, MachineKeyContainerName);
+		}
 		private const string MachineKeyContainerName = "BpUtil Asymmetric Machine Test Key #1";
-		private const string UserKeyContainerName = "BpUtil Asymmetric Machine Test Key #1";
+		private const string UserKeyContainerName = "BpUtil Asymmetric User Test Key #1";
+		private void TestAsymmetricEncryptionWithKeystore(Keystore correctKeystore, string correctKeyContainerName, Keystore wrongKeystore, string wrongKeyContainerName)
+		{
+			CleanupKeystores();
+			byte[] plainBytes = ByteUtil.Utf8NoBOM.GetBytes("Secret String For Testing");
+
+			try
+			{
+				// Key should be automatically generated
+				byte[] encryptedBytes = AsymmetricEncryption.EncryptWithKeyFromKeystore(correctKeystore, correctKeyContainerName, plainBytes);
+				Assert.IsFalse(ByteUtil.ByteArraysMatch(plainBytes, encryptedBytes));
+
+				byte[] decryptedBytes = AsymmetricEncryption.DecryptWithKeyFromKeystore(correctKeystore, correctKeyContainerName, encryptedBytes);
+				Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes));
+
+				// Key should be retrievable from correct keystore
+				string publicKeyLoaded = AsymmetricEncryption.GetPublicKeyFromKeystore(correctKeystore, correctKeyContainerName);
+				Assert.IsNotNull(publicKeyLoaded);
+
+				// Key should NOT be retrievable from incorrect keystore
+				string publicKeyFromWrongKeystore = AsymmetricEncryption.GetPublicKeyFromKeystore(wrongKeystore, correctKeyContainerName);
+				Assert.IsNull(publicKeyFromWrongKeystore);
+
+				Assert.IsTrue(KeystoreContainsKeyContainer(correctKeystore, correctKeyContainerName));
+				Assert.IsFalse(KeystoreContainsKeyContainer(wrongKeystore, correctKeyContainerName));
+				Assert.IsFalse(KeystoreContainsKeyContainer(correctKeystore, wrongKeyContainerName));
+				Assert.IsFalse(KeystoreContainsKeyContainer(wrongKeystore, wrongKeyContainerName));
+
+				// Test encryption using exported public key.
+				byte[] encryptedBytes2 = AsymmetricEncryption.EncryptWithKey(publicKeyLoaded, plainBytes);
+				Assert.IsFalse(ByteUtil.ByteArraysMatch(plainBytes, encryptedBytes2));
+
+				byte[] decryptedBytes2 = AsymmetricEncryption.DecryptWithKeyFromKeystore(correctKeystore, correctKeyContainerName, encryptedBytes2);
+				Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes2));
+
+				// Should be possible to replace existing keys by calling GenerateNewKeysInKeystore
+				AsymmetricEncryption.GenerateNewKeysInKeystore(correctKeystore, correctKeyContainerName, out string publicKey2);
+				Assert.AreNotEqual(publicKeyLoaded, publicKey2);
+
+				// Getting the key should now return the new key
+				string publicKeyLoaded2 = AsymmetricEncryption.GetPublicKeyFromKeystore(correctKeystore, correctKeyContainerName);
+				Assert.AreEqual(publicKey2, publicKeyLoaded2);
+			}
+			finally
+			{
+				AsymmetricEncryption.DeletePublicKeyFromKeystore(correctKeystore, correctKeyContainerName);
+				Assert.IsFalse(KeystoreContainsKeyContainer(correctKeystore, correctKeyContainerName));
+
+				// Confirm the delete can be done redundantly without negative effect
+				AsymmetricEncryption.DeletePublicKeyFromKeystore(correctKeystore, correctKeyContainerName);
+
+				Assert.IsFalse(KeystoreContainsKeyContainer(correctKeystore, correctKeyContainerName));
+				Assert.IsFalse(KeystoreContainsKeyContainer(wrongKeystore, correctKeyContainerName));
+				Assert.IsFalse(KeystoreContainsKeyContainer(correctKeystore, wrongKeyContainerName));
+				Assert.IsFalse(KeystoreContainsKeyContainer(wrongKeystore, wrongKeyContainerName));
+			}
+		}
 		private void CleanupKeystores()
 		{
 			AsymmetricEncryption.DeletePublicKeyFromKeystore(Keystore.Machine, MachineKeyContainerName);
 			AsymmetricEncryption.DeletePublicKeyFromKeystore(Keystore.User, MachineKeyContainerName);
 			AsymmetricEncryption.DeletePublicKeyFromKeystore(Keystore.Machine, UserKeyContainerName);
 			AsymmetricEncryption.DeletePublicKeyFromKeystore(Keystore.User, UserKeyContainerName);
-		}
-		[TestMethod]
-		public void TestAsymmetricEncryptionWithMachineKeystore()
-		{
-			CleanupKeystores();
-			byte[] plainBytes = ByteUtil.Utf8NoBOM.GetBytes("Secret String For Testing");
-
-			try
-			{
-				byte[] encryptedBytes = AsymmetricEncryption.EncryptWithKeyFromKeystore(Keystore.Machine, MachineKeyContainerName, plainBytes);
-				Assert.IsFalse(ByteUtil.ByteArraysMatch(plainBytes, encryptedBytes));
-
-				byte[] decryptedBytes = AsymmetricEncryption.DecryptWithKeyFromKeystore(Keystore.Machine, MachineKeyContainerName, encryptedBytes);
-				Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes));
-
-				// Key should be retrievable from correct keystore
-				AsymmetricEncryption.GenerateNewKeysInKeystore(Keystore.Machine, MachineKeyContainerName, out string publicKey);
-				string publicKeyLoaded = AsymmetricEncryption.GetPublicKeyFromKeystore(Keystore.Machine, MachineKeyContainerName);
-				Assert.AreEqual(publicKey, publicKeyLoaded);
-
-				// Key should NOT be retrievable from incorrect keystore
-				string publicKeyFromWrongKeystore = AsymmetricEncryption.GetPublicKeyFromKeystore(Keystore.User, MachineKeyContainerName);
-				Assert.IsNull(publicKeyFromWrongKeystore);
-
-				Assert.IsTrue(KeystoreContainsKeyContainer(Keystore.Machine, MachineKeyContainerName));
-				Assert.IsFalse(KeystoreContainsKeyContainer(Keystore.User, MachineKeyContainerName));
-
-				// Test encryption using exported public key.
-				byte[] encryptedBytes2 = AsymmetricEncryption.EncryptWithKey(publicKeyLoaded, plainBytes);
-				Assert.IsFalse(ByteUtil.ByteArraysMatch(plainBytes, encryptedBytes2));
-
-				byte[] decryptedBytes2 = AsymmetricEncryption.DecryptWithKeyFromKeystore(Keystore.Machine, MachineKeyContainerName, encryptedBytes2);
-				Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes2));
-			}
-			finally
-			{
-				AsymmetricEncryption.DeletePublicKeyFromKeystore(Keystore.Machine, MachineKeyContainerName);
-
-				Assert.IsFalse(KeystoreContainsKeyContainer(Keystore.Machine, MachineKeyContainerName));
-				Assert.IsFalse(KeystoreContainsKeyContainer(Keystore.User, MachineKeyContainerName));
-			}
-		}
-		[TestMethod]
-		public void TestAsymmetricEncryptionWithUserKeystore()
-		{
-			CleanupKeystores();
-			byte[] plainBytes = ByteUtil.Utf8NoBOM.GetBytes("Secret String For Testing");
-
-			try
-			{
-				// Test encryption and decryption
-				byte[] encryptedBytes = AsymmetricEncryption.EncryptWithKeyFromKeystore(Keystore.User, UserKeyContainerName, plainBytes);
-				Assert.IsFalse(ByteUtil.ByteArraysMatch(plainBytes, encryptedBytes));
-
-				byte[] decryptedBytes = AsymmetricEncryption.DecryptWithKeyFromKeystore(Keystore.User, UserKeyContainerName, encryptedBytes);
-				Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes));
-
-				// Key should be retrievable from correct keystore
-				AsymmetricEncryption.GenerateNewKeysInKeystore(Keystore.User, UserKeyContainerName, out string publicKey);
-				string publicKeyLoaded = AsymmetricEncryption.GetPublicKeyFromKeystore(Keystore.User, UserKeyContainerName);
-				Assert.AreEqual(publicKey, publicKeyLoaded);
-
-				// Key should NOT be retrievable from incorrect keystore
-				string publicKeyFromWrongKeystore = AsymmetricEncryption.GetPublicKeyFromKeystore(Keystore.Machine, UserKeyContainerName);
-				Assert.IsNull(publicKeyFromWrongKeystore);
-
-				Assert.IsFalse(KeystoreContainsKeyContainer(Keystore.Machine, MachineKeyContainerName));
-				Assert.IsTrue(KeystoreContainsKeyContainer(Keystore.User, MachineKeyContainerName));
-
-				// Test encryption using exported public key.
-				byte[] encryptedBytes2 = AsymmetricEncryption.EncryptWithKey(publicKeyLoaded, plainBytes);
-				Assert.IsFalse(ByteUtil.ByteArraysMatch(plainBytes, encryptedBytes2));
-
-				byte[] decryptedBytes2 = AsymmetricEncryption.DecryptWithKeyFromKeystore(Keystore.User, UserKeyContainerName, encryptedBytes2);
-				Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes2));
-			}
-			finally
-			{
-				AsymmetricEncryption.DeletePublicKeyFromKeystore(Keystore.User, UserKeyContainerName);
-
-				Assert.IsFalse(KeystoreContainsKeyContainer(Keystore.Machine, MachineKeyContainerName));
-				Assert.IsFalse(KeystoreContainsKeyContainer(Keystore.User, MachineKeyContainerName));
-			}
 		}
 		/// <summary>
 		/// <para>If true, we determine if the keystore contains the key by simply trying to load it and seeing if it worked.</para>

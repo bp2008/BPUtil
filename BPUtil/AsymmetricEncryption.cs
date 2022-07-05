@@ -50,7 +50,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// <para>Generates new 4096-bit RSA keys, saving them in a key container in the operating system's keystore.</para>
+		/// <para>Generates new 4096-bit RSA keys, saving them in a key container in the operating system's keystore. If keys already exist here, they are overwritten.</para>
 		/// <para>The public key is exported via an out string parameter, but the private key information is not exported.</para>
 		/// <para>If you need to export the private key, you shouldn't bother using the operating system's keystore.</para>
 		/// </summary>
@@ -59,6 +59,7 @@ namespace BPUtil
 		/// <param name="publicKeyBase64">CspBlob containing public key information, base64 encoded. Can be used for encrypting using <see cref="EncryptWithKey"/>.</param>
 		public static void GenerateNewKeysInKeystore(Keystore keystore, string keyContainerName, out string publicKeyBase64)
 		{
+			DeletePublicKeyFromKeystore(keystore, keyContainerName);
 			CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
 			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(keySize, cspParams))
 			{
@@ -87,6 +88,7 @@ namespace BPUtil
 			}
 			try
 			{
+				rsa.PersistKeyInCsp = true;
 				return Convert.ToBase64String(rsa.ExportCspBlob(false));
 			}
 			finally
@@ -110,7 +112,7 @@ namespace BPUtil
 			}
 			catch (CryptographicException)
 			{
-				return; // Thrown if the key does not exist, because of CspProviderFlags.UseExistingKey
+				return; // if the key does not exist...
 			}
 			try
 			{
@@ -153,7 +155,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Encrypts the given data using a key from the operating system's keystore.
+		/// Encrypts the given data using a key from the operating system's keystore. If the key does not already exist, a new one is created.
 		/// </summary>
 		/// <param name="keystore">Specify which keystore the key should be loaded from.</param>
 		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
@@ -164,11 +166,12 @@ namespace BPUtil
 			CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
 			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(cspParams))
 			{
+				rsa.PersistKeyInCsp = true;
 				return rsa.Encrypt(data, true);
 			}
 		}
 		/// <summary>
-		/// Decrypts the given data using a key from the operating system's keystore.
+		/// Decrypts the given data using a key from the operating system's keystore. If the key does not already exist, a new one is created.
 		/// </summary>
 		/// <param name="keystore">Specify which keystore the key should be loaded from.</param>
 		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
@@ -181,6 +184,7 @@ namespace BPUtil
 			{
 				if (rsa.PublicOnly)
 					throw new ApplicationException("The given key string did not contain private key components, and therefore cannot be used for decrypting.");
+				rsa.PersistKeyInCsp = true;
 				return rsa.Decrypt(data, true);
 			}
 		}
@@ -194,8 +198,9 @@ namespace BPUtil
 		{
 			CspParameters cspParams = new CspParameters(1); // 1 for RSA.  This is also the default if omitted.
 			cspParams.KeyContainerName = keyContainerName;
+			cspParams.Flags = CspProviderFlags.NoFlags;
 			if (keystore == Keystore.Machine)
-				cspParams.Flags = CspProviderFlags.UseMachineKeyStore;
+				cspParams.Flags |= CspProviderFlags.UseMachineKeyStore;
 			return cspParams;
 		}
 	}
