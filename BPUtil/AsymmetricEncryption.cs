@@ -67,13 +67,14 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Returns the public key from the RSA key in the specified key container. Behavior if the key does not already exist is configured via argument.
+		/// Returns the RSA key from the specified key container. Behavior if the key does not already exist is configured via argument.
 		/// </summary>
 		/// <param name="keystore">Specify which keystore the key should be loaded from.</param>
 		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
 		/// <param name="createIfNoExist">If true, the key is created if it does not exist (can fail and throw exception).  If false, returns null if the key does not exist or is not accessible (not expected to throw).</param>
+		/// <param name="publicOnly">If true, only the public key is returned. If false, the private key is returned.</param>
 		/// <returns></returns>
-		public static string GetPublicKeyFromKeystore(Keystore keystore, string keyContainerName, bool createIfNoExist)
+		public static string GetKeyFromKeystore(Keystore keystore, string keyContainerName, bool createIfNoExist, bool publicOnly = true)
 		{
 			if (createIfNoExist)
 			{
@@ -104,6 +105,19 @@ namespace BPUtil
 				{
 					rsa.Dispose();
 				}
+			}
+		}
+		/// <summary>
+		/// Returns an RSAParameters object containing the key parameters from the given base64 CspBlob.
+		/// </summary>
+		/// <param name="keyBase64">CspBlob containing public or private key information, base64 encoded.</param>
+		/// <returns></returns>
+		public static RSAParameters ConvertKeyBase64ToRSAParameters(string keyBase64)
+		{
+			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
+			{
+				rsa.ImportCspBlob(Convert.FromBase64String(keyBase64));
+				return rsa.ExportParameters(!rsa.PublicOnly);
 			}
 		}
 		/// <summary>
