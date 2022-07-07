@@ -96,11 +96,11 @@ namespace UnitTests
 				Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes));
 
 				// Key should be retrievable from correct keystore
-				string publicKeyLoaded = AsymmetricEncryption.GetPublicKeyFromKeystore(correctKeystore, correctKeyContainerName);
+				string publicKeyLoaded = AsymmetricEncryption.GetPublicKeyFromKeystore(correctKeystore, correctKeyContainerName, false);
 				Assert.IsNotNull(publicKeyLoaded);
 
 				// Key should NOT be retrievable from incorrect keystore
-				string publicKeyFromWrongKeystore = AsymmetricEncryption.GetPublicKeyFromKeystore(wrongKeystore, correctKeyContainerName);
+				string publicKeyFromWrongKeystore = AsymmetricEncryption.GetPublicKeyFromKeystore(wrongKeystore, correctKeyContainerName, false);
 				Assert.IsNull(publicKeyFromWrongKeystore);
 
 				Assert.IsTrue(KeystoreContainsKeyContainer(correctKeystore, correctKeyContainerName));
@@ -120,8 +120,17 @@ namespace UnitTests
 				Assert.AreNotEqual(publicKeyLoaded, publicKey2);
 
 				// Getting the key should now return the new key
-				string publicKeyLoaded2 = AsymmetricEncryption.GetPublicKeyFromKeystore(correctKeystore, correctKeyContainerName);
+				string publicKeyLoaded2 = AsymmetricEncryption.GetPublicKeyFromKeystore(correctKeystore, correctKeyContainerName, false);
 				Assert.AreEqual(publicKey2, publicKeyLoaded2);
+
+				// Delete the key
+				AsymmetricEncryption.DeletePublicKeyFromKeystore(correctKeystore, correctKeyContainerName);
+				Assert.IsNull(AsymmetricEncryption.GetPublicKeyFromKeystore(correctKeystore, correctKeyContainerName, false));
+
+				// Try to generate a new one using the "Get" method.
+				string publicKeyLoaded3 = AsymmetricEncryption.GetPublicKeyFromKeystore(correctKeystore, correctKeyContainerName, true);
+				Assert.AreNotEqual(publicKeyLoaded, publicKeyLoaded3);
+				Assert.AreNotEqual(publicKey2, publicKeyLoaded3);
 			}
 			finally
 			{
@@ -159,7 +168,7 @@ namespace UnitTests
 		{
 			if (fastKeystoreCheck)
 			{
-				return AsymmetricEncryption.GetPublicKeyFromKeystore(keystore, keyContainerName) != null;
+				return AsymmetricEncryption.GetPublicKeyFromKeystore(keystore, keyContainerName, false) != null;
 			}
 			else
 			{

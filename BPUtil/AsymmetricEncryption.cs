@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -50,7 +51,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// <para>Generates new 4096-bit RSA keys, saving them in a key container in the operating system's keystore. If keys already exist here, they are overwritten.</para>
+		/// <para>Generates new 4096-bit RSA keys, saving them in a key container in the operating system's keystore. Any existing key container with this name is deleted first.</para>
 		/// <para>The public key is exported via an out string parameter, but the private key information is not exported.</para>
 		/// <para>If you need to export the private key, you shouldn't bother using the operating system's keystore.</para>
 		/// </summary>
@@ -60,44 +61,53 @@ namespace BPUtil
 		public static void GenerateNewKeysInKeystore(Keystore keystore, string keyContainerName, out string publicKeyBase64)
 		{
 			DeletePublicKeyFromKeystore(keystore, keyContainerName);
-			CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
-			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(keySize, cspParams))
+			using (RSACryptoServiceProvider rsa = GetRsaCspWithKeystore(keystore, keyContainerName))
 			{
-				rsa.PersistKeyInCsp = true;
 				publicKeyBase64 = Convert.ToBase64String(rsa.ExportCspBlob(false));
 			}
 		}
 		/// <summary>
-		/// Returns the public key from the RSA key in the specified key container. Returns null if the named key container does not exist in the specified keystore.
+		/// Returns the public key from the RSA key in the specified key container. Behavior if the key does not already exist is configured via argument.
 		/// </summary>
 		/// <param name="keystore">Specify which keystore the key should be loaded from.</param>
 		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
+		/// <param name="createIfNoExist">If true, the key is created if it does not exist (can fail and throw exception).  If false, returns null if the key does not exist or is not accessible (not expected to throw).</param>
 		/// <returns></returns>
-		public static string GetPublicKeyFromKeystore(Keystore keystore, string keyContainerName)
+		public static string GetPublicKeyFromKeystore(Keystore keystore, string keyContainerName, bool createIfNoExist)
 		{
-			CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
-			cspParams.Flags |= CspProviderFlags.UseExistingKey;
-			RSACryptoServiceProvider rsa;
-			try
+			if (createIfNoExist)
 			{
-				rsa = new RSACryptoServiceProvider(cspParams);
+				using (RSACryptoServiceProvider rsa = GetRsaCspWithKeystore(keystore, keyContainerName))
+				{
+					return Convert.ToBase64String(rsa.ExportCspBlob(false));
+				}
 			}
-			catch (CryptographicException)
+			else
 			{
-				return null; // Thrown if the key does not exist, because of CspProviderFlags.UseExistingKey
-			}
-			try
-			{
-				rsa.PersistKeyInCsp = true;
-				return Convert.ToBase64String(rsa.ExportCspBlob(false));
-			}
-			finally
-			{
-				rsa.Dispose();
+				CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
+				cspParams.Flags |= CspProviderFlags.UseExistingKey;
+				RSACryptoServiceProvider rsa;
+				try
+				{
+					rsa = new RSACryptoServiceProvider(cspParams);
+				}
+				catch (CryptographicException)
+				{
+					return null; // Thrown if the key does not exist, because of CspProviderFlags.UseExistingKey
+				}
+				try
+				{
+					rsa.PersistKeyInCsp = true;
+					return Convert.ToBase64String(rsa.ExportCspBlob(false));
+				}
+				finally
+				{
+					rsa.Dispose();
+				}
 			}
 		}
 		/// <summary>
-		/// Deletes the RSA key with the specified key container name.
+		/// Deletes the RSA key with the specified key container name, if it exists.
 		/// </summary>
 		/// <param name="keystore">Specify which keystore the key should be deleted from.</param>
 		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
@@ -108,14 +118,16 @@ namespace BPUtil
 			RSACryptoServiceProvider rsa;
 			try
 			{
+				// Try to open existing key
 				rsa = new RSACryptoServiceProvider(keySize, cspParams);
 			}
 			catch (CryptographicException)
 			{
-				return; // if the key does not exist...
+				return; // Key does not exist or is inaccessible.  No further action can be done.
 			}
 			try
 			{
+				// Delete existing key
 				rsa.PersistKeyInCsp = false;
 				rsa.Clear();
 			}
@@ -163,10 +175,8 @@ namespace BPUtil
 		/// <returns></returns>
 		public static byte[] EncryptWithKeyFromKeystore(Keystore keystore, string keyContainerName, byte[] data)
 		{
-			CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
-			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(cspParams))
+			using (RSACryptoServiceProvider rsa = GetRsaCspWithKeystore(keystore, keyContainerName))
 			{
-				rsa.PersistKeyInCsp = true;
 				return rsa.Encrypt(data, true);
 			}
 		}
@@ -179,12 +189,10 @@ namespace BPUtil
 		/// <returns></returns>
 		public static byte[] DecryptWithKeyFromKeystore(Keystore keystore, string keyContainerName, byte[] data)
 		{
-			CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
-			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(cspParams))
+			using (RSACryptoServiceProvider rsa = GetRsaCspWithKeystore(keystore, keyContainerName))
 			{
 				if (rsa.PublicOnly)
 					throw new ApplicationException("The given key string did not contain private key components, and therefore cannot be used for decrypting.");
-				rsa.PersistKeyInCsp = true;
 				return rsa.Decrypt(data, true);
 			}
 		}
@@ -200,8 +208,34 @@ namespace BPUtil
 			cspParams.KeyContainerName = keyContainerName;
 			cspParams.Flags = CspProviderFlags.NoFlags;
 			if (keystore == Keystore.Machine)
+			{
 				cspParams.Flags |= CspProviderFlags.UseMachineKeyStore;
+				CryptoKeyAccessRule rule = new CryptoKeyAccessRule("everyone", CryptoKeyRights.FullControl, AccessControlType.Allow);
+				cspParams.CryptoKeySecurity = new CryptoKeySecurity();
+				cspParams.CryptoKeySecurity.SetAccessRule(rule);
+			}
 			return cspParams;
+		}
+		/// <summary>
+		/// Creates an RSACryptoServiceProvider with a persistent key using the given keystore and key container name. The key is created if it does not exist.
+		/// </summary>
+		/// <param name="keystore">Specify which keystore should be used.</param>
+		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
+		/// <returns></returns>
+		private static RSACryptoServiceProvider GetRsaCspWithKeystore(Keystore keystore, string keyContainerName)
+		{
+			CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
+			RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(keySize, cspParams);
+			try
+			{
+				rsa.PersistKeyInCsp = true;
+				return rsa;
+			}
+			catch
+			{
+				rsa.Dispose();
+				throw;
+			}
 		}
 	}
 }
