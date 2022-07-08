@@ -80,7 +80,7 @@ namespace BPUtil
 			{
 				using (RSACryptoServiceProvider rsa = GetRsaCspWithKeystore(keystore, keyContainerName))
 				{
-					return Convert.ToBase64String(rsa.ExportCspBlob(false));
+					return Convert.ToBase64String(rsa.ExportCspBlob(!publicOnly));
 				}
 			}
 			else
@@ -99,7 +99,7 @@ namespace BPUtil
 				try
 				{
 					rsa.PersistKeyInCsp = true;
-					return Convert.ToBase64String(rsa.ExportCspBlob(false));
+					return Convert.ToBase64String(rsa.ExportCspBlob(!publicOnly));
 				}
 				finally
 				{
