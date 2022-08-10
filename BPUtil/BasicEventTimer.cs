@@ -7,9 +7,8 @@ using System.Threading.Tasks;
 
 namespace BPUtil
 {
-
 	/// <summary>
-	/// A class which makes it easy to time different parts of a procedure individually and later report the time in seconds taken for each part.
+	/// A class which makes it easy to time different parts of a procedure individually and later report the time in seconds taken for each part.  This class is NOT thread-safe.
 	/// 
 	/// Example:
 	/// 
@@ -39,11 +38,19 @@ namespace BPUtil
 	{
 		private Stopwatch watch;
 		private string currentEvent;
+		private Dictionary<string, TimedEvent> dict_events;
 		private List<TimedEvent> events;
 		private string numberFormatString;
-		public BasicEventTimer(string numberFormatString = "0.00")
+		private bool mergeSameEventTimes = false;
+		/// <summary>
+		/// Constructs a new BasicEventTimer which helps measure execution time of code.
+		/// </summary>
+		/// <param name="numberFormatString">A format string for the (double) number of seconds an event took.</param>
+		/// <param name="mergeSameEventTimes">If true, multiple events with the same name will have their times added together into one record.  Useful when repeating a sequence of operations in a loop.</param>
+		public BasicEventTimer(string numberFormatString = "0.00", bool mergeSameEventTimes = false)
 		{
 			this.numberFormatString = numberFormatString;
+			this.mergeSameEventTimes = mergeSameEventTimes;
 			Reset();
 		}
 		/// <summary>
@@ -56,6 +63,8 @@ namespace BPUtil
 			watch = new Stopwatch();
 			currentEvent = null;
 			events = new List<TimedEvent>();
+			if (mergeSameEventTimes)
+				dict_events = new Dictionary<string, TimedEvent>();
 		}
 		/// <summary>
 		/// Starts timing a new event, automatically stopping and logging the time for the previous event, if there was one.
@@ -77,9 +86,46 @@ namespace BPUtil
 			if (currentEvent == null)
 				return;
 			watch.Stop();
-			events.Add(new TimedEvent(currentEvent, watch.Elapsed, numberFormatString));
+			AddEvent(new TimedEvent(currentEvent, watch.Elapsed, numberFormatString));
 			watch.Reset();
 			currentEvent = null;
+		}
+
+		private void AddEvent(TimedEvent timedEvent)
+		{
+			if (mergeSameEventTimes)
+			{
+				TimedEvent existing;
+				if (dict_events.TryGetValue(timedEvent.name, out existing))
+					existing.time += timedEvent.time;
+				else
+				{
+					dict_events[timedEvent.name] = timedEvent;
+					events.Add(timedEvent);
+				}
+			}
+			else
+				events.Add(timedEvent);
+		}
+		/// <summary>
+		/// Returns the time (in seconds) elapsed for the named event. If the event is not found, returns 0.
+		/// </summary>
+		public double Duration(string name)
+		{
+			return DurationTimeSpan(name).TotalSeconds;
+		}
+		/// <summary>
+		/// Returns the time elapsed for the named event. If the event is not found, returns TimeSpan.Zero.
+		/// </summary>
+		public TimeSpan DurationTimeSpan(string name)
+		{
+			foreach (TimedEvent ev in events)
+			{
+				if (ev.name == name)
+					return ev.time;
+			}
+
+			return TimeSpan.Zero;
 		}
 		/// <summary>
 		/// Returns an string containing the time in seconds measured for each event.  Events are separated by HTML "br" tags.
@@ -113,6 +159,28 @@ namespace BPUtil
 				sb.Append("e" + i + ";desc=\"" + events[i].name.Replace('"', '\'') + "\";dur=" + durationMs);
 			}
 			return sb.ToString();
+		}
+		/// <summary>
+		/// Gets the number of events currently saved in the instance.
+		/// </summary>
+		public int EventCount { get { return events.Count; } }
+		/// <summary>
+		/// Gets the amount of time that passed for the event at the given index. Throws an exception if the given event index is not valid. See <see cref="EventCount"/>.
+		/// </summary>
+		/// <param name="eventIndex">0-based index of the event to get the elapsed time for.</param>
+		/// <returns></returns>
+		public TimeSpan GetEventTime(int eventIndex)
+		{
+			return events[eventIndex].time;
+		}
+		/// <summary>
+		/// Gets the amount of time that passed for the event with the given name. Returns null if the given event name is not found.
+		/// </summary>
+		/// <param name="eventName">Name of the event to get the elapsed time for.</param>
+		/// <returns></returns>
+		public TimeSpan? GetEventTime(string eventName)
+		{
+			return events.FirstOrDefault(e => e.name == eventName)?.time;
 		}
 		private class TimedEvent
 		{
