@@ -16,7 +16,7 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// A map of Controller type names to ControllerInfo instances.
 		/// </summary>
-		private static SortedList<string, ControllerInfo> controllerInfoMap = new SortedList<string, ControllerInfo>();
+		private SortedList<string, ControllerInfo> controllerInfoMap = new SortedList<string, ControllerInfo>();
 
 		/// <summary>
 		/// The Namespace containing the controllers for this instance.
