@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace BPUtil.SimpleHttp.WebSockets
 {
 	/// <summary>
-	/// A WebSocket server connection providing synchronous access methods.
+	/// A WebSocket server connection providing synchronous access methods. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
 	/// </summary>
 	public class WebSocket
 	{
@@ -39,7 +39,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 
 		#region Constructors and Initialization
 		/// <summary>
-		/// Creates a new WebSocket bound to a <see cref="TcpClient"/> that is already connected.
+		/// Creates a new WebSocket bound to a <see cref="TcpClient"/> that is already connected. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
 		/// </summary>
 		/// <param name="tcpc">A connected <see cref="TcpClient"/> to bind to the new WebSocket instance.</param>
 		public WebSocket(TcpClient tcpc)
@@ -50,7 +50,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 		}
 
 		/// <summary>
-		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/> that has already read the request headers.  The WebSocket handshake will be completed automatically.
+		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/> that has already read the request headers.  The WebSocket handshake will be completed automatically.  It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
 		/// </summary>
 		/// <param name="p">An <see cref="HttpProcessor"/> to bind to the new WebSocket instance.</param>
 		public WebSocket(HttpProcessor p) : this(p.tcpClient)
@@ -73,7 +73,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 		}
 
 		/// <summary>
-		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/>.  The WebSocket handshake will be completed automatically.  This constructor calls StartReading automatically.
+		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/>.  The WebSocket handshake will be completed automatically.  This constructor calls StartReading automatically. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
 		/// </summary>
 		/// <param name="p">An <see cref="HttpProcessor"/> to bind to the new WebSocket instance.</param>
 		/// <param name="onMessageReceived">A callback method which is called whenever a message is received from the WebSocket.</param>
