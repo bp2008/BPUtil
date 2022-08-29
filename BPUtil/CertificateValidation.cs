@@ -18,6 +18,10 @@ namespace BPUtil
 	{
 		private static object myLock = new object();
 		private static RemoteCertificateValidationCallback[] callbacks = new RemoteCertificateValidationCallback[0];
+		/// <summary>
+		/// If true, the CertificateValidation class will always call all validation callbacks. If false, it will stop as soon as one returns true.
+		/// </summary>
+		public static bool AlwaysCallAllCallbacks = false;
 		static CertificateValidation()
 		{
 			RegisterCallback(DefaultValidationCallback);
@@ -59,11 +63,16 @@ namespace BPUtil
 
 		private static bool CallAllCallbacks(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
 		{
+			bool result = false;
 			RemoteCertificateValidationCallback[] localCallbacks = callbacks;
 			foreach (RemoteCertificateValidationCallback callback in localCallbacks)
 				if (callback(sender, certificate, chain, sslPolicyErrors))
-					return true;
-			return false;
+				{
+					result = true;
+					if (!AlwaysCallAllCallbacks)
+						return result;
+				}
+			return result;
 		}
 		/// <summary>
 		/// An example validation callback which simply returns true.  Registering this callback will effectively disable certificate validation.
