@@ -2,6 +2,9 @@
 
 namespace BPUtil.SimpleHttp.WebSockets
 {
+	/// <summary>
+	/// Base class for a frame from a WebSocket.  This will actually be of type <see cref="WebSocketBinaryFrame"/> or <see cref="WebSocketTextFrame"/>.
+	/// </summary>
 	public class WebSocketFrame
 	{
 		/// <summary>
@@ -14,6 +17,9 @@ namespace BPUtil.SimpleHttp.WebSockets
 		}
 	}
 
+	/// <summary>
+	/// A frame from a WebSocket. Contains a byte array of data.
+	/// </summary>
 	public class WebSocketBinaryFrame : WebSocketFrame
 	{
 		public byte[] Data;
@@ -36,6 +42,9 @@ namespace BPUtil.SimpleHttp.WebSockets
 		}
 	}
 
+	/// <summary>
+	///  A frame from a WebSocket. Contains a string of data.
+	/// </summary>
 	public class WebSocketTextFrame : WebSocketBinaryFrame
 	{
 		public string Text;
