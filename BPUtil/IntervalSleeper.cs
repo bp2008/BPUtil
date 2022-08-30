@@ -15,10 +15,16 @@ namespace BPUtil
 	{
 		Stopwatch sw = new Stopwatch();
 		/// <summary>
+		/// The maximum number of milliseconds to sleep between checking cancellation tokens.  Very small values may slightly increase CPU usage.
+		/// </summary>
+		public readonly long CancellationResponseTimeMilliseconds;
+		/// <summary>
 		/// Constructs a new IntervalSleeper and starts the internal stopwatch.
 		/// </summary>
-		public IntervalSleeper()
+		/// <param name="CancellationResponseTimeMilliseconds">The maximum number of milliseconds to sleep between checking cancellation tokens.  Very small values may slightly increase CPU usage.</param>
+		public IntervalSleeper(long CancellationResponseTimeMilliseconds = 100)
 		{
+			this.CancellationResponseTimeMilliseconds = CancellationResponseTimeMilliseconds;
 			sw.Start();
 		}
 		/// <summary>
@@ -45,7 +51,7 @@ namespace BPUtil
 			long remaining = wakeTimeMilliseconds - sw.ElapsedMilliseconds;
 			while (remaining > 0 && !cancellationToken.IsCancellationRequested)
 			{
-				Thread.Sleep((int)Math.Min(100, remaining));
+				Thread.Sleep((int)Math.Min(CancellationResponseTimeMilliseconds, remaining));
 				remaining = wakeTimeMilliseconds - sw.ElapsedMilliseconds;
 			}
 			sw.Restart();
@@ -60,7 +66,7 @@ namespace BPUtil
 			long remaining = wakeTimeMilliseconds - sw.ElapsedMilliseconds;
 			while (remaining > 0 && !returnTrueIfShouldCancel())
 			{
-				Thread.Sleep((int)Math.Min(100, remaining));
+				Thread.Sleep((int)Math.Min(CancellationResponseTimeMilliseconds, remaining));
 				remaining = wakeTimeMilliseconds - sw.ElapsedMilliseconds;
 			}
 			sw.Restart();
