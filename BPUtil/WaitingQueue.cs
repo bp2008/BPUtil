@@ -57,5 +57,16 @@ namespace BPUtil
 				result = default(T);
 			return false;
 		}
+
+		/// <summary>
+		/// Gets the number of elements contained in the <see cref="WaitingQueue{T}"/>.
+		/// </summary>
+		public int Count
+		{
+			get
+			{
+				return innerQueue.Count;
+			}
+		}
 	}
 }

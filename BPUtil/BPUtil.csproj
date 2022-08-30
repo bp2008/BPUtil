@@ -131,6 +131,7 @@
     <Compile Include="SimpleHttp\TLS\Implementation\TLSPlaintext.cs" />
     <Compile Include="SimpleHttp\TLS\TlsServerNameReader.cs" />
     <Compile Include="IO\UnreadableStream.cs" />
+    <Compile Include="StackHelper.cs" />
     <Compile Include="StringCache.cs" />
     <Compile Include="StringParser.cs" />
     <Compile Include="StringSorting.cs" />

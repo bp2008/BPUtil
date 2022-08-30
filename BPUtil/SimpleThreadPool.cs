@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -21,13 +22,17 @@ namespace BPUtil
 		int _currentMaxThreads;
 		int _currentLiveThreads = 0;
 		int _currentIdleThreads = 0;
-		int threadNamingCounter = -1;
+		long threadNamingCounter = -1;
 		bool threadsAreBackgroundThreads;
+		long _totalActionsQueued = 0;
+		long _totalActionsStarted = 0;
+		long _totalActionsFinished = 0;
 		/// <summary>
 		/// Gets the name of this thread pool.
 		/// </summary>
 		public string PoolName { get; }
 		volatile bool abort = false;
+		object threadStartLock = new object();
 		/// <summary>
 		/// Gets the number of threads that are currently available, including those which are busy and those which are idle.
 		/// </summary>
@@ -90,6 +95,36 @@ namespace BPUtil
 				Interlocked.Exchange(ref _currentMinThreads, value);
 			}
 		}
+		/// <summary>
+		/// Gets the total number of actions that have been queued in this pool.
+		/// </summary>
+		public long TotalActionsQueued
+		{
+			get
+			{
+				return Interlocked.Read(ref _totalActionsQueued);
+			}
+		}
+		/// <summary>
+		/// Gets the total number of actions that have been started by this pool.
+		/// </summary>
+		public long TotalActionsStarted
+		{
+			get
+			{
+				return Interlocked.Read(ref _totalActionsStarted);
+			}
+		}
+		/// <summary>
+		/// Gets the total number of actions that have been finished by this pool.
+		/// </summary>
+		public long TotalActionsFinished
+		{
+			get
+			{
+				return Interlocked.Read(ref _totalActionsFinished);
+			}
+		}
 		private Action<Exception, string> logErrorAction = SimpleHttpLogger.Log;
 		/// <summary>
 		/// Creates a new SimpleThreadPool.
@@ -113,25 +148,29 @@ namespace BPUtil
 			this.threadsAreBackgroundThreads = useBackgroundThreads;
 			if (logErrorAction != null)
 				this.logErrorAction = logErrorAction;
-			SpawnNewThreads(minThreads);
+			SpawnNewThreads();
 		}
 		/// <summary>
 		/// Creates new threads.
 		/// </summary>
 		/// <returns></returns>
-		private void SpawnNewThreads(int count)
+		private void SpawnNewThreads()
 		{
 			if (abort)
 				return;
-			for (int i = 0; i < count; i++)
+
+			if (CurrentLiveThreads < MinThreads || (CurrentLiveThreads < MaxThreads && TotalActionsQueued - TotalActionsFinished > CurrentLiveThreads))
 			{
-				if (CurrentLiveThreads < MaxThreads)
+				lock (threadStartLock)
 				{
-					Interlocked.Increment(ref _currentLiveThreads);
-					Thread t = new Thread(threadLoop);
-					t.IsBackground = threadsAreBackgroundThreads;
-					t.Name = PoolName + " " + Interlocked.Increment(ref threadNamingCounter);
-					t.Start();
+					while (CurrentLiveThreads < MinThreads || (CurrentLiveThreads < MaxThreads && TotalActionsQueued - TotalActionsFinished > CurrentLiveThreads))
+					{
+						Interlocked.Increment(ref _currentLiveThreads);
+						Thread t = new Thread(threadLoop);
+						t.IsBackground = threadsAreBackgroundThreads;
+						t.Name = PoolName + " " + Interlocked.Increment(ref threadNamingCounter);
+						t.Start();
+					}
 				}
 			}
 		}
@@ -149,15 +188,22 @@ namespace BPUtil
 		/// <summary>
 		/// Adds the specified action to the queue, to be called as soon as possible by a thread from the pool.
 		/// </summary>
-		/// <param name="action"></param>
+		/// <param name="action">Action to run on the thread pool.</param>
 		public void Enqueue(Action action)
 		{
 			if (abort || action == null)
 				return;
-			bool startNewThread = CurrentIdleThreads < 1;
-			actionQueue.Enqueue(action);
-			if (startNewThread || CurrentIdleThreads < 1)
-				SpawnNewThreads(1); // Spawning the thread AFTER enqueuing ensures that the new thread won't need to wait (as long) for a job to do.
+			StackTrace callerStack = Debugger.IsAttached ? new StackTrace() : null;
+			Interlocked.Increment(ref _totalActionsQueued);
+			if (callerStack == null)
+				actionQueue.Enqueue(action);
+			else
+				actionQueue.Enqueue(() =>
+				{
+					StackHelper.currentThreadSavedStack = callerStack;
+					action();
+				});
+			SpawnNewThreads();
 		}
 
 		private void threadLoop()
@@ -170,7 +216,9 @@ namespace BPUtil
 					// Check for queued actions to perform.
 					while (!abort && actionQueue.TryDequeue(out Action action, threadTimeoutMilliseconds))
 					{
+						Interlocked.Increment(ref _totalActionsStarted);
 						Interlocked.Decrement(ref _currentIdleThreads);
+						SpawnNewThreads();
 						try
 						{
 							action();
@@ -178,19 +226,23 @@ namespace BPUtil
 						catch (ThreadAbortException) { throw; }
 						catch (Exception ex)
 						{
-							logErrorAction?.Invoke(ex, "Error on " + Thread.CurrentThread.Name);
+							StackTrace savedStack = StackHelper.currentThreadSavedStack;
+							string savedStackStr = savedStack == null ? "" : ". Called by " + savedStack.ToString();
+							logErrorAction?.Invoke(ex, "Error on " + Thread.CurrentThread.Name + savedStackStr);
 						}
 						finally
 						{
+							Interlocked.Increment(ref _totalActionsFinished);
 							Interlocked.Increment(ref _currentIdleThreads);
+							StackHelper.currentThreadSavedStack = null;
 						}
 					}
 
 					// Timeout has occurred.
 					if (CurrentLiveThreads <= MinThreads)
-						continue;// If this thread quit, we would dip below the minimum live threads limit.
+						continue; // If this thread quit, we would dip below the minimum live threads limit.
 					else
-						return;// This thread is allowed to quit
+						return; // This thread is allowed to quit
 				}
 			}
 			catch (OperationCanceledException) { }
