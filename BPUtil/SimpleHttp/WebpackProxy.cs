@@ -59,7 +59,8 @@ namespace BPUtil.SimpleHttp
 					}
 				}
 			}
-			ex = TryProxy(p);
+			if (!p.responseWritten)
+				ex = TryProxy(p);
 			if (ex == null)
 				return;
 			Logger.Debug(ex, "Failed to proxy \"" + p.request_url.AbsolutePath + "\" to webpack dev server.");
