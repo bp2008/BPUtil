@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -20,13 +21,13 @@ namespace BPUtil.SimpleHttp.WebSockets
 		public static int MAX_PAYLOAD_BYTES = 20000000;
 
 		/// <summary>
-		/// The TcpClient instance this WebSocket is bound to.
+		/// The TcpClient instance this WebSocket is bound to. Do not use the GetStream method, as it does not support TLS (instead use <see cref="tcpStream"/>).
 		/// </summary>
 		public readonly TcpClient tcpClient;
 		/// <summary>
-		/// The NetworkStream belonging to <see cref="tcpClient"/>.
+		/// The readable/writeable stream for the data connection.  Typically either NetworkStream or SslStream.
 		/// </summary>
-		public readonly NetworkStream tcpStream;
+		public readonly Stream tcpStream;
 
 		protected Thread thrWebSocketRead;
 		protected Action<WebSocketFrame> onMessageReceived = delegate { };
@@ -39,7 +40,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 
 		#region Constructors and Initialization
 		/// <summary>
-		/// Creates a new WebSocket bound to a <see cref="TcpClient"/> that is already connected. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
+		/// Creates a new WebSocket bound to a <see cref="TcpClient"/> that is already connected. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection. If TLS is being used, this is not the constructor you want.
 		/// </summary>
 		/// <param name="tcpc">A connected <see cref="TcpClient"/> to bind to the new WebSocket instance.</param>
 		public WebSocket(TcpClient tcpc)
@@ -58,6 +59,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 			if (!IsWebSocketRequest(p))
 				throw new Exception("Unable to create a WebSocket from a connection that did not request a websocket upgrade.");
 
+			this.tcpStream = p.tcpStream;
 			handshakePerformed = true;
 			string version = p.GetHeaderValue("Sec-WebSocket-Version");
 			if (version != "13")
