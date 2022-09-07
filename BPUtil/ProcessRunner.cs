@@ -287,6 +287,14 @@ namespace BPUtil
 		/// Working directory to set in the <see cref="ProcessStartInfo"/> (if not null).
 		/// </summary>
 		public string workingDirectory;
+		/// <summary>
+		/// Gets or sets a value indicating whether to use the operating system shell to start the process. (Default: false)
+		/// </summary>
+		public bool UseShellExecute = false;
+		/// <summary>
+		/// Gets or sets a value indicating whether to start the process in a new window. (Default: true)
+		/// </summary>
+		public bool CreateNoWindow = true;
 
 		/// <summary>
 		/// Constructs an empty ProcessRunnerOptions.
@@ -310,6 +318,8 @@ namespace BPUtil
 				psi.EnvironmentVariables[v.Key] = v.Value;
 			if (workingDirectory != null)
 				psi.WorkingDirectory = workingDirectory;
+			psi.UseShellExecute = UseShellExecute;
+			psi.CreateNoWindow = CreateNoWindow;
 		}
 
 		/// <summary>
