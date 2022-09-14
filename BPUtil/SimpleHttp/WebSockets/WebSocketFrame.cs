@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace BPUtil.SimpleHttp.WebSockets
 {
@@ -22,6 +23,9 @@ namespace BPUtil.SimpleHttp.WebSockets
 	/// </summary>
 	public class WebSocketBinaryFrame : WebSocketFrame
 	{
+		/// <summary>
+		/// The unmasked data of this frame. Use Head.GetMaskedBytes(byte[]) to get masked data.
+		/// </summary>
 		public byte[] Data;
 
 		internal WebSocketBinaryFrame(WebSocketFrameHeader head, Stream stream) : base(head)
@@ -30,15 +34,15 @@ namespace BPUtil.SimpleHttp.WebSockets
 				throw new WebSocketException(WebSocketCloseCode.InternalError, "WebSocketBinaryFrame stream constructor is not compatible with fragmented frames.");
 
 			if (head.payloadLength > (ulong)WebSocket.MAX_PAYLOAD_BYTES)
-				throw new WebSocketException(WebSocketCloseCode.MessageTooBig, null);
+				throw new WebSocketException(WebSocketCloseCode.MessageTooBig, "Host does not accept payloads larger than " + WebSocket.MAX_PAYLOAD_BYTES + ". " + head.payloadLength + " is too large.");
 
 			this.Data = ByteUtil.ReadNBytes(stream, (int)head.payloadLength);
 			Head.XORMask(this.Data);
 		}
 		internal WebSocketBinaryFrame(WebSocketFrameHeader head, byte[] data) : base(head)
 		{
+			Head.XORMask(data);
 			this.Data = data;
-			Head.XORMask(this.Data);
 		}
 	}
 
@@ -47,15 +51,29 @@ namespace BPUtil.SimpleHttp.WebSockets
 	/// </summary>
 	public class WebSocketTextFrame : WebSocketBinaryFrame
 	{
-		public string Text;
+		/// <summary>
+		/// Gets or sets the text of this frame by coverting to/from the Data property of the underlying WebSocketBinaryFrame. If you need to read this value multiple times, it is better to cache the result.
+		/// </summary>
+		public string Text
+		{
+			get
+			{
+				return ByteUtil.ReadUtf8(Data);
+			}
+			set
+			{
+				Data = ByteUtil.Utf8NoBOM.GetBytes(value);
+			}
+		}
 
 		internal WebSocketTextFrame(WebSocketFrameHeader head, Stream stream) : base(head, stream)
 		{
-			this.Text = ByteUtil.ReadUtf8(Data);
 		}
 		internal WebSocketTextFrame(WebSocketFrameHeader head, byte[] data) : base(head, data)
 		{
-			this.Text = ByteUtil.ReadUtf8(Data);
+		}
+		internal WebSocketTextFrame(WebSocketFrameHeader head, string data) : base(head, ByteUtil.Utf8NoBOM.GetBytes(data))
+		{
 		}
 	}
 
@@ -71,7 +89,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// </summary>
 		public string Message;
 
-		internal WebSocketCloseFrame() : base(new WebSocketFrameHeader(WebSocketOpcode.Close, 0), new byte[0]) { }
+		/// <summary>
+		/// Constructs a WebSocketCloseFrame.
+		/// </summary>
+		/// <param name="iAmClient">Pass true if this frame is being created by a WebSocketClient with the intent to send the frame to a server.</param>
+		internal WebSocketCloseFrame(bool iAmClient) : base(new WebSocketFrameHeader(WebSocketOpcode.Close, 0, iAmClient), new byte[0]) { }
 
 		internal WebSocketCloseFrame(WebSocketFrameHeader head, Stream stream) : base(head, stream)
 		{

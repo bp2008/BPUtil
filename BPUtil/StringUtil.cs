@@ -37,6 +37,25 @@ namespace BPUtil
 			return sb.ToString();
 		}
 		/// <summary>
+		/// Gets a random character between ASCII values 32 (inclusive) and 127 (exclusive).
+		/// </summary>
+		/// <returns></returns>
+		public static char GetRandomAsciiPrintableChar()
+		{
+			return (char)SecureRandom.Next(32, 127);
+		}
+		/// <summary>
+		/// Gets a random character between ASCII values 32 (inclusive) and 127 (exclusive).
+		/// </summary>
+		/// <returns></returns>
+		public static string GetRandomAsciiPrintableString(ushort length)
+		{
+			StringBuilder sb = new StringBuilder(length);
+			for (int i = 0; i < length; i++)
+				sb.Append(GetRandomAsciiPrintableChar());
+			return sb.ToString();
+		}
+		/// <summary>
 		/// <para>Encodes the characters '&lt;', '&gt;', '"', '&amp;', and apostrophe as html entities so that the resulting string may be inserted into an html attribute.</para>
 		/// </summary>
 		/// <remarks>

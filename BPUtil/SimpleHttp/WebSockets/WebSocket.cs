@@ -23,11 +23,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <summary>
 		/// The TcpClient instance this WebSocket is bound to. Do not use the GetStream method, as it does not support TLS (instead use <see cref="tcpStream"/>).
 		/// </summary>
-		public readonly TcpClient tcpClient;
+		public TcpClient tcpClient { get; protected set; }
 		/// <summary>
 		/// The readable/writeable stream for the data connection.  Typically either NetworkStream or SslStream.
 		/// </summary>
-		public readonly Stream tcpStream;
+		public Stream tcpStream { get; protected set; }
 
 		protected Thread thrWebSocketRead;
 		protected Action<WebSocketFrame> onMessageReceived = delegate { };
@@ -37,8 +37,15 @@ namespace BPUtil.SimpleHttp.WebSockets
 		protected bool handshakePerformed = false;
 		protected bool sentCloseCode = false;
 		protected bool isClosing = false;
+		private volatile bool abort = false;
 
 		#region Constructors and Initialization
+		/// <summary>
+		/// Empty constructor for use by WebSocketClient.
+		/// </summary>
+		protected WebSocket()
+		{
+		}
 		/// <summary>
 		/// Creates a new WebSocket bound to a <see cref="TcpClient"/> that is already connected. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection. If TLS is being used, this is not the constructor you want.
 		/// </summary>
@@ -110,14 +117,25 @@ namespace BPUtil.SimpleHttp.WebSockets
 				thrWebSocketRead.Start();
 			}
 		}
-
+		/// <summary>
+		/// Attempts to close this WebSocket.
+		/// </summary>
 		public void Close()
 		{
 			lock (startStopLock)
 			{
 				isClosing = true;
-				thrWebSocketRead?.Abort();
+				abort = true;
+				this.tcpClient.Close();
 			}
+		}
+		/// <summary>
+		/// Returns true if this WebSocket is acting as a client.
+		/// </summary>
+		/// <returns></returns>
+		protected virtual bool isClient()
+		{
+			return false;
 		}
 
 		#endregion
@@ -131,9 +149,9 @@ namespace BPUtil.SimpleHttp.WebSockets
 				WebSocketFrameHeader fragmentStart = null;
 				List<byte[]> fragments = new List<byte[]>();
 				ulong totalLength = 0;
-				while (true)
+				while (!abort)
 				{
-					WebSocketFrameHeader head = new WebSocketFrameHeader(tcpStream);
+					WebSocketFrameHeader head = new WebSocketFrameHeader(tcpStream, isClient());
 
 					if (head.opcode == WebSocketOpcode.Close)
 					{
@@ -153,7 +171,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 					}
 					else if (head.opcode == WebSocketOpcode.Pong)
 					{
-						WebSocketPongFrame pingFrame = new WebSocketPongFrame(head, tcpStream);
+						WebSocketPongFrame pongFrame = new WebSocketPongFrame(head, tcpStream);
 						continue;
 					}
 					else if (head.opcode == WebSocketOpcode.Continuation || head.opcode == WebSocketOpcode.Text || head.opcode == WebSocketOpcode.Binary)
@@ -167,7 +185,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 						// Validate Payload Length
 						totalLength += head.payloadLength;
 						if (totalLength > (ulong)MAX_PAYLOAD_BYTES)
-							throw new WebSocketException(WebSocketCloseCode.MessageTooBig);
+							throw new WebSocketException(WebSocketCloseCode.MessageTooBig, "Host does not accept payloads larger than " + WebSocket.MAX_PAYLOAD_BYTES + ". Payload length is now " + totalLength + ".");
 
 						// Keep track of the frame that started each set of fragments
 						if (fragmentStart == null)
@@ -224,19 +242,40 @@ namespace BPUtil.SimpleHttp.WebSockets
 						}
 					}
 				}
+				closeFrame = new WebSocketCloseFrame(isClient());
+				closeFrame.CloseCode = WebSocketCloseCode.GoingAway;
+				Try.Swallow(() =>
+				{
+					tcpClient.SendTimeout = Math.Min(tcpClient.SendTimeout, 1000);
+					Send(closeFrame.CloseCode);
+				});
 			}
 			catch (ThreadAbortException)
 			{
 				if (closeFrame == null)
 				{
-					closeFrame = new WebSocketCloseFrame();
-					closeFrame.CloseCode = WebSocketCloseCode.Normal;
+					closeFrame = new WebSocketCloseFrame(isClient());
+					closeFrame.CloseCode = WebSocketCloseCode.GoingAway;
 				}
 				Try.Swallow(() =>
 				{
 					tcpClient.SendTimeout = Math.Min(tcpClient.SendTimeout, 1000);
 					Send(closeFrame.CloseCode);
 				});
+			}
+			catch (WebSocketException ex)
+			{
+				SimpleHttpLogger.LogVerbose(ex);
+				if (closeFrame == null)
+				{
+					closeFrame = new WebSocketCloseFrame(isClient());
+					if (ex.closeCode != null)
+						closeFrame.CloseCode = ex.closeCode.Value;
+					else
+						closeFrame.CloseCode = WebSocketCloseCode.InternalError;
+					closeFrame.Message = ex.CloseReason;
+				}
+				Try.Swallow(() => { Send(closeFrame.CloseCode); });
 			}
 			catch (Exception ex)
 			{
@@ -246,7 +285,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 
 				if (closeFrame == null)
 				{
-					closeFrame = new WebSocketCloseFrame();
+					closeFrame = new WebSocketCloseFrame(isClient());
 					closeFrame.CloseCode = isDisconnect ? WebSocketCloseCode.ConnectionLost : WebSocketCloseCode.InternalError;
 				}
 				Try.Swallow(() => { Send(closeFrame.CloseCode); });
@@ -258,7 +297,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 					if (closeFrame == null)
 					{
 						// This should not happen, but it is possible that further development could leave a code path where closeFrame did not get set.
-						closeFrame = new WebSocketCloseFrame();
+						closeFrame = new WebSocketCloseFrame(isClient());
 						closeFrame.CloseCode = WebSocketCloseCode.InternalError;
 					}
 					onClose(closeFrame);
@@ -324,14 +363,22 @@ namespace BPUtil.SimpleHttp.WebSockets
 
 			sentCloseCode = true;
 		}
+		/// <summary>
+		/// Sends a ping frame to the remote endpoint to help prevent the underlying socket/protocol from timing out.
+		/// </summary>
+		public void SendPing()
+		{
+			SendFrame(WebSocketOpcode.Ping, ByteUtil.GenerateRandomBytes(4));
+		}
 		internal void SendFrame(WebSocketOpcode opcode, byte[] data)
 		{
 			lock (sendLock)
 			{
 				// Write frame header
-				WebSocketFrameHeader head = new WebSocketFrameHeader(opcode, data.Length);
+				WebSocketFrameHeader head = new WebSocketFrameHeader(opcode, data.Length, isClient());
 				head.Write(tcpStream);
 				// Write payload
+				data = head.GetMaskedBytes(data);
 				tcpStream.Write(data, 0, data.Length);
 			}
 		}

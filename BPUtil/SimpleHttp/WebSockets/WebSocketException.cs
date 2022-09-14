@@ -9,11 +9,18 @@ namespace BPUtil.SimpleHttp.WebSockets
 	public class WebSocketException : Exception
 	{
 		public readonly WebSocketCloseCode? closeCode;
+		private string _closeReason = null;
 		public string CloseReason
 		{
 			get
 			{
-				return GetCloseReason(closeCode);
+				if (_closeReason == null)
+					_closeReason = GetCloseReason(closeCode);
+				return _closeReason;
+			}
+			set
+			{
+				_closeReason = value;
 			}
 		}
 		public WebSocketException(WebSocketCloseCode? closeCode) : this(closeCode, GetCloseReason(closeCode)) { }
@@ -21,6 +28,8 @@ namespace BPUtil.SimpleHttp.WebSockets
 		public WebSocketException(WebSocketCloseCode? closeCode, string message) : base(message)
 		{
 			this.closeCode = closeCode;
+			if (!string.IsNullOrWhiteSpace(message))
+				CloseReason = message;
 		}
 
 		public static string GetCloseReason(WebSocketCloseCode? closeCode)

@@ -55,14 +55,21 @@ namespace BPUtil.SimpleHttp.WebSockets
 			maskBytes = other.maskBytes;
 			payloadLength = other.payloadLength;
 		}
-		internal WebSocketFrameHeader(Stream networkStream)
+		/// <summary>
+		/// Constructs a non-fragmented WebSocketFrameHeader by deserializing it from a stream.
+		/// </summary>
+		/// <param name="networkStream">Stream to deserialize the header from.</param>
+		/// <param name="iAmClient">Pass true if this header is being created by a WebSocketClient that is reading a header from a server.</param>
+		internal WebSocketFrameHeader(Stream networkStream, bool iAmClient)
 		{
 			byte[] head = ByteUtil.ReadNBytes(networkStream, 2);
 			fin = (head[0] & 0b10000000) > 0; // The FIN bit tells whether this is the last message in a series. If it's 0, then the server will keep listening for more parts of the message; otherwise, the server should consider the message delivered.
 			opcode = (WebSocketOpcode)(head[0] & 0b00001111);
 			mask = (head[1] & 0b10000000) > 0; // The MASK bit simply tells whether the message is encoded.
-			if (!mask)
-				throw new WebSocketException(WebSocketCloseCode.ProtocolError, "Client must mask all outgoing frames."); // TODO: Send a "Close frame" with a status code of 1002 (protocol error) // Clients MUST mask all frames they send.
+			if (!iAmClient && !mask)
+				throw new WebSocketException(WebSocketCloseCode.ProtocolError, "Client must mask all outgoing frames.");
+			else if (iAmClient && mask)
+				throw new WebSocketException(WebSocketCloseCode.ProtocolError, "Server must not mask outgoing frames.");
 
 			payloadLength = (ulong)(head[1] & 0b01111111);
 			if (payloadLength == 126)
@@ -75,19 +82,23 @@ namespace BPUtil.SimpleHttp.WebSockets
 			if (isControlFrame && payloadLength > 125)
 				throw new WebSocketException(WebSocketCloseCode.ProtocolError, "Control frame exceeded maximum payload length");
 
-			maskBytes = ByteUtil.ReadNBytes(networkStream, 4);
+			if (mask)
+				maskBytes = ByteUtil.ReadNBytes(networkStream, 4);
 		}
 		/// <summary>
 		/// Constructs a non-fragmented WebSocketFrameHeader for the purpose of serializing it to a stream with <see cref="Write(Stream)"/>.
 		/// </summary>
 		/// <param name="opcode">The opcode to include in the header.</param>
 		/// <param name="payloadLength">The payload length to include in the header.</param>
-		internal WebSocketFrameHeader(WebSocketOpcode opcode, int payloadLength)
+		/// <param name="iAmClient">Pass true if this header is being created by a WebSocketClient with the intent to send the frame to a server.</param>
+		internal WebSocketFrameHeader(WebSocketOpcode opcode, int payloadLength, bool iAmClient)
 		{
 			this.fin = true;
 			this.opcode = opcode;
-			this.mask = false;
+			this.mask = iAmClient;
 			this.payloadLength = (ulong)payloadLength;
+			if (mask)
+				maskBytes = ByteUtil.GenerateRandomBytes(4);
 		}
 
 		/// <summary>
@@ -110,9 +121,10 @@ namespace BPUtil.SimpleHttp.WebSockets
 		internal void Write(Stream stream)
 		{
 			byte[] head;
+			int maskSize = mask ? 4 : 0;
 			if (payloadLength > ushort.MaxValue)
 			{
-				head = new byte[2 + 8];
+				head = new byte[2 + 8 + maskSize];
 				head[0] = GetFirstHeaderByte();
 				head[1] = 127;
 				ByteUtil.WriteUInt64(payloadLength, head, 2);
@@ -120,16 +132,21 @@ namespace BPUtil.SimpleHttp.WebSockets
 			}
 			else if (payloadLength > 125)
 			{
-				head = new byte[2 + 2];
+				head = new byte[2 + 2 + maskSize];
 				head[0] = GetFirstHeaderByte();
 				head[1] = 126;
 				ByteUtil.WriteUInt16((ushort)payloadLength, head, 2);
 			}
 			else
 			{
-				head = new byte[2];
+				head = new byte[2 + maskSize];
 				head[0] = GetFirstHeaderByte();
 				head[1] = (byte)payloadLength;
+			}
+			if (mask)
+			{
+				head[1] |= 0b10000000;
+				Array.Copy(maskBytes, 0, head, head.Length - maskBytes.Length, maskBytes.Length);
 			}
 			stream.Write(head, 0, head.Length);
 		}
@@ -143,11 +160,26 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <param name="buffer"></param>
 		internal void XORMask(byte[] buffer)
 		{
-			if (mask)
+			if (mask && buffer != null)
 			{
 				for (int i = 0; i < buffer.Length; i++)
 					buffer[i] = (byte)(buffer[i] ^ maskBytes[i % maskBytes.Length]);
 			}
+		}
+		/// <summary>
+		/// Masks the data if necessary and returns a byte array. The original data array may be returned, or a masked copy of the data may be returned, but in either case the original data array will be unmodified.
+		/// </summary>
+		/// <returns></returns>
+		public byte[] GetMaskedBytes(byte[] data)
+		{
+			if (mask)
+			{
+				byte[] masked = new byte[data.Length];
+				Array.Copy(data, masked, data.Length);
+				XORMask(masked);
+				return masked;
+			}
+			return data;
 		}
 	}
 }

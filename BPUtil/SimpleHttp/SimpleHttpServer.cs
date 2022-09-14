@@ -575,7 +575,9 @@ namespace BPUtil.SimpleHttp
 			//}
 			if (ex is SocketException)
 				return true;
-			if (ex is EndOfStreamException)
+			if (ex is HttpProcessor.EndOfStreamException)
+				return true;
+			if (ex is System.IO.EndOfStreamException)
 				return true;
 			if (ex is AggregateException)
 			{
@@ -981,7 +983,7 @@ namespace BPUtil.SimpleHttp
 				proxyClient.Connect(newUri.DnsSafeHost, newUri.Port);
 				Stream proxyStream = proxyClient.GetStream();
 				responseWritten = true;
-				if (newUri.Scheme == "https")
+				if (newUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
 				{
 					//try
 					//{
