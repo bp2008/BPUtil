@@ -104,16 +104,17 @@ namespace BPUtil
 		/// Creates a new archive from the given input path. If there is an error, an exception will be thrown.
 		/// </summary>
 		/// <param name="sevenZipCommandLineExePath">Path of 7za.exe.</param>
-		/// <param name="archivePath">Path to a 7zip-compatible archive (*.7z for example) that does not already exist.</param>
+		/// <param name="archivePath">Path to a 7zip archive (*.7z).</param>
 		/// <param name="sourcePath">Path of a file or directory to put into the new archive.</param>
 		/// <param name="threads">Number of threads the 7zip executable is allowed to use.</param>
 		/// <param name="lowPriority">If true, the 7zip process will be assigned BelowNormal priority.</param>
-		public static void Create7zArchive(string sevenZipCommandLineExePath, string archivePath, string sourcePath, int threads = 2, bool lowPriority = false)
+		/// <param name="createNew">If true, an exception will be thrown if the archive already exists. If false, items may be added to an existing archive.</param>
+		public static void Create7zArchive(string sevenZipCommandLineExePath, string archivePath, string sourcePath, int threads = 2, bool lowPriority = false, bool createNew = true)
 		{
-			if (FileUtil.Exists(archivePath))
+			if (createNew && FileUtil.Exists(archivePath))
 				throw new Exception("Cannot create 7z archive because an object already exists at the path \"" + archivePath + "\".");
 			if (!FileUtil.Exists(sourcePath))
-				throw new Exception("Cannot create 7z archive because nothing was found at the source path \"" + sourcePath + "\".");
+				throw new Exception("Cannot add to 7z archive because nothing was found at the source path \"" + sourcePath + "\".");
 
 			FileInfo outputFile = new FileInfo(archivePath);
 			if (!outputFile.Directory.Exists)
