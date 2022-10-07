@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -18,7 +19,7 @@ namespace BPUtil
 		/// </summary>
 		Machine,
 		/// <summary>
-		/// The key is kept at the user  level so only the user who created the key can access it (in theory).
+		/// The key is kept at the user level so only the user who created the key can access it (in theory).
 		/// </summary>
 		User
 	}
@@ -30,6 +31,7 @@ namespace BPUtil
 	/// <para>* 2048-bit key: 214-byte payload limit</para>
 	/// <para>* 3072-bit key: 342-byte payload limit</para>
 	/// <para>* 4096-bit key: 470-byte payload limit</para>
+	/// <para>This class can also be used to sign and verify using the same keys that are used for encryption and decryption.</para>
 	/// </summary>
 	public static class AsymmetricEncryption
 	{
@@ -150,8 +152,9 @@ namespace BPUtil
 				rsa.Dispose();
 			}
 		}
+		#region Encrypt/Decrypt With Given Key
 		/// <summary>
-		/// Encrypts the given data using the given public or private key that is base64 encoded.
+		/// Encrypts the given data using the public key from the given base64-encoded CspBlob.
 		/// </summary>
 		/// <param name="publicKeyBase64">CspBlob containing public key information, base64 encoded, as exported using the <see cref="GenerateNewKeys"/> method. Can also accept the private key because RSA private keys typically include public key information too.</param>
 		/// <param name="data">Data to encrypt.</param>
@@ -165,7 +168,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Decrypts the given data using the given public or private key that is base64 encoded.
+		/// Decrypts the given data using the private key from the given base64-encoded CspBlob.
 		/// </summary>
 		/// <param name="privateKeyBase64">CspBlob containing private key information, as a base64 string, as exported using the <see cref="GenerateNewKeys"/> method.</param>
 		/// <param name="data">Data to decrypt.</param>
@@ -180,8 +183,10 @@ namespace BPUtil
 				return rsa.Decrypt(data, true);
 			}
 		}
+		#endregion
+		#region Encrypt/Decrypt With Keystore
 		/// <summary>
-		/// Encrypts the given data using a key from the operating system's keystore. If the key does not already exist, a new one is created.
+		/// Encrypts the given data using a public key from the operating system's keystore. If the key does not already exist, a new one is created.
 		/// </summary>
 		/// <param name="keystore">Specify which keystore the key should be loaded from.</param>
 		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
@@ -195,7 +200,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Decrypts the given data using a key from the operating system's keystore. If the key does not already exist, a new one is created.
+		/// Decrypts the given data using a private key from the operating system's keystore. If the key does not already exist, a new one is created.
 		/// </summary>
 		/// <param name="keystore">Specify which keystore the key should be loaded from.</param>
 		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
@@ -206,10 +211,79 @@ namespace BPUtil
 			using (RSACryptoServiceProvider rsa = GetRsaCspWithKeystore(keystore, keyContainerName))
 			{
 				if (rsa.PublicOnly)
-					throw new ApplicationException("The given key string did not contain private key components, and therefore cannot be used for decrypting.");
+					throw new ApplicationException("The given key container did not contain private key components, and therefore cannot be used for decrypting.");
 				return rsa.Decrypt(data, true);
 			}
 		}
+		#endregion
+		#region Sign/Verify With Given Key
+		/// <summary>
+		/// Verifies the given signature against a hash of the data using the public key from the given base64-encoded CspBlob. Returns true if the signature is verified.
+		/// </summary>
+		/// <param name="publicKeyBase64">CspBlob containing public key information, base64 encoded, as exported using the <see cref="GenerateNewKeys"/> method. Can also accept the private key because RSA private keys typically include public key information too.</param>
+		/// <param name="data">Data to verify.</param>
+		/// <param name="signature">Signature to verify.</param>
+		/// <param name="hashAlg">Hash algorithm to use when hashing the data. Default is SHA256.</param>
+		/// <returns></returns>
+		public static bool VerifyWithKey(string publicKeyBase64, byte[] data, byte[] signature, HashAlgSelector hashAlg = HashAlgSelector.SHA256)
+		{
+			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
+			{
+				rsa.ImportCspBlob(Convert.FromBase64String(publicKeyBase64));
+				data = Hash.GetSHA256Bytes(data);
+				return rsa.VerifyHash(data, hashAlg.ToString(), signature);
+			}
+		}
+		/// <summary>
+		/// Signs a hash of the given data using the private key from the given base64-encoded CspBlob. Returns the signature.
+		/// </summary>
+		/// <param name="privateKeyBase64">CspBlob containing private key information, as a base64 string, as exported using the <see cref="GenerateNewKeys"/> method.</param>
+		/// <param name="data">Data to sign.</param>
+		/// <param name="hashAlg">Hash algorithm to use when hashing the data. Default is SHA256.</param>
+		/// <returns></returns>
+		public static byte[] SignWithKey(string privateKeyBase64, byte[] data, HashAlgSelector hashAlg = HashAlgSelector.SHA256)
+		{
+			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
+			{
+				rsa.ImportCspBlob(Convert.FromBase64String(privateKeyBase64));
+				if (rsa.PublicOnly)
+					throw new ApplicationException("The given key string did not contain private key components, and therefore cannot be used for signing.");
+				data = Hash.GetSHA256Bytes(data);
+				return rsa.SignHash(data, hashAlg.ToString());
+			}
+		}
+		#endregion
+		#region Sign/Verify With Keystore
+		/// <summary>
+		/// Verifies the given signature against a hash of the data using a public key from the operating system's keystore. If the key does not already exist, verification will fail. Returns true if the signature is verified.
+		/// </summary>
+		/// <param name="keystore">Specify which keystore the key should be loaded from.</param>
+		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
+		/// <param name="data">Data to verify.</param>
+		/// <param name="signature">Signature to verify.</param>
+		/// <param name="hashAlg">Hash algorithm to use when hashing the data. Default is SHA256.</param>
+		/// <returns></returns>
+		public static bool VerifyWithKeyFromKeystore(Keystore keystore, string keyContainerName, byte[] data, byte[] signature, HashAlgSelector hashAlg = HashAlgSelector.SHA256)
+		{
+			// .NET has a weird limitation where SHA1 is the only supported hash algorithm if we load the keys via GetRsaCspWithKeystore.  We must provide the key as a string instead.
+			string publicKey = GetKeyFromKeystore(keystore, keyContainerName, false, true);
+			return VerifyWithKey(publicKey, data, signature, hashAlg);
+		}
+		/// <summary>
+		/// Signs a hash of the given data using a private key from the operating system's keystore. If the key does not already exist, a new one is created. Returns the signature.
+		/// </summary>
+		/// <param name="keystore">Specify which keystore the key should be loaded from.</param>
+		/// <param name="keyContainerName">A string which uniquely identifies this encryption key among all other keys in the keystore.</param>
+		/// <param name="data">Data to sign.</param>
+		/// <param name="hashAlg">Hash algorithm to use when hashing the data. Default is SHA256.</param>
+		/// <returns></returns>
+		public static byte[] SignWithKeyFromKeystore(Keystore keystore, string keyContainerName, byte[] data, HashAlgSelector hashAlg = HashAlgSelector.SHA256)
+		{
+			// .NET has a weird limitation where SHA1 is the only supported hash algorithm if we load the keys via GetRsaCspWithKeystore.  We must provide the key as a string instead.
+			string privateKey = GetKeyFromKeystore(keystore, keyContainerName, false, false);
+			return SignWithKey(privateKey, data, hashAlg);
+		}
+		#endregion
 		/// <summary>
 		/// Returns a new CspParameters object configured for the specified keystore and key container name.
 		/// </summary>
@@ -238,6 +312,7 @@ namespace BPUtil
 		/// <returns></returns>
 		private static RSACryptoServiceProvider GetRsaCspWithKeystore(Keystore keystore, string keyContainerName)
 		{
+			// X509Store is an interesting alternative way to access OS keystores, but I haven't learned it.
 			CspParameters cspParams = CreateCspParameters(keystore, keyContainerName);
 			RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(keySize, cspParams);
 			try
@@ -251,5 +326,19 @@ namespace BPUtil
 				throw;
 			}
 		}
+	}
+	/// <summary>
+	/// Identifies a hash algorithm for use in AsymmetricEncryption Sign and Verify methods.
+	/// </summary>
+	public enum HashAlgSelector
+	{
+		MD5,
+		SHA1,
+		/// <summary>
+		/// The default hash algorithm, and the only one I have tested.
+		/// </summary>
+		SHA256,
+		SHA384,
+		SHA512
 	}
 }

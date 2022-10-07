@@ -67,6 +67,27 @@ namespace UnitTests
 			// Verify that private-key-encryption worked as intended
 			byte[] decryptedBytes3 = AsymmetricEncryption.DecryptWithKey(privateKey, encryptedBytes);
 			Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes3));
+
+			// Test Sign/Verify
+			{
+				byte[] signature = AsymmetricEncryption.SignWithKey(privateKey, plainBytes);
+				Assert.IsTrue(AsymmetricEncryption.VerifyWithKey(publicKey, plainBytes, signature));
+
+				// You can't Sign with a public key
+				try
+				{
+					AsymmetricEncryption.SignWithKey(publicKey, plainBytes);
+					Assert.Fail("Expected exception when trying to sign with public key.");
+				}
+				catch { }
+
+				// But you can Verify with a private key because it contains public key parameters.
+				Assert.IsTrue(AsymmetricEncryption.VerifyWithKey(privateKey, plainBytes, signature));
+
+				// Change one byte in the signature, verification should now fail.
+				signature[0] = (byte)(signature[0] + 1);
+				Assert.IsFalse(AsymmetricEncryption.VerifyWithKey(publicKey, plainBytes, signature));
+			}
 		}
 
 		[TestMethod]
@@ -114,6 +135,25 @@ namespace UnitTests
 
 				byte[] decryptedBytes2 = AsymmetricEncryption.DecryptWithKeyFromKeystore(correctKeystore, correctKeyContainerName, encryptedBytes2);
 				Assert.IsTrue(ByteUtil.ByteArraysMatch(plainBytes, decryptedBytes2));
+
+				// Test Sign/Verify
+				{
+					// Sign and verify using keystore
+					byte[] signature = AsymmetricEncryption.SignWithKeyFromKeystore(correctKeystore, correctKeyContainerName, plainBytes);
+					Assert.IsTrue(AsymmetricEncryption.VerifyWithKeyFromKeystore(correctKeystore, correctKeyContainerName, plainBytes, signature));
+
+					// Verify with public key we loaded earlier
+					Assert.IsTrue(AsymmetricEncryption.VerifyWithKey(publicKeyLoaded, plainBytes, signature));
+
+					// Sign with extracted private key, then verify again with keystore
+					string privateKeyLoaded = AsymmetricEncryption.GetKeyFromKeystore(correctKeystore, correctKeyContainerName, false, false);
+					signature = AsymmetricEncryption.SignWithKey(privateKeyLoaded, plainBytes);
+					Assert.IsTrue(AsymmetricEncryption.VerifyWithKeyFromKeystore(correctKeystore, correctKeyContainerName, plainBytes, signature));
+
+					// Change one byte in the signature, verification should now fail.
+					signature[0] = (byte)(signature[0] + 1);
+					Assert.IsFalse(AsymmetricEncryption.VerifyWithKeyFromKeystore(correctKeystore, correctKeyContainerName, plainBytes, signature));
+				}
 
 				// Should be possible to replace existing keys by calling GenerateNewKeysInKeystore
 				AsymmetricEncryption.GenerateNewKeysInKeystore(correctKeystore, correctKeyContainerName, out string publicKey2);

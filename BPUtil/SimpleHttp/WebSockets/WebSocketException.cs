@@ -67,4 +67,46 @@ namespace BPUtil.SimpleHttp.WebSockets
 			}
 		}
 	}
+	/// <summary>
+	/// A specialized WebSocketException with close code 4800.  Code 4800 is here defined to mean the first line of the HTTP response did not meet any basic expectations.
+	/// </summary>
+	public class WebSocketHttpResponseUnexpectedException : WebSocketException
+	{
+		/// <summary>
+		/// This is the first line of the HTTP response.
+		/// </summary>
+		public readonly string HttpResponseFirstLine;
+		/// <summary>
+		/// A specialized WebSocketException with close code 4800.  Code 4800 is here defined to mean the first line of the HTTP response did not meet any basic expectations.
+		/// </summary>
+		/// <param name="httpResponseFirstLine">First line of the HTTP response.</param>
+		public WebSocketHttpResponseUnexpectedException(string httpResponseFirstLine) : base((WebSocketCloseCode)4800, "Invalid first HTTP response line: \"" + httpResponseFirstLine + "\". Expected \"HTTP/1.1 101 Switching Protocols\".")
+		{
+			this.HttpResponseFirstLine = httpResponseFirstLine;
+		}
+	}
+	/// <summary>
+	/// A specialized WebSocketException with close code 4801.  Code 4801 is here defined to mean the HTTP response code was not "101" as expected.
+	/// </summary>
+	public class WebSocketHttpResponseCodeUnexpectedException : WebSocketException
+	{
+		/// <summary>
+		/// If not null, this is the HTTP status code read from the response.
+		/// </summary>
+		public readonly int? StatusCode;
+		/// <summary>
+		/// If not null, this is the Reason Phrase given with the HTTP status code.
+		/// </summary>
+		public readonly string ReasonPhrase;
+		/// <summary>
+		/// A specialized WebSocketException with close code 4801.  Code 4801 is here defined to mean the HTTP response code was not "101" as expected.
+		/// </summary>
+		/// <param name="statusCode">HTTP status code that was provided with the HTTP response.</param>
+		/// <param name="reasonPhrase">Reason Phrase that was provided with the HTTP response.</param>
+		public WebSocketHttpResponseCodeUnexpectedException(int statusCode, string reasonPhrase) : base((WebSocketCloseCode)4801, "Unexpected HTTP response status: " + statusCode + " " + reasonPhrase)
+		{
+			this.StatusCode = statusCode;
+			this.ReasonPhrase = reasonPhrase;
+		}
+	}
 }

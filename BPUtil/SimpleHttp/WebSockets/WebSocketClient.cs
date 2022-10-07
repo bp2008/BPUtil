@@ -92,12 +92,17 @@ namespace BPUtil.SimpleHttp.WebSockets
 			}
 
 			// Read HTTP response
-			string response = ByteUtil.ReadPrintableASCIILine(tcpStream);
-			if (response == null)
+			string firstResponseLine = ByteUtil.ReadPrintableASCIILine(tcpStream);
+			if (firstResponseLine == null)
 				throw new Exception("HTTP protocol error: Line was unreadable.");
-			string[] tokens = response.Split(' ');
-			if (response != "HTTP/1.1 101 Switching Protocols")
-				throw new Exception("invalid first http response line: \"" + response + "\". Expected \"HTTP/1.1 101 Switching Protocols\".");
+			if (firstResponseLine != "HTTP/1.1 101 Switching Protocols")
+			{
+				string[] tokens = firstResponseLine.Split(' ');
+				if (tokens.Length == 3 && tokens[0] == "HTTP/1.1" && int.TryParse(tokens[1], out int statusCode))
+					throw new WebSocketHttpResponseCodeUnexpectedException(statusCode, tokens[2]);
+				else
+					throw new WebSocketHttpResponseUnexpectedException(firstResponseLine);
+			}
 
 			// Read HTTP Headers
 			Dictionary<string, string> httpHeaders = new Dictionary<string, string>();
