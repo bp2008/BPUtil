@@ -39,6 +39,28 @@ namespace UnitTests
 			Assert.AreEqual(string.Join(",", cipher2), string.Join(",", cipher), "encrypted buffer should match the encrypted buffer from earlier in the test");
 			Assert.AreEqual(string.Join(",", buffer), string.Join(",", plain2), "decrypted buffer should match original buffer");
 		}
+		/// <summary>
+		// Verify that buffers can be decoded in a different order than they were encrypted, by an independent Encryption instance.
+		/// </summary>
+		[TestMethod]
+		public void TestSymmetricEncryptionOutOfOrder()
+		{
+			Encryption e = new Encryption();
+			byte[] bufferA = new byte[300];
+			new Random().NextBytes(bufferA);
+			byte[] bufferB = new byte[300];
+			new Random().NextBytes(bufferB);
+
+			byte[] cipherA = e.Encrypt(bufferA);
+			byte[] cipherB = e.Encrypt(bufferB);
+
+			e = new Encryption(e.Key, e.IV);
+			byte[] plainB = e.Decrypt(cipherB);
+			Assert.AreEqual(string.Join(",", bufferB), string.Join(",", plainB), "decrypted buffer should match original buffer");
+
+			byte[] plainA = e.Decrypt(cipherA);
+			Assert.AreEqual(string.Join(",", bufferA), string.Join(",", plainA), "decrypted buffer should match original buffer");
+		}
 		[TestMethod]
 		public void TestAsymmetricEncryptionNonPersistedKey()
 		{
