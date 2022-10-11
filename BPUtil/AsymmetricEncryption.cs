@@ -230,7 +230,7 @@ namespace BPUtil
 			using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
 			{
 				rsa.ImportCspBlob(Convert.FromBase64String(publicKeyBase64));
-				data = Hash.GetSHA256Bytes(data);
+				data = Hash(data, hashAlg);
 				return rsa.VerifyHash(data, hashAlg.ToString(), signature);
 			}
 		}
@@ -248,7 +248,7 @@ namespace BPUtil
 				rsa.ImportCspBlob(Convert.FromBase64String(privateKeyBase64));
 				if (rsa.PublicOnly)
 					throw new ApplicationException("The given key string did not contain private key components, and therefore cannot be used for signing.");
-				data = Hash.GetSHA256Bytes(data);
+				data = Hash(data, hashAlg);
 				return rsa.SignHash(data, hashAlg.ToString());
 			}
 		}
@@ -282,6 +282,35 @@ namespace BPUtil
 			// .NET has a weird limitation where SHA1 is the only supported hash algorithm if we load the keys via GetRsaCspWithKeystore.  We must provide the key as a string instead.
 			string privateKey = GetKeyFromKeystore(keystore, keyContainerName, false, false);
 			return SignWithKey(privateKey, data, hashAlg);
+		}
+		/// <summary>
+		/// Computes a cryptographic hash value of data using the specified algorithm.
+		/// </summary>
+		/// <param name="data">Data to hash.</param>
+		/// <param name="hashAlg">Hash algorithm to use for hashing the data.</param>
+		/// <returns></returns>
+		private static byte[] Hash(byte[] data, HashAlgSelector hashAlg)
+		{
+			switch (hashAlg)
+			{
+				case HashAlgSelector.MD5:
+					using (MD5Cng hasher = new MD5Cng())
+						return hasher.ComputeHash(data);
+				case HashAlgSelector.SHA1:
+					using (SHA1Cng hasher = new SHA1Cng())
+						return hasher.ComputeHash(data);
+				case HashAlgSelector.SHA256:
+					using (SHA256Cng hasher = new SHA256Cng())
+						return hasher.ComputeHash(data);
+				case HashAlgSelector.SHA384:
+					using (SHA384Cng hasher = new SHA384Cng())
+						return hasher.ComputeHash(data);
+				case HashAlgSelector.SHA512:
+					using (SHA512Cng hasher = new SHA512Cng())
+						return hasher.ComputeHash(data);
+				default:
+					throw new Exception("Unimplemented HashAlgSelector value: " + hashAlg);
+			}
 		}
 		#endregion
 		/// <summary>
