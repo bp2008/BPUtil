@@ -215,15 +215,26 @@ namespace BPUtil
 		public static byte[] ReadNBytes(IDataStream s, int n)
 		{
 			byte[] buffer = new byte[n];
-			if (n == 0)
-				return buffer; // Just to be explicit and sure about this behavior.
+			ReadBytes(s, buffer);
+			return buffer;
+		}
+		/// <summary>
+		/// Fills the given buffer with bytes from the stream. If unable to read that many bytes, this method throws an Exception.
+		/// </summary>
+		/// <param name="s">The stream to read from.</param>
+		/// <param name="buffer">The buffer to fill.</param>
+		/// <returns></returns>
+		public static void ReadBytes(IDataStream s, byte[] buffer)
+		{
+			if (buffer.Length == 0)
+				return; // Just to be explicit and sure about this behavior.
 			int totalRead = 0;
 			int justRead;
 			try
 			{
 				do
-					totalRead += (justRead = s.Read(buffer, totalRead, n - totalRead));
-				while (justRead > 0 && totalRead < n);
+					totalRead += (justRead = s.Read(buffer, totalRead, buffer.Length - totalRead));
+				while (justRead > 0 && totalRead < buffer.Length);
 			}
 			catch (IOException ex)
 			{
@@ -233,11 +244,11 @@ namespace BPUtil
 					throw;
 			}
 			catch (SocketException ex) { throw new EndOfStreamException("Stream was closed", ex); }
-			if (totalRead < n)
+			if (totalRead < buffer.Length)
 				throw new EndOfStreamException("Stream was closed");
-			else if (totalRead > n)
+			else if (totalRead > buffer.Length)
 				throw new Exception("Somehow read too much from stream");
-			return buffer;
+			return;
 		}
 		/// <summary>
 		/// Reads a specific number of bytes from the stream, returning a byte array.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.
@@ -248,15 +259,26 @@ namespace BPUtil
 		public static byte[] ReadNBytes(Stream s, int n)
 		{
 			byte[] buffer = new byte[n];
-			if (n == 0)
-				return buffer; // Just to be explicit and sure about this behavior.
+			ReadBytes(s, buffer);
+			return buffer;
+		}
+		/// <summary>
+		/// Fills the given buffer with bytes from the stream. If unable to read that many bytes, this method throws an Exception.
+		/// </summary>
+		/// <param name="s">The stream to read from.</param>
+		/// <param name="buffer">The buffer to fill.</param>
+		/// <returns></returns>
+		public static void ReadBytes(Stream s, byte[] buffer)
+		{
+			if (buffer.Length == 0)
+				return; // Just to be explicit and sure about this behavior.
 			int totalRead = 0;
 			int justRead;
 			try
 			{
 				do
-					totalRead += (justRead = s.Read(buffer, totalRead, n - totalRead));
-				while (justRead > 0 && totalRead < n);
+					totalRead += (justRead = s.Read(buffer, totalRead, buffer.Length - totalRead));
+				while (justRead > 0 && totalRead < buffer.Length);
 			}
 			catch (IOException ex)
 			{
@@ -266,11 +288,11 @@ namespace BPUtil
 					throw;
 			}
 			catch (SocketException ex) { throw new EndOfStreamException("Stream was closed", ex); }
-			if (totalRead < n)
+			if (totalRead < buffer.Length)
 				throw new EndOfStreamException("Stream was closed");
-			else if (totalRead > n)
+			else if (totalRead > buffer.Length)
 				throw new Exception("Somehow read too much from stream");
-			return buffer;
+			return;
 		}
 		/// <summary>
 		/// Reads a specific number of bytes from the stream and performs NetworkToHostOrder on the resulting byte array before returning it.
