@@ -67,6 +67,7 @@
     <Compile Include="BPQueue.cs" />
     <Compile Include="CertificateValidation.cs" />
     <Compile Include="Compass.cs" />
+    <Compile Include="CountdownStopwatch.cs" />
     <Compile Include="Encryption.cs" />
     <Compile Include="EnumHelper.cs" />
     <Compile Include="FileUtil.cs" />
