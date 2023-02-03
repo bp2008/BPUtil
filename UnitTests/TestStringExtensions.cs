@@ -38,6 +38,11 @@ namespace UnitTests
 			Assert.IsFalse(str4.IEquals(str2));
 			Assert.IsFalse(str4.IEquals(str3));
 			Assert.IsTrue(str4.IEquals(str4));
+
+			Assert.IsFalse(str1.IEquals(null));
+			Assert.IsFalse(str2.IEquals(null));
+			Assert.IsFalse(str3.IEquals(null));
+			Assert.IsFalse(str4.IEquals(null));
 		}
 	}
 }
