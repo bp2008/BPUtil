@@ -691,5 +691,52 @@ namespace BPUtil
 			}
 			return sb.ToString();
 		}
+		/// <summary>
+		/// <para>Given a terminal command, splits the command into its component substrings such that you could join them together again using a space as a separator to yield the original string.</para>
+		/// <para>For example, given this raw input:</para>
+		/// <para>"C:\Program Files\VideoLAN\VLC\vlc.exe" --rtsp-tcp "rtsp://127.0.0.1/"</para>
+		/// <para>... The method returns ...</para>
+		/// <para>["\"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\"", "--rtsp-tcp", "\"rtsp://127.0.0.1/\""]</para>
+		/// <para>... And calling string.Join(" ", ...) on the array above would yield the original input string.</para>
+		/// <para>Note that not all command strings may be entirely compatible with this method.</para>
+		/// </summary>
+		/// <param name="command">Command string that could be run in a text terminal.</param>
+		/// <returns></returns>
+		public static string[] ParseCommandLine(string command)
+		{
+			List<string> parts = new List<string>();
+			char escapeChar = Platform.IsUnix() ? '\\' : '^';
+			StringParser p = new StringParser(command);
+			StringBuilder sb = new StringBuilder();
+			bool isInQuote = false;
+			while (!p.IsFinished())
+			{
+				sb.Append(p.GetUntilAny('"', ' ', escapeChar));
+				char c = p.Get();
+				if (c == '"')
+				{
+					sb.Append(c);
+					isInQuote = !isInQuote;
+				}
+				else if (c == ' ')
+				{
+					if (isInQuote)
+						sb.Append(c);
+					else
+					{
+						parts.Add(sb.ToString());
+						sb.Clear();
+					}
+				}
+				else if (c == escapeChar)
+				{
+					sb.Append(c);
+					if (!p.IsFinished())
+						sb.Append(p.Get());
+				}
+			}
+			parts.Add(sb.ToString());
+			return parts.ToArray();
+		}
 	}
 }

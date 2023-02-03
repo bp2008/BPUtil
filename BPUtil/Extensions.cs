@@ -372,5 +372,17 @@ namespace BPUtil
 			pb.Value = value;               // Move to correct value
 		}
 		#endregion
+		#region String
+		/// <summary>
+		/// Case-insensitive equals. Shorthand for Equals(other, StringComparison.OrdinalIgnoreCase).
+		/// </summary>
+		/// <param name="str">This string.</param>
+		/// <param name="other">String to compare with.</param>
+		/// <returns></returns>
+		public static bool IEquals(this string str, string other)
+		{
+			return str.Equals(other, StringComparison.OrdinalIgnoreCase);
+		}
+		#endregion
 	}
 }

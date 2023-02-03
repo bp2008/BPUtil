@@ -398,5 +398,49 @@ namespace UnitTests
 			Assert.AreEqual("\tA\r\tB\r\n\tC", StringUtil.Indent("A\rB\r\nC", "\t"));
 			Assert.AreEqual("\tA\r\n\tB\r\tC\n\tD\r\n\tE\r\tF\n\tG", StringUtil.Indent("A\r\nB\rC\nD\r\nE\rF\nG", "\t"));
 		}
+		[TestMethod]
+		public void TestParseCommandLine()
+		{
+			string s1 = "\"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\" --rtsp-tcp \"rtsp://127.0.0.1/\"";
+			string s2 = "\"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\" --rtsp-tcp \"rtsp://127.0.0.1/\" ";
+			string s3 = "\"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\" --rtsp-tcp \"rtsp://127.0.0.1/\"  ";
+			string s4 = "  \"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\"  --rtsp-tcp \"rtsp://127.0.0.1/\"";
+
+			string[] r1 = StringUtil.ParseCommandLine(s1);
+			string[] r2 = StringUtil.ParseCommandLine(s2);
+			string[] r3 = StringUtil.ParseCommandLine(s3);
+			string[] r4 = StringUtil.ParseCommandLine(s4);
+
+			Assert.AreEqual(3, r1.Length);
+			Assert.AreEqual("\"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\"", r1[0]);
+			Assert.AreEqual("--rtsp-tcp", r1[1]);
+			Assert.AreEqual("\"rtsp://127.0.0.1/\"", r1[2]);
+
+			Assert.AreEqual(4, r2.Length);
+			Assert.AreEqual("\"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\"", r2[0]);
+			Assert.AreEqual("--rtsp-tcp", r2[1]);
+			Assert.AreEqual("\"rtsp://127.0.0.1/\"", r2[2]);
+			Assert.AreEqual("", r2[3]);
+
+			Assert.AreEqual(5, r3.Length);
+			Assert.AreEqual("\"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\"", r3[0]);
+			Assert.AreEqual("--rtsp-tcp", r3[1]);
+			Assert.AreEqual("\"rtsp://127.0.0.1/\"", r3[2]);
+			Assert.AreEqual("", r3[3]);
+			Assert.AreEqual("", r3[4]);
+
+			Assert.AreEqual(6, r4.Length);
+			Assert.AreEqual("", r4[0]);
+			Assert.AreEqual("", r4[1]);
+			Assert.AreEqual("\"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe\"", r4[2]);
+			Assert.AreEqual("", r4[3]);
+			Assert.AreEqual("--rtsp-tcp", r4[4]);
+			Assert.AreEqual("\"rtsp://127.0.0.1/\"", r4[5]);
+
+			Assert.AreEqual(s1, string.Join(" ", r1));
+			Assert.AreEqual(s2, string.Join(" ", r2));
+			Assert.AreEqual(s3, string.Join(" ", r3));
+			Assert.AreEqual(s4, string.Join(" ", r4));
+		}
 	}
 }

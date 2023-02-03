@@ -66,6 +66,7 @@
     <Compile Include="TestCompass.cs" />
     <Compile Include="TestStringCache.cs" />
     <Compile Include="TestHex.cs" />
+    <Compile Include="TestStringExtensions.cs" />
     <Compile Include="TestStringUtil.cs" />
   </ItemGroup>
   <ItemGroup>
