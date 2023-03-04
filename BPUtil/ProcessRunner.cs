@@ -295,6 +295,14 @@ namespace BPUtil
 		/// Gets or sets a value indicating whether to start the process in a new window. (Default: true)
 		/// </summary>
 		public bool CreateNoWindow = true;
+		/// <summary>
+		/// If not null, the <see cref="ProcessStartInfo.StandardErrorEncoding"/> property will be set to this.
+		/// </summary>
+		public Encoding StandardOutputEncoding = null;
+		/// <summary>
+		/// If not null, the <see cref="ProcessStartInfo.StandardErrorEncoding"/> property will be set to this.
+		/// </summary>
+		public Encoding StandardErrorEncoding = null;
 
 		/// <summary>
 		/// Constructs an empty ProcessRunnerOptions.
@@ -320,6 +328,10 @@ namespace BPUtil
 				psi.WorkingDirectory = workingDirectory;
 			psi.UseShellExecute = UseShellExecute;
 			psi.CreateNoWindow = CreateNoWindow;
+			if (StandardOutputEncoding != null)
+				psi.StandardErrorEncoding = StandardOutputEncoding;
+			if (StandardErrorEncoding != null)
+				psi.StandardErrorEncoding = StandardErrorEncoding;
 		}
 
 		/// <summary>
