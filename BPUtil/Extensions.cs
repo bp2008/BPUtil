@@ -383,6 +383,17 @@ namespace BPUtil
 		{
 			return str.Equals(other, StringComparison.OrdinalIgnoreCase);
 		}
+		/// <summary>
+		/// Case-insensitive contains. Shorthand for .IndexOf(other, StringComparison.OrdinalIgnoreCase) > -1.
+		/// </summary>
+		/// <param name="str">This string.</param>
+		/// <param name="other">String to compare with.</param>
+		/// <returns></returns>
+		public static bool IContains(this string str, string other)
+		{
+			
+			return str.IndexOf(other, StringComparison.OrdinalIgnoreCase) > -1;
+		}
 		#endregion
 	}
 }
