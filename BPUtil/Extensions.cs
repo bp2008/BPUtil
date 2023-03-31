@@ -170,7 +170,7 @@ namespace BPUtil
 			sb.Append(ex.GetType().ToString());
 			if (ex.Message != null)
 				sb.Append(": " + ex.Message);
-		
+
 			if (ex is AggregateException)
 			{
 				AggregateException agg = ex as AggregateException;
@@ -210,7 +210,7 @@ namespace BPUtil
 		/// <param name="stack">The stack trace to assign to the Exception.</param>
 		/// <returns></returns>
 		public static Exception SetStackTrace(this Exception target, StackTrace stack) => _SetStackTrace(target, stack);
-	
+
 		/// <summary>
 		/// Returns a function that efficiently sets an exception's stack trace. From https://stackoverflow.com/a/63685720/814569
 		/// </summary>
@@ -391,8 +391,25 @@ namespace BPUtil
 		/// <returns></returns>
 		public static bool IContains(this string str, string other)
 		{
-			
+
 			return str.IndexOf(other, StringComparison.OrdinalIgnoreCase) > -1;
+		}
+		#endregion
+		#region HashSet<T>
+		/// <summary>
+		/// Adds the specified elements to the HashSet.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <param name="set">This HashSet</param>
+		/// <param name="objects">Collection of objects to add to the HashSet.</param>
+		/// <returns>Returns the number of objects that were added (not counting objects that already existed in the set).</returns>
+		public static int AddRange<T>(this HashSet<T> set, IEnumerable<T> objects)
+		{
+			int added = 0;
+			foreach (T o in objects)
+				if (set.Add(o))
+					added++;
+			return added;
 		}
 		#endregion
 	}
