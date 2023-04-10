@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 
 namespace BPUtil
 {
-
 	/// <summary>
 	/// Performs sign and verify tasks using ECDsaCng. This class is thread-safe.
 	/// </summary>
@@ -23,12 +22,18 @@ namespace BPUtil
 			dsa = new ECDsaCng(521);
 		}
 		/// <summary>
+		/// Creates a new SignatureFactory from the specified private key.
+		/// </summary>
+		/// <param name="key">Base64 string of the private key previously exported from a SignatureFactory.</param>
+		public SignatureFactory(string key) : this(key, true) { }
+		/// <summary>
 		/// Creates a new SignatureFactory from the specified key.
 		/// </summary>
 		/// <param name="key">Base64 string previously exported from a SignatureFactory.</param>
-		public SignatureFactory(string key)
+		/// <param name="isPrivateKey">If true, this key is treated as a private key. If false, this key is treated as a public key and signing will not be available.</param>
+		public SignatureFactory(string key, bool isPrivateKey)
 		{
-			dsa = new ECDsaCng(CngKey.Import(Convert.FromBase64String(key), CngKeyBlobFormat.EccPrivateBlob));
+			dsa = new ECDsaCng(CngKey.Import(Convert.FromBase64String(key), isPrivateKey ? CngKeyBlobFormat.EccPrivateBlob : CngKeyBlobFormat.EccPublicBlob));
 		}
 		public void Dispose()
 		{
@@ -88,6 +93,17 @@ namespace BPUtil
 			byte[] key;
 			lock (dsa)
 				key = dsa.Key.Export(CngKeyBlobFormat.EccPrivateBlob);
+			return Convert.ToBase64String(key);
+		}
+		/// <summary>
+		/// Returns the public key in base64 format so it can be reused in future SignatureFactory instances.
+		/// </summary>
+		/// <returns></returns>
+		public string ExportPublicKey()
+		{
+			byte[] key;
+			lock (dsa)
+				key = dsa.Key.Export(CngKeyBlobFormat.EccPublicBlob);
 			return Convert.ToBase64String(key);
 		}
 	}

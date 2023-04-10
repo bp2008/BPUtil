@@ -205,6 +205,27 @@ namespace BPUtil
 					sBuilder.Append(buffer[i].ToString("x2"));
 			return sBuilder.ToString();
 		}
+		/// <summary>
+		/// Concatenates a variable number of byte arrays into one byte array.
+		/// </summary>
+		/// <param name="arrays">The byte arrays to concatenate.</param>
+		/// <returns>A new byte array that is the concatenation of all the input arrays.</returns>
+		public static byte[] ConcatenateByteArrays(params byte[][] arrays)
+		{
+			int totalLength = 0;
+			foreach (byte[] array in arrays)
+				totalLength += array.Length;
+
+			byte[] result = new byte[totalLength];
+			int offset = 0;
+			foreach (byte[] array in arrays)
+			{
+				Buffer.BlockCopy(array, 0, result, offset, array.Length);
+				offset += array.Length;
+			}
+
+			return result;
+		}
 		#region ReadNBytes
 		/// <summary>
 		/// Reads a specific number of bytes from the stream, returning a byte array.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.
