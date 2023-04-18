@@ -9,7 +9,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace UnitTests
 {
 	[TestClass]
-	public class StringUtilTests
+	public class TestStringUtil
 	{
 		[TestMethod]
 		public void TestHtmlAttributeEncode()
