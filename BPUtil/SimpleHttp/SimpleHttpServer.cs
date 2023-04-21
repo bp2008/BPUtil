@@ -965,8 +965,8 @@ namespace BPUtil.SimpleHttp
 		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
 		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
 		/// <param name="host">The value of the host header, also used in SSL authentication. If null or whitespace, it is set from the [newUrl] parameter.</param>
-		/// <param name="singleRequestOnly">If true, a Connection: close header will be added, and any existing Connection header will be dropped.</param>
-		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null, bool singleRequestOnly = false)
+		/// <param name="allowKeepalive">[DANGEROUS TO SET = true] If false, a Connection: close header will be added, and any existing Connection header will be dropped.  If true, the Connection header from the client will be preserved.  Assuming the client wanted keep-alive, this proxy request will remain active and the next request to come in on this connection will be proxied even if you didn't want it to be.  If your web server does ANYTHING ELSE besides proxy requests straight through to the same destination, this may result in client requests going to the wrong place.</param>
+		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null, bool allowKeepalive = false)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
@@ -1007,12 +1007,12 @@ namespace BPUtil.SimpleHttp
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, http_method + ' ' + newUri.PathAndQuery + ' ' + http_protocol_versionstring + "\r\n", snoopy);
 				// After the first line come the headers.
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
-				if (singleRequestOnly)
+				if (!allowKeepalive)
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
 				foreach (KeyValuePair<string, string> header in httpHeadersRaw)
 				{
 					string keyLower = header.Key.ToLower();
-					if (keyLower != "host" && (!singleRequestOnly || keyLower != "connection"))
+					if (keyLower != "host" && (allowKeepalive || keyLower != "connection"))
 						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
 				}
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
@@ -1932,7 +1932,7 @@ namespace BPUtil.SimpleHttp
 	{
 		SortedList<string, Cookie> cookieCollection = new SortedList<string, Cookie>();
 		/// <summary>
-		/// Adds a cookie with the specified name and value.  The cookie is set to expire immediately at the end of the browsing session.
+		/// Adds or updates a cookie with the specified name and value.  The cookie is set to expire immediately at the end of the browsing session.
 		/// </summary>
 		/// <param name="name">The cookie's name.</param>
 		/// <param name="value">The cookie's value.</param>
@@ -1941,7 +1941,7 @@ namespace BPUtil.SimpleHttp
 			Add(name, value, TimeSpan.Zero);
 		}
 		/// <summary>
-		/// Adds a cookie with the specified name, value, and lifespan.
+		/// Adds or updates a cookie with the specified name, value, and lifespan.
 		/// </summary>
 		/// <param name="name">The cookie's name.</param>
 		/// <param name="value">The cookie's value.</param>

@@ -46,14 +46,18 @@ namespace BPUtil.MVC
 		/// Processes a request from a client, then returns true. Returns false if the request could not be processed. Exceptions thrown by a controller are caught here.
 		/// </summary>
 		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
-		/// <param name="requestPath">(Optional) The path requested by the client, with leading '/' removed. (defaults to httpProcessor.requestedPage)</param>
+		/// <param name="requestPath">(Optional) The path requested by the client. (if null, defaults to httpProcessor.request_url.PathAndQuery)</param>
 		/// <returns></returns>
 		public bool ProcessRequest(HttpProcessor httpProcessor, string requestPath = null)
 		{
 			if (httpProcessor.responseWritten)
 				throw new Exception("MVCMain.ProcessRequest was called with an HttpProcessor that had already written a response.");
 			if (requestPath == null)
-				requestPath = httpProcessor.requestedPage;
+			{
+				requestPath = httpProcessor.request_url.PathAndQuery;
+				if (requestPath.StartsWith("/"))
+					requestPath = requestPath.Substring(1);
+			}
 			RequestContext context = new RequestContext(httpProcessor, requestPath);
 			if (!controllerInfoMap.TryGetValue(context.ControllerName.ToUpper(), out ControllerInfo controllerInfo))
 				return false;

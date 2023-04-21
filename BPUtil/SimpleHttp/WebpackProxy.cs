@@ -69,7 +69,7 @@ namespace BPUtil.SimpleHttp
 		{
 			try
 			{
-				p.ProxyTo("http://" + IPAddress.Loopback.ToString() + ":" + webpackPort + p.request_url.AbsolutePath, singleRequestOnly: true);
+				p.ProxyTo("http://" + IPAddress.Loopback.ToString() + ":" + webpackPort + p.request_url.AbsolutePath);
 				return null;
 			}
 			catch (Exception ex) { return ex; }

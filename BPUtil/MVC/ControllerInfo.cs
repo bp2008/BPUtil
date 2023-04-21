@@ -49,11 +49,12 @@ namespace BPUtil.MVC
 			}
 			Controller controller = (Controller)Activator.CreateInstance(ControllerType);
 			controller.Context = context;
-			ActionResult authResult = null;
-			controller.OnAuthorization(ref authResult);
-			if (authResult != null)
-				return authResult;
-			return CallActionMethod(controller, methodInfo);
+			ActionResult result = null;
+			controller.OnAuthorization(ref result);
+			if (result == null)
+				result = CallActionMethod(controller, methodInfo);
+			controller.PreprocessResult(result);
+			return result;
 		}
 		/// <summary>
 		/// Calls the specified method on the controller, getting arguments from the controller's Context property.
