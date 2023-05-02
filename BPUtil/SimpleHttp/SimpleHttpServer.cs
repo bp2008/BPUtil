@@ -1977,6 +1977,16 @@ namespace BPUtil.SimpleHttp
 			return cookie.value;
 		}
 		/// <summary>
+		/// Deletes the cookie with the specified name, returning true if the cookie was removed, false if it did not exist or was not removed.
+		/// </summary>
+		/// <param name="name">The name of the cookie.</param>
+		public bool Remove(string name)
+		{
+			if (name != null)
+				return cookieCollection.Remove(name.ToLower());
+			return false;
+		}
+		/// <summary>
 		/// Returns a string of "Set-Cookie: ..." headers (one for each cookie in the collection) separated by "\r\n".  There is no leading or trailing "\r\n".
 		/// </summary>
 		/// <returns>A string of "Set-Cookie: ..." headers (one for each cookie in the collection) separated by "\r\n".  There is no leading or trailing "\r\n".</returns>
