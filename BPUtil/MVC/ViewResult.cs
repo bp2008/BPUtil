@@ -8,8 +8,18 @@ using System.Threading.Tasks;
 namespace BPUtil.MVC
 {
 	/// <summary>
-	/// A result which parses a text file and replaces specially-tagged expressions with strings from the controller's ViewData.
-	/// The tagging format is similar to ASP.NET razor pages where code is prefixed with '@' characters.  Literal '@' characters may be escaped by another '@' character.
+	/// <para>A result which parses a text file and replaces specially-tagged expressions with strings from the controller's ViewData.  Expressions are case-sensitive!</para>
+	/// <para>The tagging format is similar to ASP.NET razor pages where code is prefixed with '@' characters.  Literal '@' characters may be escaped by another '@' character.</para>
+	/// <para>'@' indicates the start of a code expression.  Literal '@' characters may be inserted into the output by printing two '@' characters in sequence. E.g. "Email me at admin@@example.com"</para>
+	/// <para>Valid characters inside a code expression are alphanumeric (a-z, A-Z, 0-9) and underscore.  Colon ':' is used as a separator between tokens in order to provide method names to transform a retrieved value as demonstrated in examples below:</para>
+	/// <para>Examples:</para>
+	/// <para>@AppRoot - Yields the raw value of the ViewData field named "AppRoot".</para>
+	/// <para>@(AppRoot) - Yields the raw value of the ViewData field named "AppRoot". Wrapping the expression value in parenthesis allows you to terminate an expression that would otherwise have an ambiguous end point. e.g. "@AppRootimages/icon.jpg" vs "@(AppRoot)images/icon.jpg"</para>
+	/// <para>@HtmlEncode:Banana - Yields the HTML-encoded value of the ViewData field named "Banana".</para>
+	/// <para>@HtmlAttributeEncode:Banana - Yields the HTML-attribute-encoded value of the ViewData field named "Banana".</para>
+	/// <para>@JavaScriptStringEncode:Banana - Yields the JavaScript string encoded value of the ViewData field named "Banana".</para>
+	/// <para>@JavaScriptStringEncode:HtmlEncode:Banana - Yields the value from the ViewData field named "Banana" after being Html Encoded, then JavaScript string encoded.</para>
+	/// <para>@(JavaScriptStringEncode:HtmlEncode:Banana) - Yields the same value as above, but with parenthesis wrapping to demonstrate usage.</para>
 	/// </summary>
 	public class ViewResult : HtmlResult
 	{
@@ -102,6 +112,12 @@ namespace BPUtil.MVC
 			BodyStr = viewText;
 		}
 
+		/// <summary>
+		/// Splits the expression into tokens, retrieves the requested data value, and processes it using methods specified in the expression as necessary.
+		/// </summary>
+		/// <param name="expressionBuffer"></param>
+		/// <param name="ViewData"></param>
+		/// <returns></returns>
 		private string ProcessExpression(StringBuilder expressionBuffer, ViewDataContainer ViewData)
 		{
 			if (expressionBuffer.Length > 0)
@@ -120,6 +136,12 @@ namespace BPUtil.MVC
 				throw new Exception("View contained an empty expression.");
 		}
 
+		/// <summary>
+		/// Performs the named method on the given value.
+		/// </summary>
+		/// <param name="methodName">Name of the method to perform, e.g. "HtmlEncode".  This string must exactly match one of the hard-coded method names programmed within.</param>
+		/// <param name="value">Value to pass into the named method.</param>
+		/// <returns></returns>
 		private string PerformExpressionMethod(string methodName, string value)
 		{
 			if (methodName == "HtmlEncode")
@@ -134,7 +156,7 @@ namespace BPUtil.MVC
 		#region Methods Available to Expressions
 		private string HtmlEncode(string str)
 		{
-			return System.Web.HttpUtility.HtmlEncode(str);
+			return StringUtil.HtmlEncode(str);
 		}
 		private string HtmlAttributeEncode(string str)
 		{

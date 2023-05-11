@@ -46,7 +46,7 @@ namespace BPUtil.MVC
 		/// Processes a request from a client, then returns true. Returns false if the request could not be processed. Exceptions thrown by a controller are caught here.
 		/// </summary>
 		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
-		/// <param name="requestPath">(Optional) The path requested by the client. (if null, defaults to httpProcessor.request_url.PathAndQuery)</param>
+		/// <param name="requestPath">(Optional) The path requested by the client.  If this path starts with '/', the '/' will be removed automatically (if there are multiple '/' at the start, only one is removed). (if null, defaults to httpProcessor.request_url.PathAndQuery)</param>
 		/// <returns></returns>
 		public bool ProcessRequest(HttpProcessor httpProcessor, string requestPath = null)
 		{

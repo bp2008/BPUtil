@@ -9,8 +9,28 @@ using BPUtil.SimpleHttp;
 namespace BPUtil.MVC
 {
 	/// <summary>
-	/// Base class for a Controller roughly equivalent to those available in ASP.NET MVC.
-	/// The controller should define at least one ActionMethod.  An ActionMethod is a public method which returns an <see cref="ActionResult"/> (or a class derived from <see cref="ActionResult"/>).  The controller must not define multiple ActionMethods with the same name.
+	/// <para>Base class for a Controller roughly equivalent to those available in ASP.NET MVC.</para>
+	/// <para>The controller should define at least one ActionMethod.  An ActionMethod is a public method which returns an <see cref="ActionResult"/> (or a class derived from <see cref="ActionResult"/>).</para>
+	/// <para>The controller must not define multiple ActionMethods with the same name.</para>
+	/// <para>Normally the MVC framework will automatically write the <see cref="ActionResult"/> to the response stream, however if an ActionMethod utilizes <see cref="Controller.Context.httpProcessor"/> to write a response directly, then the MVC framework will not write the ActionResult to the response stream.  In this case it is perfectly acceptable for the ActionMethod to return null.</para>
+	/// <para>If an ActionMethod returns null, but has not written its own response using <see cref="Controller.Context.httpProcessor"/>, then the MVC framework will treat the request the same as if it failed to be routed.</para>
+	/// <para>If an ActionMethod throws an exception, the MVC framework will return an error message in HTML format.  If this format is not acceptable, then your ActionMethod should handle its own exceptions.</para>
+	/// <para>Request routing within the MVC framework is done automatically following simple rules.</para>
+	/// <para>======================================</para>
+	/// <para>Request routing examples:</para>
+	/// <para>The URL "https://localhost/MyController" will route to the controller named "MyController" and call the ActionMethod named "Index" with no arguments.</para>
+	/// <para>The URL "https://localhost/MyController/Index" is equivalent to the above example, for routing purposes.</para>
+	/// <para>The URL "https://localhost/MYCONTROLLER/INDEX" is equivalent to the above example for routing purposes.</para>
+	/// <para>The URL "https://localhost/Apple/Banana/Cherry/5" will route to the controller named "Apple" and call the ActionMethod named "Banana", providing two arguments "Cherry" and 5.  However if the "Apple" Controller does not have an ActionMethod named "Banana", then the "Index" ActionMethod is called instead with three arguments "Banana", "Cherry", and 5.</para>
+	/// <para>======================================</para>
+	/// <para>These are the routing rules:</para>
+	/// <para>* The "Path" part of the URL is split on '/' characters.</para>
+	/// <para>* The first segment is the Controller name, matched case-insensitive.  The first segment is required, but all following segments are optional.</para>
+	/// <para>* The second segment is the ActionMethod name, matched case-insensitive. If this second segment is not provided, it is assumed that the desired ActionMethod name is "Index" and that the ActionMethod takes no arguments. If the second segment of the Path is provided but does not match an ActionMethod, then it is assumed that the desired ActionMethod name is "Index" and the second segment value is used as the first argument.</para>
+	/// <para>* All following segments are arguments for the ActionMethod. Arguments must be provided in the order and format that is delared in the ActionMethod method declaration.  If the client provides too many or too few arguments, or incompatible argument values, it is an error.  Optional parameters to the method may be omitted from the query, but you cannot skip an optional parameter and declare a value for a later optional parameter; the arguments must be in order.</para>
+	/// <para>* To provide a value for a Boolean type argument to an ActionMethod, use "1" or "true" (case-insensitive) for true, or any other value for false (even empty string!).</para>
+	/// <para>======================================</para>
+	/// <para>If these built-in routing rules are not sufficient, it is possible to have an ActionMethod pull arguments from the POST body or from the Query String.</para>
 	/// </summary>
 	public abstract class Controller
 	{
@@ -171,7 +191,9 @@ namespace BPUtil.MVC
 		}
 
 		/// <summary>
-		/// Returns a ViewResult created from the specified text file.  This controller instance's <see cref="ViewData"/> will be used for view processing.
+		/// <para>Returns a <see cref="ViewResult"/> created from the specified text file.  This controller instance's <see cref="ViewData"/> will be used for view processing.</para>
+		/// <para>The given text file will be processed by replacing specially-tagged expressions with strings from <see cref="ViewData"/>.
+		/// The tagging format is similar to ASP.NET razor pages where code is prefixed with '@' characters.  Literal '@' characters may be escaped by another '@' character.</para>
 		/// </summary>
 		/// <param name="filePath">Path to a text file containing the view content.</param>
 		protected virtual ViewResult View(string filePath)

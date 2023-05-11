@@ -391,8 +391,27 @@ namespace BPUtil
 		/// <returns></returns>
 		public static bool IContains(this string str, string other)
 		{
-
 			return str.IndexOf(other, StringComparison.OrdinalIgnoreCase) > -1;
+		}
+		/// <summary>
+		/// Determines whether the beginning of this string instance matches the specified string when compared without case-sensitivity. IStartsWith is shorthand for this.StartsWith(value, StringComparison.OrdinalIgnoreCase).
+		/// </summary>
+		/// <param name="str">This string.</param>
+		/// <param name="value">The string to find at the start of this string.</param>
+		/// <returns></returns>
+		public static bool IStartsWith(this string str, string value)
+		{
+			return str.StartsWith(value, StringComparison.OrdinalIgnoreCase);
+		}
+		/// <summary>
+		/// Determines whether the end of this string instance matches the specified string when compared without case-sensitivity. IEndsWith is shorthand for this.EndsWith(value, StringComparison.OrdinalIgnoreCase).
+		/// </summary>
+		/// <param name="str">This string.</param>
+		/// <param name="value">The string to find at the start of this string.</param>
+		/// <returns></returns>
+		public static bool IEndsWith(this string str, string value)
+		{
+			return str.EndsWith(value, StringComparison.OrdinalIgnoreCase);
 		}
 		#endregion
 		#region HashSet<T>
