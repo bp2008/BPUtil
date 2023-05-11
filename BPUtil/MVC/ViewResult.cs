@@ -30,12 +30,39 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// Contructs a ViewResult from the specified file.
 		/// </summary>
-		/// <param name="filePath">Path to a text file containing the view content.</param>
+		/// <param name="filePath">Path to a text file containing the view content. If this is a relative path within the current diretory, and the debugger is attached and this is a debug build and the project directory also contains the relative path, then the file is loaded from the project source directory instead of the bin directory.</param>
 		/// <param name="ViewData">A ViewDataContainer containing values for expressions found within the view.</param>
 		public ViewResult(string filePath, ViewDataContainer ViewData) : base(null)
 		{
-			string text = File.ReadAllText(filePath);
-			ProcessView(text, ViewData);
+			if (System.Diagnostics.Debugger.IsAttached)
+			{
+				FileInfo fi = new FileInfo(filePath);
+				string cwd = Directory.GetCurrentDirectory();
+				if (fi.FullName.StartsWith(cwd))
+				{
+					DirectoryInfo di = new DirectoryInfo(cwd);
+					if (di.Name == "Debug")
+					{
+						di = di.Parent;
+						if (di?.Name == "x86" || di?.Name == "x64")
+							di = di.Parent;
+						if (di?.Name == "bin")
+							di = di.Parent;
+					}
+					string debugPath = Path.Combine(di.FullName, filePath);
+					if (File.Exists(debugPath))
+						filePath = debugPath;
+				}
+			}
+			if (File.Exists(filePath))
+			{
+				string text = File.ReadAllText(filePath);
+				ProcessView(text, ViewData);
+			}
+			else
+			{
+				ResponseStatus = "404 Not Found";
+			}
 		}
 		/// <summary>
 		/// Processes the specified text as a view and sets this result body. Do not call this unless the constructor you used says to do so.
