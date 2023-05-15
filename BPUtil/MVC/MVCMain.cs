@@ -53,11 +53,9 @@ namespace BPUtil.MVC
 			if (httpProcessor.responseWritten)
 				throw new Exception("MVCMain.ProcessRequest was called with an HttpProcessor that had already written a response.");
 			if (requestPath == null)
-			{
 				requestPath = httpProcessor.request_url.PathAndQuery;
-				if (requestPath.StartsWith("/"))
-					requestPath = requestPath.Substring(1);
-			}
+			if (requestPath.StartsWith("/"))
+				requestPath = requestPath.Substring(1);
 			RequestContext context = new RequestContext(httpProcessor, requestPath);
 			if (!controllerInfoMap.TryGetValue(context.ControllerName.ToUpper(), out ControllerInfo controllerInfo))
 				return false;
