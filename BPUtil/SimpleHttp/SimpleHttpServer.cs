@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
@@ -1367,6 +1368,73 @@ namespace BPUtil.SimpleHttp
 			{
 				return true; // The read poll returned false, so the connection is supposedly open with no data available to read, which is the normal state.
 			}
+		}
+		/// <summary>
+		/// Tests the "Authorization" header and returns the NetworkCredential that the client authenticated with, or null if authentication was not successful. Only "Digest" authentication is supported at this time.  SimpleHttpServer does not guard against replay attacks.
+		/// </summary>
+		/// <param name="realm">Name of the system that is requesting authentication.  This string is shown to the user to help them understand which credential is being requested e.g. "example.com".</param>
+		/// <param name="validCredentials">A collection of valid credentials which must be tested one at a time against the client's Authorization header.</param>
+		/// <returns></returns>
+		public NetworkCredential ValidateDigestAuth(string realm, IEnumerable<NetworkCredential> validCredentials)
+		{
+			string Authorization = GetHeaderValue("Authorization");
+			if (string.IsNullOrEmpty(Authorization))
+				return null;
+
+			try
+			{
+				AuthenticationHeaderValue authHeaderValue = AuthenticationHeaderValue.Parse(Authorization);
+				if (authHeaderValue.Scheme.IEquals("Digest"))
+				{
+					Dictionary<string, string> parameters = new Dictionary<string, string>();
+					string[] parameterPairs = authHeaderValue.Parameter.Split(',');
+					foreach (string parameterPair in parameterPairs)
+					{
+						string[] keyValue = parameterPair.Split('=');
+						string key = keyValue[0].Trim().ToLower();
+						string value = keyValue[1].Trim().Trim('"');
+						parameters.Add(key, value);
+					}
+
+					parameters.TryGetValue("uri", out string uri);
+					parameters.TryGetValue("nonce", out string nonce);
+					parameters.TryGetValue("nc", out string nc);
+					parameters.TryGetValue("cnonce", out string cnonce);
+					parameters.TryGetValue("qop", out string qop);
+					parameters.TryGetValue("response", out string response);
+
+					string ha2 = Hash.GetMD5Hex(http_method + ":" + uri);
+
+					foreach (NetworkCredential cred in validCredentials)
+					{
+						// Calculate the expected response based on the provided credentials and challenge parameters
+						string ha1 = Hash.GetMD5Hex(cred.UserName + ":" + realm + ":" + cred.Password);
+						string expectedResponse = Hash.GetMD5Hex(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2);
+
+						if (response == expectedResponse)
+							return cred;
+					}
+				}
+			}
+			catch (Exception) { }
+			return null;
+		}
+		/// <summary>
+		/// Returns a string which can be set as the value of the "WWW-Authenticate" header accompanying a "401 Unauthorized" response.  The header will request HTTP Digest authentication using random "nonce" and "opaque" strings.  SimpleHttpServer does not guard against replay attacks.
+		/// </summary>
+		/// <param name="realm"></param>
+		/// <returns></returns>
+		public string GetDigestAuthWWWAuthenticateHeaderValue(string realm)
+		{
+			byte[] nonceData = new byte[32];
+			SecureRandom.NextBytes(nonceData);
+			string nonce = Hex.ToHex(nonceData);
+
+			byte[] opaqueData = new byte[32];
+			SecureRandom.NextBytes(opaqueData);
+			string opaque = Hex.ToHex(opaqueData);
+
+			return "Digest realm=\"" + realm + "\", nonce=\"" + nonce + "\", opaque=\"" + opaque + "\", algorithm=MD5, qop=\"auth\", userhash=true";
 		}
 		/// <summary>
 		/// An exception containing an HTTP response code and text.
