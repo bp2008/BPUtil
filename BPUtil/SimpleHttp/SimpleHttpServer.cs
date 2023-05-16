@@ -11,6 +11,7 @@ using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 // This file has been modified continuously since Nov 10, 2012 by Brian Pearce.
@@ -1386,15 +1387,7 @@ namespace BPUtil.SimpleHttp
 				AuthenticationHeaderValue authHeaderValue = AuthenticationHeaderValue.Parse(Authorization);
 				if (authHeaderValue.Scheme.IEquals("Digest"))
 				{
-					Dictionary<string, string> parameters = new Dictionary<string, string>();
-					string[] parameterPairs = authHeaderValue.Parameter.Split(',');
-					foreach (string parameterPair in parameterPairs)
-					{
-						string[] keyValue = parameterPair.Split('=');
-						string key = keyValue[0].Trim().ToLower();
-						string value = keyValue[1].Trim().Trim('"');
-						parameters.Add(key, value);
-					}
+					Dictionary<string, string> parameters = ParseAuthorizationHeader(authHeaderValue.Parameter);
 
 					parameters.TryGetValue("uri", out string uri);
 					parameters.TryGetValue("nonce", out string nonce);
@@ -1418,6 +1411,18 @@ namespace BPUtil.SimpleHttp
 			}
 			catch (Exception) { }
 			return null;
+		}
+		private static Dictionary<string, string> ParseAuthorizationHeader(string authHeader)
+		{
+			var authParams = new Dictionary<string, string>();
+			string pattern = @"(\w+)=(""([^""]+)""|(\w+))";
+			var matches = Regex.Matches(authHeader, pattern);
+			foreach (Match match in matches)
+			{
+				string value = match.Groups[3].Value != "" ? match.Groups[3].Value : match.Groups[4].Value;
+				authParams.Add(match.Groups[1].Value, value);
+			}
+			return authParams;
 		}
 		/// <summary>
 		/// Returns a string which can be set as the value of the "WWW-Authenticate" header accompanying a "401 Unauthorized" response.  The header will request HTTP Digest authentication using random "nonce" and "opaque" strings.  SimpleHttpServer does not guard against replay attacks.
