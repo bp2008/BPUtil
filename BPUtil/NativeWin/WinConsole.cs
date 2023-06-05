@@ -11,8 +11,9 @@ namespace BPUtil.NativeWin
 {
 	public static class WinConsole
 	{
+		private static bool consoleAllocated = false;
 		/// <summary>
-		/// Un-redirects the console output of a program and allocates a console if necessary. Available only on Windows.
+		/// Un-redirects the console output of a program and allocates a console if necessary. Available only on Windows. See also <see cref="Dispose"/>.
 		/// </summary>
 		/// <param name="alwaysCreateNewConsole">If false, we attempt to attach to a pre-existing console, but fall back to allocating a new one.  If true, we simply allocate the new console.</param>
 		public static void Initialize(bool alwaysCreateNewConsole = true)
@@ -25,13 +26,24 @@ namespace BPUtil.NativeWin
 				|| (AttachConsole(ATTACH_PARENT) == 0
 				&& Marshal.GetLastWin32Error() != ERROR_ACCESS_DENIED))
 			{
-				consoleAttached = AllocConsole() != 0;
+				consoleAttached = consoleAllocated = AllocConsole() != 0;
 			}
 
 			if (consoleAttached)
 			{
 				InitializeOutAndErrorStreams();
 				InitializeInStream();
+			}
+		}
+		/// <summary>
+		/// Dispose will free the console if one was allocated by the last call to Initialize.  It shouldn't be necessary to call this if the program is exiting.
+		/// </summary>
+		public static void Dispose()
+		{
+			if (consoleAllocated)
+			{
+				FreeConsole();
+				consoleAllocated = false;
 			}
 		}
 
@@ -78,6 +90,10 @@ namespace BPUtil.NativeWin
 			CharSet = CharSet.Auto,
 			CallingConvention = CallingConvention.StdCall)]
 		private static extern int AllocConsole();
+
+		[DllImport("kernel32.dll", SetLastError = true)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool FreeConsole();
 
 		[DllImport("kernel32.dll",
 			EntryPoint = "AttachConsole",
