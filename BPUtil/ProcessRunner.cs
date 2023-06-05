@@ -131,6 +131,7 @@ namespace BPUtil
 
 				while (!p.HasExited)
 					p.WaitForExit(500);
+				// Must call WaitForExit without a timeout in order to force output buffers to be flushed.
 				p.WaitForExit();
 				return p.ExitCode;
 			}
@@ -388,7 +389,7 @@ namespace BPUtil
 		{
 			while (!process.HasExited)
 				process.WaitForExit(250);
-			process.WaitForExit(); // Sometimes necessary for finalization of the response streams?
+			process.WaitForExit(); // Must call WaitForExit without a timeout in order to force output buffers to be flushed.
 			return process.ExitCode;
 		}
 
@@ -412,7 +413,7 @@ namespace BPUtil
 			}
 			if (process.HasExited)
 			{
-				process.WaitForExit(); // Sometimes necessary for finalization of the response streams?
+				process.WaitForExit(); // Must call WaitForExit without a timeout in order to force output buffers to be flushed.
 				exitCode = process.ExitCode;
 				return true;
 			}
