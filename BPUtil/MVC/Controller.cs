@@ -12,8 +12,8 @@ namespace BPUtil.MVC
 	/// <para>Base class for a Controller roughly equivalent to those available in ASP.NET MVC.</para>
 	/// <para>The controller should define at least one ActionMethod.  An ActionMethod is a public method which returns an <see cref="ActionResult"/> (or a class derived from <see cref="ActionResult"/>).</para>
 	/// <para>The controller must not define multiple ActionMethods with the same name.</para>
-	/// <para>Normally the MVC framework will automatically write the <see cref="ActionResult"/> to the response stream, however if an ActionMethod utilizes <see cref="Controller.Context.httpProcessor"/> to write a response directly, then the MVC framework will not write the ActionResult to the response stream.  In this case it is perfectly acceptable for the ActionMethod to return null.</para>
-	/// <para>If an ActionMethod returns null, but has not written its own response using <see cref="Controller.Context.httpProcessor"/>, then the MVC framework will treat the request the same as if it failed to be routed.</para>
+	/// <para>Normally the MVC framework will automatically write the <see cref="ActionResult"/> to the response stream, however if an ActionMethod utilizes Controller.Context.httpProcessor to write a response directly, then the MVC framework will not write the ActionResult to the response stream.  In this case it is perfectly acceptable for the ActionMethod to return null.</para>
+	/// <para>If an ActionMethod returns null, but has not written its own response using Controller.Context.httpProcessor, then the MVC framework will treat the request the same as if it failed to be routed.</para>
 	/// <para>If an ActionMethod throws an exception, the MVC framework will return an error message in HTML format.  If this format is not acceptable, then your ActionMethod should handle its own exceptions.</para>
 	/// <para>Request routing within the MVC framework is done automatically following simple rules.</para>
 	/// <para>======================================</para>

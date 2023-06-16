@@ -124,6 +124,10 @@
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\SimpleCertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\Enums\ContentType.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\FragmentStream.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\DefaultExtension.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\Extension.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\Enums\ExtensionType.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\ServerNameExtension.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\HandshakeMessage.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\Enums\HandshakeType.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\HandshakeBody.cs" />

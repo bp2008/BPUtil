@@ -8,6 +8,9 @@ using System.Threading.Tasks;
 
 namespace BPUtil.IO
 {
+	/// <summary>
+	/// A stream which can have data buffers "un-read".  In other words, code can read some bytes from the stream, then put the bytes back into the stream afterward so they will be read again.
+	/// </summary>
 	public class UnreadableStream : Stream, IDisposable
 	{
 		/// <summary>

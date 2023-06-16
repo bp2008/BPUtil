@@ -16,6 +16,18 @@ namespace BPUtil.SimpleHttp.TLS.Implementation
 		protected TLSPlaintext currentFragment = null;
 		protected ContentType? firstFragmentType = null;
 		protected int position = 0;
+		public bool ClientUsedTLS
+		{
+			get
+			{
+				if (currentFragment == null)
+				{
+					currentFragment = getFragmentCallback();
+					firstFragmentType = currentFragment.type;
+				}
+				return currentFragment.isTlsHandshake;
+			}
+		}
 
 		/// <summary>
 		/// Creates a new FragmentStream that will be locked to the type of the first fragment it is provided.

@@ -31,6 +31,7 @@ namespace BPUtil.SimpleHttp
 		public static UTF8Encoding Utf8NoBOM = new UTF8Encoding(false);
 		private const int BUF_SIZE = 4096;
 		private static int MAX_POST_SIZE = 10 * 1024 * 1024; // 10MB
+		private readonly AllowedConnectionTypes allowedConnectionTypes;
 
 		#region Fields and Properties
 		/// <summary>
@@ -83,7 +84,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// The base Uri for this server, containing its host name and port.
 		/// </summary>
-		public Uri base_uri_this_server;
+		public Uri base_uri_this_server { get; private set; }
 		/// <summary>
 		/// The requested url.
 		/// </summary>
@@ -300,9 +301,9 @@ namespace BPUtil.SimpleHttp
 		#endregion
 
 		/// <summary>
-		/// If true, the connection is secure.
+		/// If true, the connection is secured with TLS.
 		/// </summary>
-		public readonly bool secure_https;
+		public bool secure_https { get; private set; }
 		private ICertificateSelector certificateSelector;
 		/// <summary>
 		/// The type of compression that will be used for the response stream.
@@ -326,20 +327,15 @@ namespace BPUtil.SimpleHttp
 		//private TcpClient _internal_proxy_keepalive_tcp_client;
 		#endregion
 
-		public HttpProcessor(TcpClient s, HttpServer srv, X509Certificate2 ssl_certificate = null) : this(s, srv, SimpleCertificateSelector.FromCertificate(ssl_certificate)) { }
-
-		public HttpProcessor(TcpClient s, HttpServer srv, ICertificateSelector certificateSelector)
+		public HttpProcessor(TcpClient s, HttpServer srv, ICertificateSelector certificateSelector, AllowedConnectionTypes allowedConnectionTypes)
 		{
+			if ((allowedConnectionTypes == AllowedConnectionTypes.https || allowedConnectionTypes == AllowedConnectionTypes.httpAndHttps) && certificateSelector == null)
+				throw new ArgumentException("HttpProcessor was instructed to accept https requests but was not provided a certificate selector.", "certificateSelector");
+
 			this.certificateSelector = certificateSelector;
-			this.secure_https = certificateSelector != null;
 			this.tcpClient = s;
-			this.base_uri_this_server = new Uri("http" + (this.secure_https ? "s" : "") + "://" + s.Client.LocalEndPoint.ToString(), UriKind.Absolute);
 			this.srv = srv;
-		}
-
-		public HttpProcessor(bool secure_https)
-		{
-			this.secure_https = secure_https;
+			this.allowedConnectionTypes = allowedConnectionTypes;
 		}
 
 		private string streamReadLine(Stream inputStream, int maxLength = 32768)
@@ -376,20 +372,36 @@ namespace BPUtil.SimpleHttp
 			{
 				tcpClient.SendBufferSize = 65536;
 				tcpStream = tcpClient.GetStream();
-				if (this.secure_https)
+				if (allowedConnectionTypes == AllowedConnectionTypes.https || allowedConnectionTypes == AllowedConnectionTypes.httpAndHttps)
 				{
 					try
 					{
 						X509Certificate cert;
-						if (certificateSelector is SimpleCertificateSelector)
-							cert = certificateSelector.GetCertificate(null); // SimpleCertificateSelector doesn't use serverName, so we can skip reading it.
+						if (allowedConnectionTypes == AllowedConnectionTypes.https && certificateSelector is SimpleCertificateSelector)
+						{
+							// This connection only supports HTTPS, and SimpleCertificateSelector doesn't require Server Name Indication.
+							// We can skip wrapping the network stream to read the TLS Client Hello message.
+							cert = certificateSelector.GetCertificate(null);
+						}
 						else
 						{
-							tcpStream = TLS.TlsServerNameReader.Read(tcpStream, out string serverName);
-							cert = certificateSelector.GetCertificate(serverName);
+							// Read the TLS Client Hello message to get the server name so we can select the correct certificate.
+							// This requires wrapping the network stream which makes all further read/write operations slightly less efficient.
+							// Note it is possible that the client is not using TLS, in which case no certificate will be selected and the
+							//   request will be processed as plain HTTP.
+							tcpStream = TLS.TlsServerNameReader.Read(tcpStream, out string serverName, out bool clientUsedTls);
+							if (clientUsedTls)
+								cert = certificateSelector.GetCertificate(serverName);
+							else
+								cert = null;
 						}
-						tcpStream = new System.Net.Security.SslStream(tcpStream, false, null, null);
-						((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(cert, false, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+						if (cert != null)
+						{
+							tcpStream = new System.Net.Security.SslStream(tcpStream, false, null, null);
+							const System.Security.Authentication.SslProtocols Tls13 = (System.Security.Authentication.SslProtocols)12288;
+							((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(cert, false, System.Security.Authentication.SslProtocols.Tls12 | Tls13, false);
+							this.secure_https = true;
+						}
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (SocketException) { throw; }
@@ -399,6 +411,7 @@ namespace BPUtil.SimpleHttp
 						return;
 					}
 				}
+				this.base_uri_this_server = new Uri("http" + (this.secure_https ? "s" : "") + "://" + tcpClient.Client.LocalEndPoint.ToString(), UriKind.Absolute);
 				Stream originalTcpStream = tcpStream;
 				do
 				{
@@ -1571,20 +1584,33 @@ namespace BPUtil.SimpleHttp
 			if (this.port > 65535 || this.port < -1) this.port = -1;
 			if (this.secure_port > 65535 || this.secure_port < -1) this.secure_port = -1;
 
-			if (this.port > -1)
-			{
-				thrHttp = new Thread(listen);
-				thrHttp.IsBackground = true;
-				thrHttp.Name = "HttpServer Thread";
-			}
-
 			if (this.secure_port > -1)
 			{
 				if (this.certificateSelector == null)
 					this.certificateSelector = SimpleCertificateSelector.FromCertificate(HttpServer.GetSelfSignedCertificate());
+			}
+
+			if (this.secure_port > -1 && this.secure_port == this.port)
+			{
 				thrHttps = new Thread(listen);
 				thrHttps.IsBackground = true;
-				thrHttps.Name = "HttpsServer Thread";
+				thrHttps.Name = "Http and Https Combined Server Thread";
+			}
+			else
+			{
+				if (this.port > -1)
+				{
+					thrHttp = new Thread(listen);
+					thrHttp.IsBackground = true;
+					thrHttp.Name = "HttpServer Thread";
+				}
+
+				if (this.secure_port > -1)
+				{
+					thrHttps = new Thread(listen);
+					thrHttps.IsBackground = true;
+					thrHttps.Name = "HttpsServer Thread";
+				}
 			}
 			NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAvailabilityChanged;
 			NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
@@ -1621,13 +1647,14 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// A function which produces an IProcessor instance, allowing this server to be used for protocols besides HTTP.  By default, this returns a standard HttpProcessor.
 		/// </summary>
-		/// <param name="s"></param>
-		/// <param name="srv"></param>
-		/// <param name="certSelector">An instnace of a type deriving from ICertificateSelector, such as <see cref="SimpleCertificateSelector"/> or <see cref="ServerNameCertificateSelector"/>.</param>
+		/// <param name="s">The TcpClient which holds the connection from the client.</param>
+		/// <param name="srv">The server instance which accepted the TCP connection from the client.</param>
+		/// <param name="certSelector">An instance of a type deriving from ICertificateSelector, such as <see cref="SimpleCertificateSelector"/> or <see cref="ServerNameCertificateSelector"/>.</param>
+		/// <param name="allowedConnectionTypes">Indicates whether the connection should support HTTP, HTTPS, or both.</param>
 		/// <returns></returns>
-		public virtual IProcessor MakeClientProcessor(TcpClient s, HttpServer srv, ICertificateSelector certSelector)
+		public virtual IProcessor MakeClientProcessor(TcpClient s, HttpServer srv, ICertificateSelector certSelector, AllowedConnectionTypes allowedConnectionTypes)
 		{
-			return new HttpProcessor(s, srv, certSelector);
+			return new HttpProcessor(s, srv, certSelector, allowedConnectionTypes);
 		}
 		private void NetworkChange_NetworkAddressChanged(object sender, EventArgs e)
 		{
@@ -1663,7 +1690,7 @@ namespace BPUtil.SimpleHttp
 			return DateTime.MaxValue;
 		}
 		/// <summary>
-		/// Returns the date in local time after which the certificate is no longer valid.  If the certificate is null, returns DateTime.MaxValue.
+		/// Returns the friendly name from the certificate.  If the certificate is null, returns DateTime.MaxValue.
 		/// </summary>
 		/// <returns></returns>
 		[Obsolete("This doesn't work properly when using Server Name Indication to select a certificate.")]
@@ -1696,9 +1723,10 @@ namespace BPUtil.SimpleHttp
 						fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
 					}
 				}
+				const string autoCertPassword = "N0t_V3ry-S3cure#lol";
 				FileInfo fiCert = new FileInfo(fiExe.Directory.FullName + "/SimpleHttpServer-SslCert.pfx");
 				if (fiCert.Exists)
-					ssl_certificate = new X509Certificate2(fiCert.FullName, "N0t_V3ry-S3cure#lol");
+					ssl_certificate = new X509Certificate2(fiCert.FullName, autoCertPassword);
 				else
 				{
 					using (BPUtil.SimpleHttp.Crypto.CryptContext ctx = new BPUtil.SimpleHttp.Crypto.CryptContext())
@@ -1715,14 +1743,27 @@ namespace BPUtil.SimpleHttp
 								ValidTo = DateTime.Today.AddYears(100),
 							});
 
-						byte[] certData = ssl_certificate.Export(X509ContentType.Pfx, "N0t_V3ry-S3cure#lol");
+						byte[] certData = ssl_certificate.Export(X509ContentType.Pfx, autoCertPassword);
 						File.WriteAllBytes(fiCert.FullName, certData);
 					}
+					// Native cert generator. .NET 4.7.2 required.
+					//using (System.Security.Cryptography.RSA key = System.Security.Cryptography.RSA.Create(2048))
+					//{
+					//	CertificateRequest request = new CertificateRequest("cn=localhost", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+
+					//	SubjectAlternativeNameBuilder sanBuilder = new SubjectAlternativeNameBuilder();
+					//	sanBuilder.AddDnsName("localhost");
+					//	request.CertificateExtensions.Add(sanBuilder.Build());
+
+					//	ssl_certificate = request.CreateSelfSigned(DateTime.Today.AddDays(-1), DateTime.Today.AddYears(100));
+
+					//	byte[] certData = ssl_certificate.Export(X509ContentType.Pfx);
+					//	File.WriteAllBytes(fiCert.FullName, certData);
+					//}
 				}
 				return ssl_certificate;
 			}
 		}
-
 		/// <summary>
 		/// Listens for connections, somewhat robustly.  Does not return until the server is stopped or until more than 100 listener restarts occur in a single day.
 		/// </summary>
@@ -1730,7 +1771,7 @@ namespace BPUtil.SimpleHttp
 		{
 			try
 			{
-				bool isSecureListener = (bool)param;
+				SimpleHttpServerThreadArgs args = (SimpleHttpServerThreadArgs)param;
 
 				int errorCount = 0;
 				DateTime lastError = DateTime.Now;
@@ -1742,19 +1783,18 @@ namespace BPUtil.SimpleHttp
 					bool threwExceptionOuter = false;
 					try
 					{
-						listener = new TcpListener(bindAddr, isSecureListener ? secure_port : port);
-						if (isSecureListener)
-							secureListener = listener;
-						else
-							unsecureListener = listener;
+						listener = new TcpListener(bindAddr, args.port);
+						args.SetListenerField(listener);
 						listener.Start();
-						if (isSecureListener)
-							actual_port_https = ((IPEndPoint)listener.LocalEndpoint).Port;
-						else
-							actual_port_http = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+						args.SetActualPort(((IPEndPoint)listener.LocalEndpoint).Port);
+
 						try
 						{
-							SocketBound(this, "Web Server listening on port " + (isSecureListener ? (actual_port_https + " (https)") : (actual_port_http + " (http)")));
+							if (args.allowedConnectionTypes == AllowedConnectionTypes.httpAndHttps)
+								SocketBound(this, "Web Server listening on port " + actual_port_https + " (http and https)");
+							else
+								SocketBound(this, "Web Server listening on port " + (args.allowedConnectionTypes == AllowedConnectionTypes.https ? (actual_port_https + " (https)") : (actual_port_http + " (http)")));
 						}
 						catch (ThreadAbortException) { throw; }
 						catch (Exception ex)
@@ -1792,7 +1832,7 @@ namespace BPUtil.SimpleHttp
 								//		SimpleHttpLogger.Log(ex);
 								//	}
 								//}
-								IProcessor processor = MakeClientProcessor(s, this, isSecureListener ? certificateSelector : null);
+								IProcessor processor = MakeClientProcessor(s, this, certificateSelector, args.allowedConnectionTypes);
 								pool.Enqueue(processor.Process);
 								//	try
 								//	{
@@ -1873,9 +1913,15 @@ namespace BPUtil.SimpleHttp
 		public void Start()
 		{
 			if (thrHttp != null)
-				thrHttp.Start(false);
+				thrHttp.Start(new SimpleHttpServerThreadArgs(this.port,
+					AllowedConnectionTypes.http,
+					port => this.actual_port_http = port,
+					listener => this.unsecureListener = listener));
 			if (thrHttps != null)
-				thrHttps.Start(true);
+				thrHttps.Start(new SimpleHttpServerThreadArgs(this.secure_port,
+					this.secure_port == this.port ? AllowedConnectionTypes.httpAndHttps : AllowedConnectionTypes.https,
+					port => this.actual_port_https = port,
+					listener => this.secureListener = listener));
 		}
 
 		/// <summary>
@@ -1896,7 +1942,7 @@ namespace BPUtil.SimpleHttp
 			try { pool.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			if (unsecureListener != null)
 				try { unsecureListener.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
-			if (secureListener != null)
+			if (secureListener != null && unsecureListener != secureListener)
 				try { secureListener.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			if (thrHttp != null)
 				try { thrHttp.Abort(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
@@ -1983,6 +2029,27 @@ namespace BPUtil.SimpleHttp
 		}
 	}
 	#region Helper Classes
+	class SimpleHttpServerThreadArgs
+	{
+		public int port;
+		public AllowedConnectionTypes allowedConnectionTypes;
+		public Action<int> SetActualPort;
+		public Action<TcpListener> SetListenerField;
+
+		public SimpleHttpServerThreadArgs(int port, AllowedConnectionTypes allowedConnectionTypes, Action<int> setActualPort, Action<TcpListener> setListenerField)
+		{
+			this.port = port;
+			this.allowedConnectionTypes = allowedConnectionTypes;
+			SetActualPort = setActualPort;
+			SetListenerField = setListenerField;
+		}
+	}
+	public enum AllowedConnectionTypes
+	{
+		http,
+		https,
+		httpAndHttps
+	}
 	public enum CompressionType
 	{
 		None,

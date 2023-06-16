@@ -7,7 +7,7 @@ using System.IO;
 namespace BPUtil.SimpleHttp.TLS
 {
 	/// <summary>
-	/// Uses BPUtil's very limited TLS implementation to read the TLS Client Hello in order to get the name of the server.
+	/// Uses BPUtil's very limited TLS implementation to read the TLS Client Hello in order to get the name of the server. Based on: https://tls13.xargs.org/
 	/// </summary>
 	public class TlsServerNameReader
 	{
@@ -16,29 +16,35 @@ namespace BPUtil.SimpleHttp.TLS
 		/// </summary>
 		/// <param name="tcpStream">The stream that is expected to begin a TLS 1.0, 1.1, or 1.2 handshake.</param>
 		/// <param name="serverName">The server name from the TLS Server Name extension.  Or null.</param>
+		/// <param name="clientUsedTls">True if the client used the TLS protocol (https), false if not.</param>
 		/// <returns></returns>
 		/// <exception cref="Exception">Throws if there is a problem parsing the TLS Client Hello.</exception>
-		public static Stream Read(Stream tcpStream, out string serverName)
+		public static Stream Read(Stream tcpStream, out string serverName, out bool clientUsedTls)
 		{
+			clientUsedTls = true;
+
 			UnreadableStream unread = new UnreadableStream(tcpStream);
 
 			FragmentStream readerOfClientHello = new FragmentStream(() =>
 			{
 				TLSPlaintext fragment = new TLSPlaintext(tcpStream);
 				unread.Unread(fragment.data_header);
-				unread.Unread(fragment.data_fragment);
+				if (fragment.isTlsHandshake)
+				{b
+					unread.Unread(fragment.data_fragment);
 
-				if (fragment.type != ContentType.handshake)
-					throw new Exception("TLS protocol error: Fragment began with byte " + (byte)fragment.type + ". Expected " + (byte)ContentType.handshake);
-				if (!fragment.version.IsSupported())
-					throw new Exception("Unsupported TLS protocol version: " + fragment.version);
-
+					if (fragment.type != ContentType.handshake)
+						throw new Exception("TLS protocol error: Fragment began with byte " + (byte)fragment.type + ". Expected " + (byte)ContentType.handshake);
+					if (!fragment.version.IsSupported())
+						throw new Exception("Unsupported TLS protocol version: " + fragment.version);
+				}
 				return fragment;
 			});
 
 			HandshakeMessage firstHandshakeMessage = new HandshakeMessage(new BasicDataStream(readerOfClientHello));
-			
-			if (firstHandshakeMessage.msg_type == HandshakeType.client_hello)
+			clientUsedTls = firstHandshakeMessage.ClientUsedTLS;
+
+			if (clientUsedTls && firstHandshakeMessage.msg_type == HandshakeType.client_hello)
 			{
 				ClientHello clientHello = firstHandshakeMessage.body as ClientHello;
 				serverName = clientHello.serverName;

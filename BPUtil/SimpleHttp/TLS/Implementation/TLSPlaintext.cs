@@ -20,6 +20,8 @@ namespace BPUtil.SimpleHttp.TLS.Implementation
 		public ContentType type;
 		public ProtocolVersion version;
 
+		public bool isTlsHandshake = false;
+
 		public TLSPlaintext() { }
 		public TLSPlaintext(Stream stream)
 		{
@@ -30,8 +32,13 @@ namespace BPUtil.SimpleHttp.TLS.Implementation
 				major = data_header[1],
 				minor = data_header[2]
 			};
+			if (type != ContentType.handshake)
+				return;
+
 			ushort length = ByteUtil.ReadUInt16(data_header, 3);
 			data_fragment = ByteUtil.ReadNBytes(stream, length);
+
+			isTlsHandshake = true;
 		}
 	}
 }
