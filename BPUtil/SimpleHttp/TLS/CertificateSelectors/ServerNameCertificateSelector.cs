@@ -13,14 +13,14 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Returns an X509Certificate appropriate for the specified serverName, or null.
 		/// </summary>
-		/// <param name="serverName">The server name as indicated by ServerNameIndication. May be null or empty.</param>
+		/// <param name="serverName">The server name as indicated by ServerNameIndication. May be null or empty. Not case sensitive.</param>
 		/// <returns>an X509Certificate or null</returns>
 		public X509Certificate GetCertificate(string serverName)
 		{
 			if (serverName == null)
 				serverName = "";
 			else
-				serverName = serverName.ToLower();
+				serverName = serverName.ToUpper();
 
 			X509Certificate cert;
 			if (allCertsByDomain.TryGetValue(serverName, out cert))
@@ -34,14 +34,14 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Sets the certificate for the specified server name.
 		/// </summary>
-		/// <param name="serverName">The domain name of the server.  The lower-case form of this will be used as the dictionary key.  To specify a default certificate, use <see cref="string.Empty"/> as the serverName.  Null is treated as empty string.</param>
+		/// <param name="serverName">The domain name of the server.  To specify a default certificate, use <see cref="string.Empty"/> as the serverName.  Null is treated as empty string.  The upper-case form of this string be used as the dictionary key in order to avoid case-sensitivity.</param>
 		/// <param name="cert">The certificate.</param>
 		public void SetCertificate(string serverName, X509Certificate cert)
 		{
 			if (serverName == null)
 				serverName = "";
 			else
-				serverName = serverName.ToLower();
+				serverName = serverName.ToUpper();
 
 			allCertsByDomain[serverName] = cert;
 		}

@@ -30,7 +30,7 @@ namespace BPUtil.SimpleHttp.TLS
 				TLSPlaintext fragment = new TLSPlaintext(tcpStream);
 				unread.Unread(fragment.data_header);
 				if (fragment.isTlsHandshake)
-				{b
+				{
 					unread.Unread(fragment.data_fragment);
 
 					if (fragment.type != ContentType.handshake)
