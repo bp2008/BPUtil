@@ -1723,10 +1723,26 @@ namespace BPUtil.SimpleHttp
 						fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
 					}
 				}
-				const string autoCertPassword = "N0t_V3ry-S3cure#lol";
+				string autoCertPassword = "N0t_V3ry-S3cure#lol";
 				FileInfo fiCert = new FileInfo(fiExe.Directory.FullName + "/SimpleHttpServer-SslCert.pfx");
 				if (fiCert.Exists)
-					ssl_certificate = new X509Certificate2(fiCert.FullName, autoCertPassword);
+				{
+					try
+					{
+						ssl_certificate = new X509Certificate2(fiCert.FullName, autoCertPassword);
+					}
+					catch (Exception ex1)
+					{
+						try
+						{
+							ssl_certificate = new X509Certificate2(fiCert.FullName);
+						}
+						catch
+						{
+							throw ex1;
+						}
+					}
+				}
 				else
 				{
 					using (BPUtil.SimpleHttp.Crypto.CryptContext ctx = new BPUtil.SimpleHttp.Crypto.CryptContext())
