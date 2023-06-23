@@ -32,7 +32,7 @@ namespace BPUtil
 				try
 				{
 					if (filePath == null)
-						filePath = this.GetType().Name + ".cfg";
+						filePath = GetDefaultFilePath();
 					object lockObj = fileLocks.GetOrAdd(filePath.ToLower(), MakeLockKey);
 					lock (lockObj)
 					{
@@ -42,9 +42,8 @@ namespace BPUtil
 							if (!fi.Directory.Exists)
 								Directory.CreateDirectory(fi.Directory.FullName);
 						}
-						System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(this.GetType());
 						using (FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
-							x.Serialize(fs, this);
+							SerializeObject(this, fs);
 					}
 					return true;
 				}
@@ -71,16 +70,15 @@ namespace BPUtil
 				{
 					Type thistype = this.GetType();
 					if (filePath == null)
-						filePath = thistype.Name + ".cfg";
+						filePath = GetDefaultFilePath();
 					object lockObj = fileLocks.GetOrAdd(filePath.ToLower(), MakeLockKey);
 					lock (lockObj)
 					{
 						if (!File.Exists(filePath))
 							return false;
-						System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(this.GetType());
 						object obj;
 						using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-							obj = x.Deserialize(fs);
+							obj = DeserializeObject(fs);
 						foreach (FieldInfo sourceField in obj.GetType().GetFields())
 						{
 							try
@@ -126,7 +124,7 @@ namespace BPUtil
 		public virtual bool SaveIfNoExist(string filePath = null)
 		{
 			if (filePath == null)
-				filePath = this.GetType().Name + ".cfg";
+				filePath = GetDefaultFilePath();
 			object lockObj = fileLocks.GetOrAdd(filePath.ToLower(), MakeLockKey);
 			lock (lockObj)
 			{
@@ -135,6 +133,68 @@ namespace BPUtil
 			}
 			return false;
 		}
+
+		protected virtual string GetDefaultFilePath()
+		{
+			return this.GetType().Name + ".cfg";
+		}
+
+		/// <summary>
+		/// <para>Writes the object to a FileStream.  The default implementation in SerializableObjectBase uses XML.</para>
+		/// </summary>
+		protected virtual void SerializeObject(object obj, FileStream stream)
+		{
+			System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(this.GetType());
+			x.Serialize(stream, this);
+		}
+		/// <summary>
+		/// <para>Reads the object from a FileStream.  The default implementation in SerializableObjectBase uses XML.</para>
+		/// </summary>
+		protected virtual SerializableObjectBase DeserializeObject(FileStream stream)
+		{
+			System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(this.GetType());
+			object obj = x.Deserialize(stream);
+			return (SerializableObjectBase)obj;
+		}
+	}
+	public abstract class SerializableObjectJson : SerializableObjectBase
+	{
+		/// <summary>
+		/// <para>Writes the object to a FileStream using JSON.</para>
+		/// </summary>
+		protected override void SerializeObject(object obj, FileStream stream)
+		{
+			using (StreamWriter sw = new StreamWriter(stream, ByteUtil.Utf8NoBOM))
+			{
+				sw.Write(SerializeToJson(obj));
+			}
+		}
+		/// <summary>
+		/// <para>Reads the object from a FileStream using JSON.</para>
+		/// </summary>
+		protected override SerializableObjectBase DeserializeObject(FileStream stream)
+		{
+			using (StreamReader sr = new StreamReader(stream, ByteUtil.Utf8NoBOM))
+			{
+				string str = sr.ReadToEnd();
+				return (SerializableObjectBase)DeserializeFromJson(str);
+			}
+		}
+
+		protected override string GetDefaultFilePath()
+		{
+			return this.GetType().Name + ".json";
+		}
+		/// <summary>
+		/// <para>Converts an object to a JSON string. Must be implemented by classes deriving from SerializableObjectJson.</para>
+		/// <para>e.g. JsonConvert.SerializeObject</para>
+		/// </summary>
+		public abstract string SerializeToJson(object obj);
+		/// <summary>
+		/// <para>Converts a JSON string to an object. Must be implemented by classes deriving from SerializableObjectJson.</para>
+		/// <para>e.g.JsonConvert.DeserializeObject</para>
+		/// </summary>
+		public abstract object DeserializeFromJson(string str);
 	}
 	/// <summary>
 	/// Annotate the serializable object with this in order to load serialized properties (otherwise only fields are loaded from file).

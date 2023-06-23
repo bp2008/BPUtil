@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -13,6 +14,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 
 // This file has been modified continuously since Nov 10, 2012 by Brian Pearce.
 // Based on http://www.codeproject.com/Articles/137979/Simple-HTTP-Server-in-C
@@ -316,15 +318,6 @@ namespace BPUtil.SimpleHttp
 		public MemoryStream PostBodyStream { get; protected set; }
 
 		public long keepAliveRequestCount { get; protected set; } = 0;
-
-		///// <summary>
-		///// For internal use only by the ProxyTo method, this field 
-		///// </summary>
-		//private IPEndPoint _internal_proxy_keepalive_remote_endpoint;
-		///// <summary>
-		///// For internal use only by the ProxyTo method, this field stores a TcpClient that has been kept alive intentionally in anticipation of another request.
-		///// </summary>
-		//private TcpClient _internal_proxy_keepalive_tcp_client;
 		#endregion
 
 		public HttpProcessor(TcpClient s, HttpServer srv, ICertificateSelector certificateSelector, AllowedConnectionTypes allowedConnectionTypes)
@@ -338,31 +331,32 @@ namespace BPUtil.SimpleHttp
 			this.allowedConnectionTypes = allowedConnectionTypes;
 		}
 
-		private string streamReadLine(Stream inputStream, int maxLength = 32768)
-		{
-			int next_char;
-			bool endOfStream = false;
-			bool didRead = false;
-			StringBuilder data = new StringBuilder();
-			while (true)
-			{
-				next_char = inputStream.ReadByte();
-				if (next_char == -1)
-				{
-					endOfStream = true;
-					break;
-				};
-				didRead = true;
-				if (next_char == '\n') { break; }
-				if (next_char == '\r') { continue; }
-				if (data.Length >= maxLength)
-					throw new HttpProcessorException("413 Entity Too Large");
-				data.Append(Convert.ToChar(next_char));
-			}
-			if (endOfStream && !didRead)
-				return null;
-			return data.ToString();
-		}
+		//private string streamReadLine(Stream inputStream, int maxLength = 32768)
+		//{
+		//	int next_char;
+		//	bool endOfStream = false;
+		//	bool didRead = false;
+		//	StringBuilder data = new StringBuilder();
+		//	while (true)
+		//	{
+		//		next_char = inputStream.ReadByte();
+		//		if (next_char == -1)
+		//		{
+		//			endOfStream = true;
+		//			break;
+		//		};
+		//		didRead = true;
+		//		if (next_char == '\n') { break; }
+		//		if (next_char == '\r') { continue; }
+		//		if (data.Length >= maxLength)
+		//			throw new HttpProcessorException("413 Entity Too Large");
+		//		data.Append(Convert.ToChar(next_char));
+		//	}
+		//	if (endOfStream && !didRead)
+		//		return null;
+		//	return data.ToString();
+		//}
+
 		/// <summary>
 		/// Processes the request.
 		/// </summary>
@@ -389,8 +383,7 @@ namespace BPUtil.SimpleHttp
 							// This requires wrapping the network stream which makes all further read/write operations slightly less efficient.
 							// Note it is possible that the client is not using TLS, in which case no certificate will be selected and the
 							//   request will be processed as plain HTTP.
-							tcpStream = TLS.TlsServerNameReader.Read(tcpStream, out string serverName, out bool clientUsedTls);
-							if (clientUsedTls)
+							if (TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, out string serverName))
 								cert = certificateSelector.GetCertificate(serverName);
 							else
 								cert = null;
@@ -443,9 +436,9 @@ namespace BPUtil.SimpleHttp
 					try
 					{
 						tcpClient.ReceiveTimeout = 10000;
-						parseRequest();
-						readHeaders();
-						keepAliveRequested = "keep-alive".Equals(GetHeaderValue("connection"), StringComparison.OrdinalIgnoreCase);
+						parseRequest().Wait();
+						readHeaders(tcpStream, httpHeaders, httpHeadersRaw).Wait();
+						keepAliveRequested = "keep-alive".IEquals(GetHeaderValue("connection"));
 						IPAddress originalRemoteIp = RemoteIPAddress;
 						if (srv.XRealIPHeader)
 						{
@@ -626,9 +619,9 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Parses the first line of the http request to get the request method, url, and protocol version.
 		/// </summary>
-		private void parseRequest()
+		private async Task parseRequest()
 		{
-			string request = streamReadLine(tcpStream);
+			string request = await streamReadLine(tcpStream);
 			if (request == null)
 				throw new EndOfStreamException();
 			string[] tokens = request.Split(' ');
@@ -649,10 +642,10 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Parses the http headers
 		/// </summary>
-		private void readHeaders()
+		internal static async Task readHeaders(Stream tcpStream, Dictionary<string, string> httpHeaders, Dictionary<string, string> httpHeadersRaw)
 		{
 			string line;
-			while ((line = streamReadLine(tcpStream)) != "")
+			while ((line = await streamReadLine(tcpStream)) != "")
 			{
 				if (line == null)
 					throw new EndOfStreamException();
@@ -665,16 +658,52 @@ namespace BPUtil.SimpleHttp
 					pos++; // strip any spaces
 
 				string value = line.Substring(pos);
-				AddOrUpdateHeaderValue(name, value);
+				AddOrUpdateHeaderValue(httpHeaders, httpHeadersRaw, name, value);
 			}
+		}
+
+		internal static async Task<string> streamReadLine(Stream inputStream, int maxLength = 32768)
+		{
+			int next_char;
+			bool endOfStream = false;
+			bool didRead = false;
+			StringBuilder data = new StringBuilder();
+			byte[] buf = new byte[1];
+			while (true)
+			{
+				//next_char = inputStream.ReadByte();
+				//if (next_char == -1)
+				//{
+				//	endOfStream = true;
+				//	break;
+				//};
+				int read = await inputStream.ReadAsync(buf, 0, 1);
+				if (read == 0)
+				{
+					endOfStream = true;
+					break;
+				};
+				next_char = buf[0];
+				didRead = true;
+				if (next_char == '\n') { break; }
+				if (next_char == '\r') { continue; }
+				if (data.Length >= maxLength)
+					throw new HttpProcessorException("413 Entity Too Large");
+				data.Append(Convert.ToChar(next_char));
+			}
+			if (endOfStream && !didRead)
+				return null;
+			return data.ToString();
 		}
 
 		/// <summary>
 		/// Adds or updates the header with the specified value.  If the header already has a value in our map(s), a comma will be appended, then the new value will be appended.
 		/// </summary>
-		/// <param name="headerName"></param>
-		/// <param name="value"></param>
-		private void AddOrUpdateHeaderValue(string headerName, string value)
+		/// <param name="httpHeaders">Collection into which the header is inserted with lower case key.</param>
+		/// <param name="httpHeadersRaw">Collection into which the header is inserted.</param>
+		/// <param name="headerName">Header name (key).</param>
+		/// <param name="value">Header value.</param>
+		private static void AddOrUpdateHeaderValue(Dictionary<string, string> httpHeaders, Dictionary<string, string> httpHeadersRaw, string headerName, string value)
 		{
 			string lower = headerName.ToLower();
 			string existingValue = "";
@@ -1076,7 +1105,6 @@ namespace BPUtil.SimpleHttp
 		{
 			if (snoopy != null)
 				snoopy.AddItem(new ProxyDataItem(Direction, str));
-			//DebugLogStreamWrite(item.ToString());
 			byte[] buf = Utf8NoBOM.GetBytes(str);
 			target.Write(buf, 0, buf.Length);
 		}
@@ -1089,20 +1117,10 @@ namespace BPUtil.SimpleHttp
 					item = new ProxyDataItem(Direction, ByteUtil.SubArray(buf, 0, length));
 				else
 					item = new ProxyDataItem(Direction, buf);
-				//DebugLogStreamWrite(item.ToString() + "\r\n");
 				snoopy?.AddItem(item);
 			}
 			target.Write(buf, 0, length);
 		}
-		//private object DebugWriterLock = new object();
-		//private int rnd = StaticRandom.Next();
-		//private void DebugLogStreamWrite(string content)
-		//{
-		//	lock (DebugWriterLock)
-		//	{
-		//		File.AppendAllText(rnd + ".txt", content);
-		//	}
-		//}
 		private void CopyStreamUntilClosed(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
 			byte[] buf = new byte[16000];
@@ -1113,6 +1131,19 @@ namespace BPUtil.SimpleHttp
 				if (read > 0)
 					_ProxyData(Direction, target, buf, read, snoopy);
 			}
+		}
+		/// <summary>
+		/// Acts as a proxy server, sending the request to a different URL.  This method starts a new (and unpooled) thread to handle the response from the remote server.
+		/// The "Host" header is rewritten (or added) and output as the first header.
+		/// </summary>
+		/// <param name="newUrl">The URL to proxy the original request to.</param>
+		/// <param name="networkTimeoutMs">The send and receive timeout to set for both TcpClients, in milliseconds.</param>
+		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
+		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
+		/// <param name="host">The value of the host header, also used in SSL authentication. If null or whitespace, it is set from the [newUrl] parameter.</param>
+		public async Task ProxyToAsync(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null)
+		{
+			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), networkTimeoutMs, host, acceptAnyCert, snoopy);
 		}
 		#endregion
 
@@ -1457,7 +1488,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// An exception containing an HTTP response code and text.
 		/// </summary>
-		private class HttpProcessorException : Exception
+		internal class HttpProcessorException : Exception
 		{
 			/// <summary>
 			/// Constructs an exception containing an HTTP response code and text.
@@ -1469,7 +1500,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Occurs when the client committed a protocol violation.
 		/// </summary>
-		private class HttpProtocolException : Exception
+		internal class HttpProtocolException : Exception
 		{
 			public HttpProtocolException(string message) : base(message) { }
 		}
@@ -1477,7 +1508,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Occurs when the end of stream is found during request processing. Inherits from <see cref="HttpProtocolException"/>.
 		/// </summary>
-		private class EndOfStreamException : HttpProtocolException
+		internal class EndOfStreamException : HttpProtocolException
 		{
 			public EndOfStreamException() : base("End of stream") { }
 		}
@@ -1486,33 +1517,125 @@ namespace BPUtil.SimpleHttp
 	public abstract class HttpServer : IDisposable
 	{
 		/// <summary>
-		/// If > -1, the server was told to listen for http connections on this port.  Port 0 causes the socket library to choose its own port.
+		/// Defines a local socket binding for HttpServer.
 		/// </summary>
-		protected readonly int port;
-		/// <summary>
-		/// If > -1, the server was told to listen for https connections on this port.  Port 0 causes the socket library to choose its own port.
-		/// </summary>
-		protected readonly int secure_port;
-		protected int actual_port_http = -1;
-		protected int actual_port_https = -1;
-		/// <summary>
-		/// The actual port the http server is listening on.  Will be -1 if not listening.
-		/// </summary>
-		public int Port_http
+		public class Binding
 		{
-			get
+			/// <summary>
+			/// The local endpoint which the server listens on for this Binding.
+			/// </summary>
+			public readonly IPEndPoint Endpoint;
+			/// <summary>
+			/// Connection types that are allowed, where it is possible to allow plain unencrypted connections or TLS.
+			/// </summary>
+			public readonly AllowedConnectionTypes AllowedConnectionTypes;
+			/// <summary>
+			/// Constructs an Endpoint.
+			/// </summary>
+			/// <param name="allowedConnectionTypes">Connection types that are allowed for this binding, where it is possible to allow plain unencrypted connections or TLS.</param>
+			/// <param name="endpoint">The local endpoint which the server listens on for this Binding.</param>
+			public Binding(AllowedConnectionTypes allowedConnectionTypes, IPEndPoint endpoint)
 			{
-				return actual_port_http;
+				AllowedConnectionTypes = allowedConnectionTypes;
+				if (endpoint == null)
+					throw new ArgumentNullException("endpoint");
+				Endpoint = endpoint;
 			}
+			/// <summary>
+			/// Constructs a Binding.
+			/// </summary>
+			/// <param name="allowedConnectionTypes">Connection types that are allowed for this binding, where it is possible to allow plain unencrypted connections or TLS.</param>
+			/// <param name="port">TCP port number to listen on.</param>
+			/// <param name="address">IP address to listen on.</param>
+			public Binding(AllowedConnectionTypes allowedConnectionTypes, ushort port, IPAddress address = null) : this(allowedConnectionTypes, new IPEndPoint(address ?? IPAddress.Any, port)) { }
 		}
-		/// <summary>
-		/// The actual port the https server is listening on.  Will be -1 if not listening.
-		/// </summary>
-		public int Port_https
+		public class ListenerData
 		{
-			get
+			public readonly Binding Binding;
+			private TcpListener tcpListener;
+			private volatile bool isStopping = false;
+			internal HttpServer Server;
+			/// <summary>
+			/// Constructs a ListenerData.
+			/// </summary>
+			/// <param name="server">Server which owns this ListenerData.</param>
+			/// <param name="binding">Local service binding which this ListenerData will use.</param>
+			public ListenerData(HttpServer server, Binding binding)
 			{
-				return actual_port_https;
+				this.Server = server;
+				this.Binding = binding;
+			}
+			/// <summary>
+			/// Robustly listens on the Binding.  The task does not complete until Stop() is called.
+			/// </summary>
+			public async void Run()
+			{
+				while (!isStopping)
+				{
+					try
+					{
+						tcpListener = new TcpListener(Binding.Endpoint);
+						tcpListener.Start();
+						string trafficType;
+						if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.http)
+							trafficType = "http";
+						else if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.https)
+							trafficType = "https";
+						else if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.httpAndHttps)
+							trafficType = "http and https";
+						else
+							trafficType = "unknown";
+						Server.SocketBound.Invoke(this, "Listening on " + Binding.Endpoint.ToString() + " for " + trafficType);
+						while (!isStopping && tcpListener.Server?.IsBound == true)
+						{
+							try
+							{
+								TcpClient s = await tcpListener.AcceptTcpClientAsync().ConfigureAwait(false);
+								// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
+								if (s.ReceiveTimeout < 10000 && s.ReceiveTimeout != 0) // Timeout of 0 is infinite
+									s.ReceiveTimeout = 10000;
+								if (s.SendTimeout < 10000 && s.SendTimeout != 0) // Timeout of 0 is infinite
+									s.SendTimeout = 10000;
+								int? rbuf = Server.ReceiveBufferSize;
+								if (rbuf != null)
+									s.ReceiveBufferSize = rbuf.Value;
+								int? sbuf = Server.SendBufferSize;
+								if (sbuf != null)
+									s.SendBufferSize = sbuf.Value;
+								IProcessor processor = Server.MakeClientProcessor(s, Server, Server.certificateSelector, Binding.AllowedConnectionTypes);
+								Server.pool.Enqueue(processor.Process);
+							}
+							catch (ObjectDisposedException ex)
+							{
+								if (!isStopping)
+									Logger.Debug(ex, "SimpleHttp.HttpServer.ListenerData error processing TcpClient.");
+							}
+							catch (Exception ex)
+							{
+								Logger.Debug(ex, "SimpleHttp.HttpServer.ListenerData error processing TcpClient.");
+							}
+						}
+					}
+					catch (Exception ex)
+					{
+						Logger.Debug(ex, "SimpleHttp.HttpServer.ListenerData error managing socket.");
+					}
+					finally
+					{
+						try
+						{
+							tcpListener?.Stop();
+						}
+						catch { }
+					}
+				}
+			}
+			public void Stop()
+			{
+				isStopping = true;
+				TcpListener l = tcpListener;
+				tcpListener = null;
+				l?.Stop();
 			}
 		}
 		public int? SendBufferSize = null;
@@ -1527,21 +1650,10 @@ namespace BPUtil.SimpleHttp
 		public bool XForwardedForHeader = false;
 		protected volatile bool stopRequested = false;
 		protected ICertificateSelector certificateSelector;
-		private Thread thrHttp;
-		private Thread thrHttps;
-		private TcpListener unsecureListener = null;
-		private TcpListener secureListener = null;
 		/// <summary>
 		/// Raised when a listening socket is bound to a port.  The Event Handler passes along a string which can be printed to the console, announcing this event.
 		/// </summary>
 		public event EventHandler<string> SocketBound = delegate { };
-		/// <summary>
-		/// Raised when an SSL connection is made using a certificate that will expire within the next 14 days.  This event will not be raised more than once in a 60 minute period (assuming the same HttpServer instance is used).
-		/// The TimeSpan argument indicates the time to expiration, which may be less than or equal to TimeSpan.Zero if the certificate is expired.
-		/// </summary>
-		[Obsolete("This is no longer used.")]
-		public event EventHandler<TimeSpan> CertificateExpirationWarning = delegate { };
-		private DateTime timeOfNextCertificateExpirationWarning = DateTime.MinValue;
 
 		private NetworkAddressInfo addressInfo = new NetworkAddressInfo();
 		/// <summary>
@@ -1553,65 +1665,23 @@ namespace BPUtil.SimpleHttp
 		{
 			return addressInfo;
 		}
-		public readonly IPAddress bindAddr = IPAddress.Any;
 
-		public SimpleThreadPool pool;
+		/// <summary>
+		/// The thread pool to use for processing client connections.
+		/// </summary>
+		public SimpleThreadPool pool = new SimpleThreadPool("SimpleHttp.HttpServer");
+		/// <summary>
+		/// List of ListenerData instances responsible for asynchronously accepting TCP clients.
+		/// </summary>
+		private List<ListenerData> listeners = new List<ListenerData>();
 		/// <summary>
 		/// 
 		/// </summary>
-		/// <param name="port">The port number on which to accept regular http connections. If -1, the server will not listen for http connections.</param>
-		/// <param name="httpsPort">(Optional) The port number on which to accept https connections. If -1, the server will not listen for https connections.</param>
-		/// <param name="cert">(Optional) Certificate to use for https connections.  If null and an httpsPort was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
-		/// <param name="bindAddr">If not null, the server will bind to this address.  Default: IPAddress.Any.</param>
-		public HttpServer(int port, int httpsPort = -1, X509Certificate2 cert = null, IPAddress bindAddr = null) : this(port, httpsPort, SimpleCertificateSelector.FromCertificate(cert), bindAddr) { }
-		/// <summary>
-		/// 
-		/// </summary>
-		/// <param name="port">The port number on which to accept regular http connections. If -1, the server will not listen for http connections.</param>
-		/// <param name="httpsPort">(Optional) The port number on which to accept https connections. If -1, the server will not listen for https connections.</param>
-		/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an httpsPort was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
-		/// <param name="bindAddr">If not null, the server will bind to this address.  Default: IPAddress.Any.</param>
-		public HttpServer(int port, int httpsPort, ICertificateSelector certificateSelector, IPAddress bindAddr)
+		/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an https-compatible endpoint was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
+		public HttpServer(ICertificateSelector certificateSelector = null)
 		{
-			pool = new SimpleThreadPool("SimpleHttpServer");
-
-			this.port = port;
-			this.secure_port = httpsPort;
 			this.certificateSelector = certificateSelector;
-			if (bindAddr != null)
-				this.bindAddr = bindAddr;
 
-			if (this.port > 65535 || this.port < -1) this.port = -1;
-			if (this.secure_port > 65535 || this.secure_port < -1) this.secure_port = -1;
-
-			if (this.secure_port > -1)
-			{
-				if (this.certificateSelector == null)
-					this.certificateSelector = SimpleCertificateSelector.FromCertificate(HttpServer.GetSelfSignedCertificate());
-			}
-
-			if (this.secure_port > -1 && this.secure_port == this.port)
-			{
-				thrHttps = new Thread(listen);
-				thrHttps.IsBackground = true;
-				thrHttps.Name = "Http and Https Combined Server Thread";
-			}
-			else
-			{
-				if (this.port > -1)
-				{
-					thrHttp = new Thread(listen);
-					thrHttp.IsBackground = true;
-					thrHttp.Name = "HttpServer Thread";
-				}
-
-				if (this.secure_port > -1)
-				{
-					thrHttps = new Thread(listen);
-					thrHttps.IsBackground = true;
-					thrHttps.Name = "HttpsServer Thread";
-				}
-			}
 			NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAvailabilityChanged;
 			NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
 			UpdateNetworkAddresses();
@@ -1669,36 +1739,6 @@ namespace BPUtil.SimpleHttp
 		private void UpdateNetworkAddresses()
 		{
 			addressInfo = new NetworkAddressInfo(NetworkInterface.GetAllNetworkInterfaces());
-		}
-		/// <summary>
-		/// Sets a new SSL certificate to be used for all future connections;
-		/// </summary>
-		/// <param name="newCertificate"></param>
-		public void SetCertificate(X509Certificate2 newCertificate)
-		{
-			certificateSelector = SimpleCertificateSelector.FromCertificate(newCertificate);
-		}
-		/// <summary>
-		/// Returns the date in local time after which the certificate is no longer valid.  If the certificate is null, returns DateTime.MaxValue.
-		/// </summary>
-		/// <returns></returns>
-		[Obsolete("This doesn't work properly when using Server Name Indication to select a certificate.")]
-		public DateTime GetCertificateExpiration()
-		{
-			if (certificateSelector != null)
-				return (certificateSelector.GetCertificate(null) as X509Certificate2).NotAfter;
-			return DateTime.MaxValue;
-		}
-		/// <summary>
-		/// Returns the friendly name from the certificate.  If the certificate is null, returns DateTime.MaxValue.
-		/// </summary>
-		/// <returns></returns>
-		[Obsolete("This doesn't work properly when using Server Name Indication to select a certificate.")]
-		public string GetCertificateFriendlyName()
-		{
-			if (certificateSelector != null)
-				return (certificateSelector.GetCertificate(null) as X509Certificate2).FriendlyName;
-			return null;
 		}
 
 		private static object certCreateLock = new object();
@@ -1781,163 +1821,58 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 		/// <summary>
-		/// Listens for connections, somewhat robustly.  Does not return until the server is stopped or until more than 100 listener restarts occur in a single day.
+		/// <para>Shorthand method to configure this server to listen on all interfaces on one http and/or one https port.</para>
+		/// <para>If the same port is given for both protocols, only one socket will be bound and it will accept both protocols.</para>
+		/// <para>This method will start or stop listeners as necessary to transition from the current set of bindings to the new set of bindings.</para>
 		/// </summary>
-		private void listen(object param)
+		/// <param name="httpPort">Port number for the HTTP listener. If out of range [0-65535] (e.g. -1), the listener is disabled.</param>
+		/// <param name="httpsPort">Port number for the HTTPS listener. If out of range [0-65535] (e.g. -1), the listener is disabled.</param>
+		public void SetBindings(int httpPort = -1, int httpsPort = -1)
 		{
-			try
+			if (httpPort > 65535 || httpPort < -1) httpPort = -1;
+			if (httpsPort > 65535 || httpsPort < -1) httpsPort = -1;
+			List<Binding> bindings = new List<Binding>();
+			if (httpPort != -1 && httpPort == httpsPort)
+				bindings.Add(new HttpServer.Binding(AllowedConnectionTypes.httpAndHttps, new IPEndPoint(IPAddress.Any, httpPort)));
+			else
 			{
-				SimpleHttpServerThreadArgs args = (SimpleHttpServerThreadArgs)param;
-
-				int errorCount = 0;
-				DateTime lastError = DateTime.Now;
-
-				TcpListener listener = null;
-
-				while (!stopRequested)
-				{
-					bool threwExceptionOuter = false;
-					try
-					{
-						listener = new TcpListener(bindAddr, args.port);
-						args.SetListenerField(listener);
-						listener.Start();
-
-						args.SetActualPort(((IPEndPoint)listener.LocalEndpoint).Port);
-
-						try
-						{
-							if (args.allowedConnectionTypes == AllowedConnectionTypes.httpAndHttps)
-								SocketBound(this, "Web Server listening on port " + actual_port_https + " (http and https)");
-							else
-								SocketBound(this, "Web Server listening on port " + (args.allowedConnectionTypes == AllowedConnectionTypes.https ? (actual_port_https + " (https)") : (actual_port_http + " (http)")));
-						}
-						catch (ThreadAbortException) { throw; }
-						catch (Exception ex)
-						{
-							SimpleHttpLogger.Log(ex);
-						}
-
-						DateTime innerLastError = DateTime.Now;
-						int innerErrorCount = 0;
-						while (!stopRequested)
-						{
-							try
-							{
-								TcpClient s = listener.AcceptTcpClient();
-								// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
-								if (s.ReceiveTimeout < 10000 && s.ReceiveTimeout != 0) // Timeout of 0 is infinite
-									s.ReceiveTimeout = 10000;
-								if (s.SendTimeout < 10000 && s.SendTimeout != 0) // Timeout of 0 is infinite
-									s.SendTimeout = 10000;
-								if (ReceiveBufferSize != null)
-									s.ReceiveBufferSize = ReceiveBufferSize.Value;
-								if (SendBufferSize != null)
-									s.SendBufferSize = SendBufferSize.Value;
-								//DateTime now = DateTime.Now;
-								//if (cert != null && now.AddDays(14) > cert.NotAfter && timeOfNextCertificateExpirationWarning < now)
-								//{
-								//	timeOfNextCertificateExpirationWarning = now.AddHours(1);
-								//	try
-								//	{
-								//		CertificateExpirationWarning(this, now - cert.NotAfter);
-								//	}
-								//	catch (ThreadAbortException) { throw; }
-								//	catch (Exception ex)
-								//	{
-								//		SimpleHttpLogger.Log(ex);
-								//	}
-								//}
-								IProcessor processor = MakeClientProcessor(s, this, certificateSelector, args.allowedConnectionTypes);
-								pool.Enqueue(processor.Process);
-								//	try
-								//	{
-								//		StreamWriter outputStream = new StreamWriter(s.GetStream());
-								//		outputStream.WriteLineRN("HTTP/1.1 503 Service Unavailable");
-								//		outputStream.WriteLineRN("Connection: close");
-								//		outputStream.WriteLineRN("");
-								//		outputStream.WriteLineRN("Server too busy");
-								//	}
-								//	catch (ThreadAbortException) { throw; }
-							}
-							catch (ThreadAbortException) { throw; }
-							catch (Exception ex)
-							{
-								if (ex.Message == "A blocking operation was interrupted by a call to WSACancelBlockingCall")
-								{
-								}
-								else
-								{
-									if (DateTime.Now.Hour != innerLastError.Hour || DateTime.Now.DayOfYear != innerLastError.DayOfYear)
-									{
-										innerLastError = DateTime.Now;
-										innerErrorCount = 0;
-									}
-									if (++innerErrorCount > 10)
-										throw ex;
-									SimpleHttpLogger.Log(ex, "Inner Error count this hour: " + innerErrorCount);
-									Thread.Sleep(1);
-								}
-							}
-						}
-					}
-					catch (ThreadAbortException) { stopRequested = true; }
-					catch (Exception ex)
-					{
-						if (ex.Message == "A blocking operation was interrupted by a call to WSACancelBlockingCall")
-						{
-						}
-						else
-						{
-							if (DateTime.Now.DayOfYear != lastError.DayOfYear || DateTime.Now.Year != lastError.Year)
-							{
-								lastError = DateTime.Now;
-								errorCount = 0;
-							}
-							if (++errorCount > 200)
-								throw ex;
-							SimpleHttpLogger.Log(ex, "Restarting listener. Outer Error count today: " + errorCount);
-							threwExceptionOuter = true;
-						}
-					}
-					finally
-					{
-						try
-						{
-							if (listener != null)
-							{
-								listener.Stop();
-								if (threwExceptionOuter)
-									Thread.Sleep(1000);
-							}
-						}
-						catch (ThreadAbortException) { stopRequested = true; }
-						catch (Exception) { }
-					}
-				}
+				if (httpPort != -1)
+					bindings.Add(new HttpServer.Binding(AllowedConnectionTypes.http, new IPEndPoint(IPAddress.Any, httpPort)));
+				if (httpsPort != -1)
+					bindings.Add(new HttpServer.Binding(AllowedConnectionTypes.https, new IPEndPoint(IPAddress.Any, httpsPort)));
 			}
-			catch (ThreadAbortException) { stopRequested = true; }
-			catch (Exception ex)
-			{
-				SimpleHttpLogger.Log(ex, "Exception thrown in outer loop.  Exiting listener.");
-			}
+			SetBindings(bindings.ToArray());
 		}
-
 		/// <summary>
-		/// Starts listening for connections.
+		/// Sets the collection of bindings which this server should listen on.  This method will start or stop listeners as necessary to transition from the current set of bindings to the new set of bindings.
 		/// </summary>
-		public void Start()
+		/// <param name="newBindings">All bindings which this server should listen on.</param>
+		public void SetBindings(params Binding[] newBindings)
 		{
-			if (thrHttp != null)
-				thrHttp.Start(new SimpleHttpServerThreadArgs(this.port,
-					AllowedConnectionTypes.http,
-					port => this.actual_port_http = port,
-					listener => this.unsecureListener = listener));
-			if (thrHttps != null)
-				thrHttps.Start(new SimpleHttpServerThreadArgs(this.secure_port,
-					this.secure_port == this.port ? AllowedConnectionTypes.httpAndHttps : AllowedConnectionTypes.https,
-					port => this.actual_port_https = port,
-					listener => this.secureListener = listener));
+			if (newBindings == null)
+				newBindings = new Binding[0];
+
+			ListenerData[] toStart;
+			ListenerData[] toStop;
+			lock (listeners)
+			{
+				toStart = newBindings
+					.Where(b => !listeners.Any(l => l.Binding.Equals(b)))
+					.Select(b => new ListenerData(this, b))
+					.ToArray();
+				listeners.AddRange(toStart);
+				toStop = listeners.Where(l => !newBindings.Any(b => l.Binding.Equals(b))).ToArray();
+			}
+
+			foreach (ListenerData listener in toStop)
+			{
+				listener.Stop();
+			}
+
+			foreach (ListenerData listener in toStart)
+			{
+				listener.Run();
+			}
 		}
 
 		/// <summary>
@@ -1956,57 +1891,17 @@ namespace BPUtil.SimpleHttp
 			}
 			catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			try { pool.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
-			if (unsecureListener != null)
-				try { unsecureListener.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
-			if (secureListener != null && unsecureListener != secureListener)
-				try { secureListener.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
-			if (thrHttp != null)
-				try { thrHttp.Abort(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
-			if (thrHttps != null)
-				try { thrHttps.Abort(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+
+			lock (listeners)
+			{
+				foreach (ListenerData listener in listeners)
+				{
+					listener.Stop();
+				}
+			}
+
 			try { stopServer(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			try { GlobalThrottledStream.ThrottlingManager.Shutdown(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
-		}
-
-		/// <summary>
-		/// Blocks the calling thread until the http listening threads finish or the timeout expires.  Call this after calling Stop() if you need to wait for the listener to clean up, such as if you intend to start another instance of the server using the same port(s).
-		/// </summary>
-		/// <param name="timeout_milliseconds">Maximum number of milliseconds to wait for the HttpServer Threads to stop.</param>
-		public bool Join(int timeout_milliseconds = 2000)
-		{
-			bool success = true;
-			System.Diagnostics.Stopwatch stopwatch = new System.Diagnostics.Stopwatch();
-			int timeToWait = timeout_milliseconds;
-			stopwatch.Start();
-			if (timeToWait > 0)
-			{
-				try
-				{
-					if (thrHttp != null && thrHttp.IsAlive)
-						success = thrHttp.Join(timeToWait) && success;
-				}
-				catch (ThreadAbortException) { throw; }
-				catch (Exception ex)
-				{
-					SimpleHttpLogger.Log(ex);
-				}
-			}
-			stopwatch.Stop();
-			timeToWait = timeout_milliseconds - (int)stopwatch.ElapsedMilliseconds;
-			if (timeToWait > 0)
-			{
-				try
-				{
-					if (thrHttps != null && thrHttps.IsAlive)
-						success = thrHttps.Join(timeToWait) && success;
-				}
-				catch (ThreadAbortException) { throw; }
-				catch (Exception ex)
-				{
-					SimpleHttpLogger.Log(ex);
-				}
-			}
-			return success;
 		}
 
 		/// <summary>
@@ -2309,4 +2204,565 @@ namespace BPUtil.SimpleHttp
 		void LogRequest(DateTime time, string line);
 	}
 	#endregion
+	//public abstract class LEGACYHttpServer : IDisposable
+	//{
+	//	/// <summary>
+	//	/// If > -1, the server was told to listen for http connections on this port.  Port 0 causes the socket library to choose its own port.
+	//	/// </summary>
+	//	protected readonly int port;
+	//	/// <summary>
+	//	/// If > -1, the server was told to listen for https connections on this port.  Port 0 causes the socket library to choose its own port.
+	//	/// </summary>
+	//	protected readonly int secure_port;
+	//	protected int actual_port_http = -1;
+	//	protected int actual_port_https = -1;
+	//	/// <summary>
+	//	/// The actual port the http server is listening on.  Will be -1 if not listening.
+	//	/// </summary>
+	//	public int Port_http
+	//	{
+	//		get
+	//		{
+	//			return actual_port_http;
+	//		}
+	//	}
+	//	/// <summary>
+	//	/// The actual port the https server is listening on.  Will be -1 if not listening.
+	//	/// </summary>
+	//	public int Port_https
+	//	{
+	//		get
+	//		{
+	//			return actual_port_https;
+	//		}
+	//	}
+	//	public int? SendBufferSize = null;
+	//	public int? ReceiveBufferSize = null;
+	//	/// <summary>
+	//	/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Real-IP".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.
+	//	/// </summary>
+	//	public bool XRealIPHeader = false;
+	//	/// <summary>
+	//	/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Forwarded-For".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.
+	//	/// </summary>
+	//	public bool XForwardedForHeader = false;
+	//	protected volatile bool stopRequested = false;
+	//	protected ICertificateSelector certificateSelector;
+	//	private Thread thrHttp;
+	//	private Thread thrHttps;
+	//	private TcpListener unsecureListener = null;
+	//	private TcpListener secureListener = null;
+	//	/// <summary>
+	//	/// Raised when a listening socket is bound to a port.  The Event Handler passes along a string which can be printed to the console, announcing this event.
+	//	/// </summary>
+	//	public event EventHandler<string> SocketBound = delegate { };
+	//	/// <summary>
+	//	/// Raised when an SSL connection is made using a certificate that will expire within the next 14 days.  This event will not be raised more than once in a 60 minute period (assuming the same HttpServer instance is used).
+	//	/// The TimeSpan argument indicates the time to expiration, which may be less than or equal to TimeSpan.Zero if the certificate is expired.
+	//	/// </summary>
+	//	[Obsolete("This is no longer used.")]
+	//	public event EventHandler<TimeSpan> CertificateExpirationWarning = delegate { };
+	//	private DateTime timeOfNextCertificateExpirationWarning = DateTime.MinValue;
+
+	//	private NetworkAddressInfo addressInfo = new NetworkAddressInfo();
+	//	/// <summary>
+	//	/// Gets information about the current network interfaces.
+	//	/// You should work with a local reference to the returned object, because this method is not guaranteed to always return the same instance.
+	//	/// </summary>
+	//	/// <returns></returns>
+	//	internal NetworkAddressInfo GetAddressInfo()
+	//	{
+	//		return addressInfo;
+	//	}
+	//	public readonly IPAddress bindAddr = IPAddress.Any;
+
+	//	public SimpleThreadPool pool;
+	//	/// <summary>
+	//	/// 
+	//	/// </summary>
+	//	/// <param name="port">The port number on which to accept regular http connections. If -1, the server will not listen for http connections.</param>
+	//	/// <param name="httpsPort">(Optional) The port number on which to accept https connections. If -1, the server will not listen for https connections.</param>
+	//	/// <param name="cert">(Optional) Certificate to use for https connections.  If null and an httpsPort was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
+	//	/// <param name="bindAddr">If not null, the server will bind to this address.  Default: IPAddress.Any.</param>
+	//	public HttpServer(int port, int httpsPort = -1, X509Certificate2 cert = null, IPAddress bindAddr = null) : this(port, httpsPort, SimpleCertificateSelector.FromCertificate(cert), bindAddr) { }
+	//	/// <summary>
+	//	/// 
+	//	/// </summary>
+	//	/// <param name="port">The port number on which to accept regular http connections. If -1, the server will not listen for http connections.</param>
+	//	/// <param name="httpsPort">(Optional) The port number on which to accept https connections. If -1, the server will not listen for https connections.</param>
+	//	/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an httpsPort was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
+	//	/// <param name="bindAddr">If not null, the server will bind to this address.  Default: IPAddress.Any.</param>
+	//	public HttpServer(int port, int httpsPort, ICertificateSelector certificateSelector, IPAddress bindAddr)
+	//	{
+	//		pool = new SimpleThreadPool("SimpleHttpServer");
+
+	//		this.port = port;
+	//		this.secure_port = httpsPort;
+	//		this.certificateSelector = certificateSelector;
+	//		if (bindAddr != null)
+	//			this.bindAddr = bindAddr;
+
+	//		if (this.port > 65535 || this.port < -1) this.port = -1;
+	//		if (this.secure_port > 65535 || this.secure_port < -1) this.secure_port = -1;
+
+	//		if (this.secure_port > -1)
+	//		{
+	//			if (this.certificateSelector == null)
+	//				this.certificateSelector = SimpleCertificateSelector.FromCertificate(HttpServer.GetSelfSignedCertificate());
+	//		}
+
+	//		if (this.secure_port > -1 && this.secure_port == this.port)
+	//		{
+	//			thrHttps = new Thread(listen);
+	//			thrHttps.IsBackground = true;
+	//			thrHttps.Name = "Http and Https Combined Server Thread";
+	//		}
+	//		else
+	//		{
+	//			if (this.port > -1)
+	//			{
+	//				thrHttp = new Thread(listen);
+	//				thrHttp.IsBackground = true;
+	//				thrHttp.Name = "HttpServer Thread";
+	//			}
+
+	//			if (this.secure_port > -1)
+	//			{
+	//				thrHttps = new Thread(listen);
+	//				thrHttps.IsBackground = true;
+	//				thrHttps.Name = "HttpsServer Thread";
+	//			}
+	//		}
+	//		NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAvailabilityChanged;
+	//		NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
+	//		UpdateNetworkAddresses();
+	//	}
+
+	//	#region IDisposable Support
+	//	private bool disposedValue = false;
+
+	//	protected virtual void Dispose(bool disposing)
+	//	{
+	//		if (!disposedValue)
+	//		{
+	//			if (disposing)
+	//			{
+	//				// Dispose managed objects
+	//				Stop();
+	//			}
+
+	//			// Dispose unmanaged objects
+	//			// Set large fields = null
+
+	//			disposedValue = true;
+	//		}
+	//	}
+
+	//	public void Dispose()
+	//	{
+	//		// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+	//		Dispose(true);
+	//	}
+	//	#endregion
+
+	//	/// <summary>
+	//	/// A function which produces an IProcessor instance, allowing this server to be used for protocols besides HTTP.  By default, this returns a standard HttpProcessor.
+	//	/// </summary>
+	//	/// <param name="s">The TcpClient which holds the connection from the client.</param>
+	//	/// <param name="srv">The server instance which accepted the TCP connection from the client.</param>
+	//	/// <param name="certSelector">An instance of a type deriving from ICertificateSelector, such as <see cref="SimpleCertificateSelector"/> or <see cref="ServerNameCertificateSelector"/>.</param>
+	//	/// <param name="allowedConnectionTypes">Indicates whether the connection should support HTTP, HTTPS, or both.</param>
+	//	/// <returns></returns>
+	//	public virtual IProcessor MakeClientProcessor(TcpClient s, HttpServer srv, ICertificateSelector certSelector, AllowedConnectionTypes allowedConnectionTypes)
+	//	{
+	//		return new HttpProcessor(s, srv, certSelector, allowedConnectionTypes);
+	//	}
+	//	private void NetworkChange_NetworkAddressChanged(object sender, EventArgs e)
+	//	{
+	//		UpdateNetworkAddresses();
+	//	}
+
+	//	private void NetworkChange_NetworkAvailabilityChanged(object sender, NetworkAvailabilityEventArgs e)
+	//	{
+	//		UpdateNetworkAddresses();
+	//	}
+
+	//	private void UpdateNetworkAddresses()
+	//	{
+	//		addressInfo = new NetworkAddressInfo(NetworkInterface.GetAllNetworkInterfaces());
+	//	}
+	//	/// <summary>
+	//	/// Sets a new SSL certificate to be used for all future connections;
+	//	/// </summary>
+	//	/// <param name="newCertificate"></param>
+	//	public void SetCertificate(X509Certificate2 newCertificate)
+	//	{
+	//		certificateSelector = SimpleCertificateSelector.FromCertificate(newCertificate);
+	//	}
+	//	/// <summary>
+	//	/// Returns the date in local time after which the certificate is no longer valid.  If the certificate is null, returns DateTime.MaxValue.
+	//	/// </summary>
+	//	/// <returns></returns>
+	//	[Obsolete("This doesn't work properly when using Server Name Indication to select a certificate.")]
+	//	public DateTime GetCertificateExpiration()
+	//	{
+	//		if (certificateSelector != null)
+	//			return (certificateSelector.GetCertificate(null) as X509Certificate2).NotAfter;
+	//		return DateTime.MaxValue;
+	//	}
+	//	/// <summary>
+	//	/// Returns the friendly name from the certificate.  If the certificate is null, returns DateTime.MaxValue.
+	//	/// </summary>
+	//	/// <returns></returns>
+	//	[Obsolete("This doesn't work properly when using Server Name Indication to select a certificate.")]
+	//	public string GetCertificateFriendlyName()
+	//	{
+	//		if (certificateSelector != null)
+	//			return (certificateSelector.GetCertificate(null) as X509Certificate2).FriendlyName;
+	//		return null;
+	//	}
+
+	//	private static object certCreateLock = new object();
+	//	public static X509Certificate2 GetSelfSignedCertificate()
+	//	{
+	//		lock (certCreateLock)
+	//		{
+	//			X509Certificate2 ssl_certificate;
+	//			FileInfo fiExe;
+	//			try
+	//			{
+	//				fiExe = new FileInfo(System.Reflection.Assembly.GetEntryAssembly().Location);
+	//			}
+	//			catch
+	//			{
+	//				try
+	//				{
+	//					fiExe = new FileInfo(System.Windows.Forms.Application.ExecutablePath);
+	//				}
+	//				catch
+	//				{
+	//					fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
+	//				}
+	//			}
+	//			string autoCertPassword = "N0t_V3ry-S3cure#lol";
+	//			FileInfo fiCert = new FileInfo(fiExe.Directory.FullName + "/SimpleHttpServer-SslCert.pfx");
+	//			if (fiCert.Exists)
+	//			{
+	//				try
+	//				{
+	//					ssl_certificate = new X509Certificate2(fiCert.FullName, autoCertPassword);
+	//				}
+	//				catch (Exception ex1)
+	//				{
+	//					try
+	//					{
+	//						ssl_certificate = new X509Certificate2(fiCert.FullName);
+	//					}
+	//					catch
+	//					{
+	//						throw ex1;
+	//					}
+	//				}
+	//			}
+	//			else
+	//			{
+	//				using (BPUtil.SimpleHttp.Crypto.CryptContext ctx = new BPUtil.SimpleHttp.Crypto.CryptContext())
+	//				{
+	//					ctx.Open();
+
+	//					ssl_certificate = ctx.CreateSelfSignedCertificate(
+	//						new BPUtil.SimpleHttp.Crypto.SelfSignedCertProperties
+	//						{
+	//							IsPrivateKeyExportable = true,
+	//							KeyBitLength = 4096,
+	//							Name = new X500DistinguishedName("cn=localhost"),
+	//							ValidFrom = DateTime.Today.AddDays(-1),
+	//							ValidTo = DateTime.Today.AddYears(100),
+	//						});
+
+	//					byte[] certData = ssl_certificate.Export(X509ContentType.Pfx, autoCertPassword);
+	//					File.WriteAllBytes(fiCert.FullName, certData);
+	//				}
+	//				// Native cert generator. .NET 4.7.2 required.
+	//				//using (System.Security.Cryptography.RSA key = System.Security.Cryptography.RSA.Create(2048))
+	//				//{
+	//				//	CertificateRequest request = new CertificateRequest("cn=localhost", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+
+	//				//	SubjectAlternativeNameBuilder sanBuilder = new SubjectAlternativeNameBuilder();
+	//				//	sanBuilder.AddDnsName("localhost");
+	//				//	request.CertificateExtensions.Add(sanBuilder.Build());
+
+	//				//	ssl_certificate = request.CreateSelfSigned(DateTime.Today.AddDays(-1), DateTime.Today.AddYears(100));
+
+	//				//	byte[] certData = ssl_certificate.Export(X509ContentType.Pfx);
+	//				//	File.WriteAllBytes(fiCert.FullName, certData);
+	//				//}
+	//			}
+	//			return ssl_certificate;
+	//		}
+	//	}
+	//	/// <summary>
+	//	/// Listens for connections, somewhat robustly.  Does not return until the server is stopped or until more than 100 listener restarts occur in a single day.
+	//	/// </summary>
+	//	private void listen(object param)
+	//	{
+	//		try
+	//		{
+	//			SimpleHttpServerThreadArgs args = (SimpleHttpServerThreadArgs)param;
+
+	//			int errorCount = 0;
+	//			DateTime lastError = DateTime.Now;
+
+	//			TcpListener listener = null;
+
+	//			while (!stopRequested)
+	//			{
+	//				bool threwExceptionOuter = false;
+	//				try
+	//				{
+	//					listener = new TcpListener(bindAddr, args.port);
+	//					args.SetListenerField(listener);
+	//					listener.Start();
+
+	//					args.SetActualPort(((IPEndPoint)listener.LocalEndpoint).Port);
+
+	//					try
+	//					{
+	//						if (args.allowedConnectionTypes == AllowedConnectionTypes.httpAndHttps)
+	//							SocketBound(this, "Web Server listening on port " + actual_port_https + " (http and https)");
+	//						else
+	//							SocketBound(this, "Web Server listening on port " + (args.allowedConnectionTypes == AllowedConnectionTypes.https ? (actual_port_https + " (https)") : (actual_port_http + " (http)")));
+	//					}
+	//					catch (ThreadAbortException) { throw; }
+	//					catch (Exception ex)
+	//					{
+	//						SimpleHttpLogger.Log(ex);
+	//					}
+
+	//					DateTime innerLastError = DateTime.Now;
+	//					int innerErrorCount = 0;
+	//					while (!stopRequested)
+	//					{
+	//						try
+	//						{
+	//							TcpClient s = listener.AcceptTcpClient();
+	//							// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
+	//							if (s.ReceiveTimeout < 10000 && s.ReceiveTimeout != 0) // Timeout of 0 is infinite
+	//								s.ReceiveTimeout = 10000;
+	//							if (s.SendTimeout < 10000 && s.SendTimeout != 0) // Timeout of 0 is infinite
+	//								s.SendTimeout = 10000;
+	//							if (ReceiveBufferSize != null)
+	//								s.ReceiveBufferSize = ReceiveBufferSize.Value;
+	//							if (SendBufferSize != null)
+	//								s.SendBufferSize = SendBufferSize.Value;
+	//							//DateTime now = DateTime.Now;
+	//							//if (cert != null && now.AddDays(14) > cert.NotAfter && timeOfNextCertificateExpirationWarning < now)
+	//							//{
+	//							//	timeOfNextCertificateExpirationWarning = now.AddHours(1);
+	//							//	try
+	//							//	{
+	//							//		CertificateExpirationWarning(this, now - cert.NotAfter);
+	//							//	}
+	//							//	catch (ThreadAbortException) { throw; }
+	//							//	catch (Exception ex)
+	//							//	{
+	//							//		SimpleHttpLogger.Log(ex);
+	//							//	}
+	//							//}
+	//							IProcessor processor = MakeClientProcessor(s, this, certificateSelector, args.allowedConnectionTypes);
+	//							pool.Enqueue(processor.Process);
+	//							//	try
+	//							//	{
+	//							//		StreamWriter outputStream = new StreamWriter(s.GetStream());
+	//							//		outputStream.WriteLineRN("HTTP/1.1 503 Service Unavailable");
+	//							//		outputStream.WriteLineRN("Connection: close");
+	//							//		outputStream.WriteLineRN("");
+	//							//		outputStream.WriteLineRN("Server too busy");
+	//							//	}
+	//							//	catch (ThreadAbortException) { throw; }
+	//						}
+	//						catch (ThreadAbortException) { throw; }
+	//						catch (Exception ex)
+	//						{
+	//							if (ex.Message == "A blocking operation was interrupted by a call to WSACancelBlockingCall")
+	//							{
+	//							}
+	//							else
+	//							{
+	//								if (DateTime.Now.Hour != innerLastError.Hour || DateTime.Now.DayOfYear != innerLastError.DayOfYear)
+	//								{
+	//									innerLastError = DateTime.Now;
+	//									innerErrorCount = 0;
+	//								}
+	//								if (++innerErrorCount > 10)
+	//									throw ex;
+	//								SimpleHttpLogger.Log(ex, "Inner Error count this hour: " + innerErrorCount);
+	//								Thread.Sleep(1);
+	//							}
+	//						}
+	//					}
+	//				}
+	//				catch (ThreadAbortException) { stopRequested = true; }
+	//				catch (Exception ex)
+	//				{
+	//					if (ex.Message == "A blocking operation was interrupted by a call to WSACancelBlockingCall")
+	//					{
+	//					}
+	//					else
+	//					{
+	//						if (DateTime.Now.DayOfYear != lastError.DayOfYear || DateTime.Now.Year != lastError.Year)
+	//						{
+	//							lastError = DateTime.Now;
+	//							errorCount = 0;
+	//						}
+	//						if (++errorCount > 200)
+	//							throw ex;
+	//						SimpleHttpLogger.Log(ex, "Restarting listener. Outer Error count today: " + errorCount);
+	//						threwExceptionOuter = true;
+	//					}
+	//				}
+	//				finally
+	//				{
+	//					try
+	//					{
+	//						if (listener != null)
+	//						{
+	//							listener.Stop();
+	//							if (threwExceptionOuter)
+	//								Thread.Sleep(1000);
+	//						}
+	//					}
+	//					catch (ThreadAbortException) { stopRequested = true; }
+	//					catch (Exception) { }
+	//				}
+	//			}
+	//		}
+	//		catch (ThreadAbortException) { stopRequested = true; }
+	//		catch (Exception ex)
+	//		{
+	//			SimpleHttpLogger.Log(ex, "Exception thrown in outer loop.  Exiting listener.");
+	//		}
+	//	}
+
+	//	/// <summary>
+	//	/// Starts listening for connections.
+	//	/// </summary>
+	//	public void Start()
+	//	{
+	//		if (thrHttp != null)
+	//			thrHttp.Start(new SimpleHttpServerThreadArgs(this.port,
+	//				AllowedConnectionTypes.http,
+	//				port => this.actual_port_http = port,
+	//				listener => this.unsecureListener = listener));
+	//		if (thrHttps != null)
+	//			thrHttps.Start(new SimpleHttpServerThreadArgs(this.secure_port,
+	//				this.secure_port == this.port ? AllowedConnectionTypes.httpAndHttps : AllowedConnectionTypes.https,
+	//				port => this.actual_port_https = port,
+	//				listener => this.secureListener = listener));
+	//	}
+
+	//	/// <summary>
+	//	/// Stops listening for connections.
+	//	/// </summary>
+	//	public void Stop()
+	//	{
+	//		if (stopRequested)
+	//			return;
+	//		stopRequested = true;
+
+	//		try
+	//		{
+	//			NetworkChange.NetworkAvailabilityChanged -= NetworkChange_NetworkAvailabilityChanged;
+	//			NetworkChange.NetworkAddressChanged -= NetworkChange_NetworkAddressChanged;
+	//		}
+	//		catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+	//		try { pool.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+	//		if (unsecureListener != null)
+	//			try { unsecureListener.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+	//		if (secureListener != null && unsecureListener != secureListener)
+	//			try { secureListener.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+	//		if (thrHttp != null)
+	//			try { thrHttp.Abort(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+	//		if (thrHttps != null)
+	//			try { thrHttps.Abort(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+	//		try { stopServer(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+	//		try { GlobalThrottledStream.ThrottlingManager.Shutdown(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+	//	}
+
+	//	/// <summary>
+	//	/// Blocks the calling thread until the http listening threads finish or the timeout expires.  Call this after calling Stop() if you need to wait for the listener to clean up, such as if you intend to start another instance of the server using the same port(s).
+	//	/// </summary>
+	//	/// <param name="timeout_milliseconds">Maximum number of milliseconds to wait for the HttpServer Threads to stop.</param>
+	//	public bool Join(int timeout_milliseconds = 2000)
+	//	{
+	//		bool success = true;
+	//		System.Diagnostics.Stopwatch stopwatch = new System.Diagnostics.Stopwatch();
+	//		int timeToWait = timeout_milliseconds;
+	//		stopwatch.Start();
+	//		if (timeToWait > 0)
+	//		{
+	//			try
+	//			{
+	//				if (thrHttp != null && thrHttp.IsAlive)
+	//					success = thrHttp.Join(timeToWait) && success;
+	//			}
+	//			catch (ThreadAbortException) { throw; }
+	//			catch (Exception ex)
+	//			{
+	//				SimpleHttpLogger.Log(ex);
+	//			}
+	//		}
+	//		stopwatch.Stop();
+	//		timeToWait = timeout_milliseconds - (int)stopwatch.ElapsedMilliseconds;
+	//		if (timeToWait > 0)
+	//		{
+	//			try
+	//			{
+	//				if (thrHttps != null && thrHttps.IsAlive)
+	//					success = thrHttps.Join(timeToWait) && success;
+	//			}
+	//			catch (ThreadAbortException) { throw; }
+	//			catch (Exception ex)
+	//			{
+	//				SimpleHttpLogger.Log(ex);
+	//			}
+	//		}
+	//		return success;
+	//	}
+
+	//	/// <summary>
+	//	/// Handles an Http GET request.
+	//	/// </summary>
+	//	/// <param name="p">The HttpProcessor handling the request.</param>
+	//	public abstract void handleGETRequest(HttpProcessor p);
+	//	/// <summary>
+	//	/// Handles an Http POST request.
+	//	/// </summary>
+	//	/// <param name="p">The HttpProcessor handling the request.</param>
+	//	/// <param name="inputData">The input stream.  If the request's MIME type was "application/x-www-form-urlencoded", the StreamReader will be null and you can obtain the parameter values using p.PostParams, p.GetPostParam(), p.GetPostIntParam(), etc.</param>
+	//	public abstract void handlePOSTRequest(HttpProcessor p, StreamReader inputData);
+	//	/// <summary>
+	//	/// This is called when the server is stopping.  Perform any cleanup work here.
+	//	/// </summary>
+	//	protected abstract void stopServer();
+
+	//	/// <summary>
+	//	/// If this method returns true, requests should be logged to a file.
+	//	/// </summary>
+	//	/// <returns></returns>
+	//	public virtual bool shouldLogRequestsToFile()
+	//	{
+	//		return false;
+	//	}
+
+	//	/// <summary>
+	//	/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
+	//	/// </summary>
+	//	/// <param name="remoteIpAddress"></param>
+	//	/// <returns></returns>
+	//	public virtual bool IsTrustedProxyServer(IPAddress remoteIpAddress)
+	//	{
+	//		return false;
+	//	}
+	//}
 }

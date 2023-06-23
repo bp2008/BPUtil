@@ -52,7 +52,7 @@ namespace BPUtil
 					if (ex != null)
 					{
 						Console.ForegroundColor = ConsoleColor.Red;
-						Console.WriteLine(ex.ToString());
+						Console.WriteLine(ex.ToHierarchicalString());
 					}
 					Console.ResetColor();
 				}
@@ -63,7 +63,7 @@ namespace BPUtil
 					if (extraMsg)
 						debugMessage.AppendLine(additionalInformation);
 					if (ex != null)
-						debugMessage.AppendLine(ex.ToString());
+						debugMessage.AppendLine(ex.ToHierarchicalString());
 					int attempts = 0;
 					while (attempts < 5)
 					{
