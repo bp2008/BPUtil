@@ -331,31 +331,31 @@ namespace BPUtil.SimpleHttp
 			this.allowedConnectionTypes = allowedConnectionTypes;
 		}
 
-		//private string streamReadLine(Stream inputStream, int maxLength = 32768)
-		//{
-		//	int next_char;
-		//	bool endOfStream = false;
-		//	bool didRead = false;
-		//	StringBuilder data = new StringBuilder();
-		//	while (true)
-		//	{
-		//		next_char = inputStream.ReadByte();
-		//		if (next_char == -1)
-		//		{
-		//			endOfStream = true;
-		//			break;
-		//		};
-		//		didRead = true;
-		//		if (next_char == '\n') { break; }
-		//		if (next_char == '\r') { continue; }
-		//		if (data.Length >= maxLength)
-		//			throw new HttpProcessorException("413 Entity Too Large");
-		//		data.Append(Convert.ToChar(next_char));
-		//	}
-		//	if (endOfStream && !didRead)
-		//		return null;
-		//	return data.ToString();
-		//}
+		public static string streamReadLine(Stream inputStream, int maxLength = 32768)
+		{
+			int next_char;
+			bool endOfStream = false;
+			bool didRead = false;
+			StringBuilder data = new StringBuilder();
+			while (true)
+			{
+				next_char = inputStream.ReadByte();
+				if (next_char == -1)
+				{
+					endOfStream = true;
+					break;
+				};
+				didRead = true;
+				if (next_char == '\n') { break; }
+				if (next_char == '\r') { continue; }
+				if (data.Length >= maxLength)
+					throw new HttpProcessorException("413 Entity Too Large");
+				data.Append(Convert.ToChar(next_char));
+			}
+			if (endOfStream && !didRead)
+				return null;
+			return data.ToString();
+		}
 
 		/// <summary>
 		/// Processes the request.
@@ -436,8 +436,9 @@ namespace BPUtil.SimpleHttp
 					try
 					{
 						tcpClient.ReceiveTimeout = 10000;
-						parseRequest().Wait();
-						readHeaders(tcpStream, httpHeaders, httpHeadersRaw).Wait();
+						if (!parseRequest())
+							return; // End of stream was encountered. Very common with "Connection: keep-alive" when another request does not arrive.
+						readHeaders(tcpStream, httpHeaders, httpHeadersRaw);
 						keepAliveRequested = "keep-alive".IEquals(GetHeaderValue("connection"));
 						IPAddress originalRemoteIp = RemoteIPAddress;
 						if (srv.XRealIPHeader)
@@ -494,7 +495,8 @@ namespace BPUtil.SimpleHttp
 							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url?.OriginalString);
 						if (IsOrdinaryDisconnectException(e))
 						{
-							SimpleHttpLogger.LogVerbose(e);
+							if (keepAliveRequestCount <= 1) // Do not log if this is a kept-alive connection.
+								SimpleHttpLogger.LogVerbose(e);
 							if (!responseWritten)
 								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request."); // This response should probably fail because the client has disconnected.
 							return;
@@ -617,13 +619,13 @@ namespace BPUtil.SimpleHttp
 		//}
 
 		/// <summary>
-		/// Parses the first line of the http request to get the request method, url, and protocol version.
+		/// Parses the first line of the http request to get the request method, url, and protocol version. Returns true if successful or false if we encountered the end of the stream.  May throw various exceptions.
 		/// </summary>
-		private async Task parseRequest()
+		private bool parseRequest()
 		{
-			string request = await streamReadLine(tcpStream);
+			string request = streamReadLine(tcpStream);
 			if (request == null)
-				throw new EndOfStreamException();
+				return false;
 			string[] tokens = request.Split(' ');
 			if (tokens.Length != 3)
 				throw new HttpProtocolException("invalid http request line: " + request);
@@ -637,15 +639,16 @@ namespace BPUtil.SimpleHttp
 			requestedPage = request_url.AbsolutePath.StartsWith("/") ? request_url.AbsolutePath.Substring(1) : request_url.AbsolutePath;
 
 			http_protocol_versionstring = tokens[2];
+			return true;
 		}
 
 		/// <summary>
 		/// Parses the http headers
 		/// </summary>
-		internal static async Task readHeaders(Stream tcpStream, Dictionary<string, string> httpHeaders, Dictionary<string, string> httpHeadersRaw)
+		internal static void readHeaders(Stream tcpStream, Dictionary<string, string> httpHeaders, Dictionary<string, string> httpHeadersRaw)
 		{
 			string line;
-			while ((line = await streamReadLine(tcpStream)) != "")
+			while ((line = streamReadLine(tcpStream)) != "")
 			{
 				if (line == null)
 					throw new EndOfStreamException();
@@ -661,39 +664,13 @@ namespace BPUtil.SimpleHttp
 				AddOrUpdateHeaderValue(httpHeaders, httpHeadersRaw, name, value);
 			}
 		}
-
-		internal static async Task<string> streamReadLine(Stream inputStream, int maxLength = 32768)
+		
+		internal static async Task<string> streamReadLineAsync(StreamReader reader, int maxLength = 32768)
 		{
-			int next_char;
-			bool endOfStream = false;
-			bool didRead = false;
-			StringBuilder data = new StringBuilder();
-			byte[] buf = new byte[1];
-			while (true)
-			{
-				//next_char = inputStream.ReadByte();
-				//if (next_char == -1)
-				//{
-				//	endOfStream = true;
-				//	break;
-				//};
-				int read = await inputStream.ReadAsync(buf, 0, 1);
-				if (read == 0)
-				{
-					endOfStream = true;
-					break;
-				};
-				next_char = buf[0];
-				didRead = true;
-				if (next_char == '\n') { break; }
-				if (next_char == '\r') { continue; }
-				if (data.Length >= maxLength)
-					throw new HttpProcessorException("413 Entity Too Large");
-				data.Append(Convert.ToChar(next_char));
-			}
-			if (endOfStream && !didRead)
-				return null;
-			return data.ToString();
+			string str = await reader.ReadLineAsync();
+			if (str.Length >= maxLength)
+				throw new HttpProcessorException("413 Entity Too Large");
+			return str; // Null if end of stream.
 		}
 
 		/// <summary>
@@ -1141,9 +1118,12 @@ namespace BPUtil.SimpleHttp
 		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
 		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
 		/// <param name="host">The value of the host header, also used in SSL authentication. If null or whitespace, it is set from the [newUrl] parameter.</param>
-		public async Task ProxyToAsync(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null)
+		/// <param name="bet">Optional event timer for collecting timing data.</param>
+		public async Task ProxyToAsync(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null, BasicEventTimer bet = null)
 		{
-			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), networkTimeoutMs, host, acceptAnyCert, snoopy);
+			bet?.Start("Entering ProxyToAsync");
+			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), networkTimeoutMs, host, acceptAnyCert, snoopy, bet);
+			bet?.Start("Exiting ProxyToAsync");
 		}
 		#endregion
 
@@ -1681,6 +1661,8 @@ namespace BPUtil.SimpleHttp
 		public HttpServer(ICertificateSelector certificateSelector = null)
 		{
 			this.certificateSelector = certificateSelector;
+			if (this.certificateSelector == null)
+				this.certificateSelector = SimpleCertificateSelector.FromCertificate(HttpServer.GetSelfSignedCertificate());
 
 			NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAvailabilityChanged;
 			NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
@@ -2204,6 +2186,9 @@ namespace BPUtil.SimpleHttp
 		void LogRequest(DateTime time, string line);
 	}
 	#endregion
+	///// <summary>
+	///// Legacy HttpServer.
+	///// </summary>
 	//public abstract class LEGACYHttpServer : IDisposable
 	//{
 	//	/// <summary>

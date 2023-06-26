@@ -14,7 +14,14 @@ namespace BPUtil
 	/// </summary>
 	public static class ByteUtil
 	{
+		/// <summary>
+		/// UTF-8 encoding configured to NOT emit a byte order mark.
+		/// </summary>
 		public static readonly UTF8Encoding Utf8NoBOM = new UTF8Encoding(false);
+		/// <summary>
+		/// ISO-8859-1 encoding used by HTTP requests.
+		/// </summary>
+		public static readonly Encoding ISO_8859_1 = Encoding.GetEncoding("ISO-8859-1");
 		/// <summary>
 		/// Returns true of the content of the specified byte arrays exactly match each other, or if both arrays are null.
 		/// </summary>

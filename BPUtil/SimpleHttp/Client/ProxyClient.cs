@@ -42,36 +42,50 @@ namespace BPUtil.SimpleHttp.Client
 		/// <param name="host">String to be used for TLS server name indication and the Host header. If null or whitespace, this is automatically populated from the [uri].</param>
 		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
 		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
+		/// <param name="bet">Optional event timer for collecting timing data.</param>
 		/// <returns></returns>
-		public static async Task ProxyRequest(HttpProcessor p, Uri uri, int networkTimeoutMs = 60000, string host = null, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null)
+		public static async Task ProxyRequest(HttpProcessor p, Uri uri, int networkTimeoutMs = 60000, string host = null, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, BasicEventTimer bet = null)
 		{
+			bet?.Start("ProxyRequest Start");
 			string origin = GetOriginLower(uri);
 			ConcurrentQueue<ProxyClient> pool = poolsByOrigin.GetOrAdd(origin, createNewPool);
 
-			int numRetries = 5;
-			while (numRetries > 0)
+			int numTries = 0;
+			while (true)
 			{
-				numRetries--;
-
+				numTries++;
 				ProxyClient client;
 				if (!pool.TryDequeue(out client))
+				{
 					client = new ProxyClient(origin);
+					bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with new client");
+				}
 				else
+				{
 					Logger.Info("Got ProxyClient from pool");
+					bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with existing client");
+				}
 
-				ProxyResult result = await client.BeginProxyRequestAsync(p, uri, networkTimeoutMs, host, acceptAnyCert, snoopy);
+				ProxyResult result = await client.BeginProxyRequestAsync(p, uri, networkTimeoutMs, host, acceptAnyCert, snoopy, bet);
+				bet?.Start("ProxyRequest analyze result #" + numTries + ": " + result.ErrorCode);
 
 				if (result.IsProxyClientReusable)
 				{
 					pool.Enqueue(client);
 					Logger.Info("Recycling ProxyClient for future use.");
 				}
-
-				if (!result.ShouldTryAgainWithAnotherConnection)
-					numRetries = 0;
-				if (!result.Success && numRetries <= 0)
-					Logger.Info("ProxyRequest to uri \"" + uri.ToString() + "\" failed with error: " + result.ErrorMessage);
+				if (result.Success)
+					break;
+				else
+				{
+					if (!result.ShouldTryAgainWithAnotherConnection)
+					{
+						Logger.Info("ProxyRequest to uri \"" + uri.ToString() + "\" failed with error: " + result.ErrorMessage);
+						break;
+					}
+				}
 			}
+			bet?.Start("ProxyRequest Finish Up");
 		}
 		/// <summary>
 		/// Polls the socket to see if it has closed.
@@ -107,11 +121,14 @@ namespace BPUtil.SimpleHttp.Client
 		/// <param name="host">String to be used for TLS server name indication and the Host header. If null or whitespace, this is automatically populated from the [uri].</param>
 		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
 		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
+		/// <param name="bet">Optional event timer for collecting timing data.</param>
 		/// <returns></returns>
-		public async Task<ProxyResult> BeginProxyRequestAsync(HttpProcessor p, Uri uri, int networkTimeoutMs = 60000, string host = null, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null)
+		public async Task<ProxyResult> BeginProxyRequestAsync(HttpProcessor p, Uri uri, int networkTimeoutMs = 60000, string host = null, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, BasicEventTimer bet = null)
 		{
 			// Interally, we shall refer to the original client making the request to this application as "the client", while the destination URI points at "the server".
 
+			bet?.Start("BeginProxyRequestAsync Init");
+			
 			if (p.responseWritten)
 				throw new ApplicationException("This ProxyClient is unable to complete the current request because a response has already been written to the client making this request.");
 
@@ -142,6 +159,7 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				try
 				{
+					bet?.Start("BeginProxyRequestAsync Connect");
 					await proxyClient.ConnectAsync(uri.DnsSafeHost, uri.Port);
 					proxyStream = proxyClient.GetStream();
 				}
@@ -154,6 +172,7 @@ namespace BPUtil.SimpleHttp.Client
 				{
 					if (uri.Scheme.IEquals("https"))
 					{
+						bet?.Start("BeginProxyRequestAsync TLS Negotiate");
 						System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
 						if (acceptAnyCert)
 							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
@@ -167,6 +186,7 @@ namespace BPUtil.SimpleHttp.Client
 					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, "ProxyClient failed to negotiate TLS with the remote host: " + uri.DnsSafeHost + ":" + uri.Port + "\r\n" + ex.ToHierarchicalString(), false, false);
 				}
 			}
+			bet?.Start("BeginProxyRequestAsync Process Request Headers");
 
 			p.tcpClient.ReceiveTimeout = networkTimeoutMs;
 			p.tcpClient.SendTimeout = networkTimeoutMs;
@@ -179,7 +199,10 @@ namespace BPUtil.SimpleHttp.Client
 			if (ourClientWantsConnectionClose)
 				requestHeader_Connection = "keep-alive"; // Our client requested connection: close, but we we'll use keep-alive for our own proxy connection.
 
+			string requestHeader_Host = p.GetHeaderValue("host");
+
 			// Send the first line of our HTTP request.
+			bet?.Start("BeginProxyRequestAsync Transmit Proxy Request");
 			string requestLine = p.http_method + ' ' + uri.PathAndQuery + ' ' + p.http_protocol_versionstring;
 			await _ProxyString(ProxyDataDirection.RequestToServer, proxyStream, requestLine + "\r\n", snoopy);
 			// After the first line comes the request headers.
@@ -197,6 +220,7 @@ namespace BPUtil.SimpleHttp.Client
 			// Write the original POST body if there was one.
 			if (p.PostBodyStream != null)
 			{
+				bet?.Start("BeginProxyRequestAsync Transmit POST body");
 				long remember_position = p.PostBodyStream.Position;
 				p.PostBodyStream.Seek(0, SeekOrigin.Begin);
 				byte[] buf = p.PostBodyStream.ToArray();
@@ -210,10 +234,12 @@ namespace BPUtil.SimpleHttp.Client
 			Dictionary<string, string> proxyHttpHeadersRaw = new Dictionary<string, string>();
 			try
 			{
-				responseStatusLine = await HttpProcessor.streamReadLine(proxyStream);
+				bet?.Start("BeginProxyRequestAsync Read Status Line From Remote Server");
+				responseStatusLine = HttpProcessor.streamReadLine(proxyStream);
 
 				// Read response headers from remote server
-				await HttpProcessor.readHeaders(proxyStream, proxyHttpHeaders, proxyHttpHeadersRaw);
+				bet?.Start("BeginProxyRequestAsync Read Response Headers From Remote Server");
+				HttpProcessor.readHeaders(proxyStream, proxyHttpHeaders, proxyHttpHeadersRaw);
 			}
 			catch (HttpProcessor.EndOfStreamException ex)
 			{
@@ -223,12 +249,15 @@ namespace BPUtil.SimpleHttp.Client
 			}
 
 			// Decide how to respond
+			bet?.Start("BeginProxyRequestAsync Process Response Headers");
 			ProxyResponseDecision decision = ProxyResponseDecision.Undefined;
 			long proxyContentLength = 0;
+			bool remoteServerWantsKeepalive = false;
 			if (proxyHttpHeaders.TryGetValue("connection", out string proxyConnectionHeader))
 			{
 				if (proxyConnectionHeader.IEquals("keep-alive"))
 				{
+					remoteServerWantsKeepalive = true;
 					// keep-alive responses must either specify a "Content-Length" or use "Transfer-Encoding: chunked".
 					if (proxyHttpHeaders.TryGetValue("content-length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
 					{
@@ -258,6 +287,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 
 			// Write response status line
+			bet?.Start("BeginProxyRequestAsync Write Response: " + decision);
 			p.responseWritten = true;
 			await _ProxyString(ProxyDataDirection.ResponseFromServer, p.tcpStream, responseStatusLine + "\r\n", snoopy);
 
@@ -271,8 +301,22 @@ namespace BPUtil.SimpleHttp.Client
 
 			foreach (KeyValuePair<string, string> header in proxyHttpHeadersRaw)
 			{
-				if (!header.Key.IEquals("connection"))
-					await _ProxyString(ProxyDataDirection.ResponseFromServer, p.tcpStream, header.Key + ": " + header.Value + "\r\n", snoopy);
+				string key = header.Key;
+				string value = header.Value;
+				if (key.IEquals("connection"))
+					continue;
+				if (key.IEquals("location"))
+				{
+					if (!string.IsNullOrWhiteSpace(requestHeader_Host)
+						&& Uri.TryCreate(value, UriKind.Absolute, out Uri redirectUri)
+						&& redirectUri.Host.IEquals(host))
+					{
+						UriBuilder uriBuilder = new UriBuilder(redirectUri);
+						uriBuilder.Host = requestHeader_Host;
+						value = uriBuilder.Uri.ToString();
+					}
+				}
+				await _ProxyString(ProxyDataDirection.ResponseFromServer, p.tcpStream, key + ": " + value + "\r\n", snoopy);
 			}
 
 			// Write blank line to indicate the end of the response headers
@@ -293,7 +337,8 @@ namespace BPUtil.SimpleHttp.Client
 				// The current thread will handle additional incoming data from our client and proxy it to the remote server.
 				await CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, p.tcpStream, proxyStream, snoopy);
 			}
-			return new ProxyResult(ProxyResultErrorCode.Success, null, "keep-alive".IEquals(proxyConnectionHeader), false);
+			bet?.Start("BeginProxyRequestAsync Return result");
+			return new ProxyResult(ProxyResultErrorCode.Success, null, remoteServerWantsKeepalive, false);
 		}
 		#region Helpers
 		private enum ProxyResponseDecision
@@ -305,7 +350,7 @@ namespace BPUtil.SimpleHttp.Client
 			if (snoopy != null)
 				snoopy.AddItem(new ProxyDataItem(Direction, str));
 			byte[] buf = ByteUtil.Utf8NoBOM.GetBytes(str);
-			await target.WriteAsync(buf, 0, buf.Length);
+			await target.WriteAsync(buf, 0, buf.Length).ConfigureAwait(false);
 		}
 		private static async Task _ProxyData(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy)
 		{
@@ -318,14 +363,14 @@ namespace BPUtil.SimpleHttp.Client
 					item = new ProxyDataItem(Direction, buf);
 				snoopy?.AddItem(item);
 			}
-			await target.WriteAsync(buf, 0, length);
+			await target.WriteAsync(buf, 0, length).ConfigureAwait(false);
 		}
 
 		private static async Task ProxyResponseToClient(Stream serverStream, Stream clientStream, ProxyDataBuffer snoopy)
 		{
 			try
 			{
-				await CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, serverStream, clientStream, snoopy);
+				await CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, serverStream, clientStream, snoopy).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
@@ -340,9 +385,9 @@ namespace BPUtil.SimpleHttp.Client
 			int read = 1;
 			while (read > 0)
 			{
-				read = await source.ReadAsync(buf, 0, buf.Length);
+				read = await source.ReadAsync(buf, 0, buf.Length).ConfigureAwait(false);
 				if (read > 0)
-					await _ProxyData(Direction, target, buf, read, snoopy);
+					await _ProxyData(Direction, target, buf, read, snoopy).ConfigureAwait(false);
 			}
 		}
 		private static async Task<long> CopyNBytes(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
@@ -352,9 +397,9 @@ namespace BPUtil.SimpleHttp.Client
 			int read = 1;
 			while (read > 0 && totalProxied < N)
 			{
-				read = await source.ReadAsync(buf, 0, (int)Math.Min(N - totalProxied, buf.Length));
+				read = await source.ReadAsync(buf, 0, (int)Math.Min(N - totalProxied, buf.Length)).ConfigureAwait(false);
 				if (read > 0)
-					await _ProxyData(Direction, target, buf, read, snoopy);
+					await _ProxyData(Direction, target, buf, read, snoopy).ConfigureAwait(false);
 				totalProxied += read;
 			}
 			return totalProxied;
@@ -366,39 +411,38 @@ namespace BPUtil.SimpleHttp.Client
 			while (true)
 			{
 				// Read chunk size
-				string chunkSizeLine = await HttpProcessor.streamReadLine(source);
+				string chunkSizeLine = HttpProcessor.streamReadLine(source);
 				if (chunkSizeLine == null)
 					break;
 
 				int chunkSize = int.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
-				if (chunkSize == 0)
-					break;
 
 				// Write chunk size
 				byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
-				await _ProxyData(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy);
+				await _ProxyData(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy).ConfigureAwait(false);
 
 				// Copy chunk data
 				int bytesRemaining = chunkSize;
 				while (bytesRemaining > 0)
 				{
-					bytesRead = await source.ReadAsync(buf, 0, Math.Min(buf.Length, bytesRemaining));
+					bytesRead = await source.ReadAsync(buf, 0, Math.Min(buf.Length, bytesRemaining)).ConfigureAwait(false);
 					if (bytesRead == 0)
 						throw new EndOfStreamException();
 
-					await _ProxyData(ProxyDataDirection.ResponseFromServer, target, buf, bytesRead, snoopy);
+					await _ProxyData(ProxyDataDirection.ResponseFromServer, target, buf, bytesRead, snoopy).ConfigureAwait(false);
 					bytesRemaining -= bytesRead;
 				}
 
 				// Read and write chunk trailer
-				string trailerLine = await HttpProcessor.streamReadLine(source);
+				string trailerLine = HttpProcessor.streamReadLine(source);
 				if (trailerLine != "")
-				{
 					throw new InvalidDataException();
-				}
 
-				byte[] trailerBytes = Encoding.ASCII.GetBytes(trailerLine + "\r\n");
-				await _ProxyData(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy);
+				byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
+				await _ProxyData(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy).ConfigureAwait(false);
+
+				if (chunkSize == 0)
+					break;
 			}
 		}
 		#endregion
