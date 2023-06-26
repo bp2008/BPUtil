@@ -435,7 +435,7 @@ namespace BPUtil.SimpleHttp
 					outputStream = new StreamWriter(tcpStream, Utf8NoBOM, tcpClient.SendBufferSize, true);
 					try
 					{
-						tcpClient.ReceiveTimeout = 10000;
+						tcpClient.ReceiveTimeout = keepAliveRequestCount <= 1 ? 10000 : 60000;
 						if (!parseRequest())
 							return; // End of stream was encountered. Very common with "Connection: keep-alive" when another request does not arrive.
 						readHeaders(tcpStream, httpHeaders, httpHeadersRaw);
@@ -664,7 +664,7 @@ namespace BPUtil.SimpleHttp
 				AddOrUpdateHeaderValue(httpHeaders, httpHeadersRaw, name, value);
 			}
 		}
-		
+
 		internal static async Task<string> streamReadLineAsync(StreamReader reader, int maxLength = 32768)
 		{
 			string str = await reader.ReadLineAsync();
