@@ -189,12 +189,12 @@ namespace BPUtil
 		/// <para>Converts an object to a JSON string. Must be implemented by classes deriving from SerializableObjectJson.</para>
 		/// <para>e.g. JsonConvert.SerializeObject</para>
 		/// </summary>
-		public abstract string SerializeToJson(object obj);
+		protected abstract string SerializeToJson(object obj);
 		/// <summary>
 		/// <para>Converts a JSON string to an object. Must be implemented by classes deriving from SerializableObjectJson.</para>
 		/// <para>e.g.JsonConvert.DeserializeObject</para>
 		/// </summary>
-		public abstract object DeserializeFromJson(string str);
+		protected abstract object DeserializeFromJson(string str);
 	}
 	/// <summary>
 	/// Annotate the serializable object with this in order to load serialized properties (otherwise only fields are loaded from file).

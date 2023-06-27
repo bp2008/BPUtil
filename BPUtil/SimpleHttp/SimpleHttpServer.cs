@@ -783,6 +783,10 @@ namespace BPUtil.SimpleHttp
 				PostBodyStream = null;
 			}
 		}
+		private void handleOtherRequest()
+		{
+			srv.handleOtherRequest(this, http_method);
+		}
 		#region Response Compression
 		/// <summary>
 		/// Automatically compresses the response body using gzip encoding, if the client requested it.
@@ -860,7 +864,7 @@ namespace BPUtil.SimpleHttp
 			if (contentLength > -1)
 				outputStream.WriteLineRN("Content-Length: " + contentLength);
 			else if (keepAlive)
-				outputStream.WriteLineRN("Transfer-Encoding: chunked");
+				outputStream.WriteLineRN("Transfer-Encoding: chunked"); // TODO: Wrap the output stream with one that automatically uses chunked transfer encoding.  See ProxyClient for an example of chunked transfer encoding.
 			if (compressionType == CompressionType.GZip)
 				outputStream.WriteLineRN("Content-Encoding: gzip");
 			string cookieStr = responseCookies.ToString();
@@ -886,19 +890,32 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		/// <param name="code">(OPTIONAL) The http error code (including explanation entity).  For example: "404 Not Found" where 404 is the error code and "Not Found" is the explanation.</param>
 		/// <param name="description">(OPTIONAL) A description string to send after the headers as the response.  This is typically shown to the remote user in his browser.  If null, the code string is sent here.  If "", no response body is sent by this function, and you may or may not want to write your own.</param>
-		public virtual void writeFailure(string code = "404 Not Found", string description = null)
+		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
+		public virtual void writeFailure(string code = "404 Not Found", string description = null, List<KeyValuePair<string, string>> additionalHeaders = null)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
+			if (code == null)
+				throw new ArgumentNullException("code", "HttpProcessor.writeFailure() requires a non-null code argument.");
+
+			if (description == null)
+				description = code;
+			int contentLength = ByteUtil.Utf8NoBOM.GetByteCount(description);
+
 			responseWritten = true;
 			outputStream.WriteLineRN("HTTP/1.1 " + code);
 			outputStream.WriteLineRN("Content-Type: text/plain; charset=utf-8");
-			outputStream.WriteLineRN("Connection: close");
+			outputStream.WriteLineRN("Content-Length: " + contentLength);
+			if (additionalHeaders != null)
+				foreach (KeyValuePair<string, string> header in additionalHeaders)
+					outputStream.WriteLineRN(header.Key + ": " + header.Value);
+			if (this.keepAliveRequested)
+				outputStream.WriteLineRN("Connection: keep-alive");
+			else
+				outputStream.WriteLineRN("Connection: close");
 			outputStream.WriteLineRN("");
-			if (description == null)
-				outputStream.WriteLineRN(code);
-			else if (description != "")
-				outputStream.WriteLineRN(description);
+			if (description != "")
+				outputStream.Write(description);
 		}
 
 		/// <summary>
@@ -1898,6 +1915,22 @@ namespace BPUtil.SimpleHttp
 		/// <param name="inputData">The input stream.  If the request's MIME type was "application/x-www-form-urlencoded", the StreamReader will be null and you can obtain the parameter values using p.PostParams, p.GetPostParam(), p.GetPostIntParam(), etc.</param>
 		public abstract void handlePOSTRequest(HttpProcessor p, StreamReader inputData);
 		/// <summary>
+		/// Handles requests using less common Http verbs such as "HEAD" or "PUT". See <see cref="HttpMethods"/>.
+		/// </summary>
+		/// <param name="method">The HTTP method string, e.g. "HEAD" or "PUT". See <see cref="HttpMethods"/>.</param>
+		/// <param name="p">The HttpProcessor handling the request.</param>
+		public virtual void handleOtherRequest(HttpProcessor p, string method)
+		{
+			if (method == HttpMethods.HEAD)
+			{
+				List<KeyValuePair<string, string>> additionalHeaders = new List<KeyValuePair<string, string>>();
+				additionalHeaders.Add(new KeyValuePair<string, string>("Allow", "GET"));
+				p.writeFailure("405 Method Not Allowed", additionalHeaders: additionalHeaders);
+			}
+			else
+				p.writeFailure("501 Not Implemented");
+		}
+		/// <summary>
 		/// This is called when the server is stopping.  Perform any cleanup work here.
 		/// </summary>
 		protected abstract void stopServer();
@@ -1922,6 +1955,71 @@ namespace BPUtil.SimpleHttp
 		}
 	}
 	#region Helper Classes
+	/// <summary>
+	/// <para>HTTP request methods</para>
+	/// <para>This static class defines all the methods from https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods on 2023-06-27, but SimpleHttpServer only fully supports GET and POST.</para>
+	/// <para>HTTP defines a set of request methods to indicate the desired action to be performed for a given resource. Although they can also be nouns, these request methods are sometimes referred to as HTTP verbs. Each of them implements a different semantic, but some common features are shared by a group of them: e.g. a request method can be safe, idempotent, or cacheable.</para>
+	/// </summary>
+	public static class HttpMethods
+	{
+		/// <summary>
+		/// The GET method requests a representation of the specified resource. Requests using GET should only retrieve data.
+		/// </summary>
+		public const string GET = "GET";
+		/// <summary>
+		/// The HEAD method asks for a response identical to a GET request, but without the response body.
+		/// </summary>
+		public const string HEAD = "HEAD";
+		/// <summary>
+		/// The POST method submits an entity to the specified resource, often causing a change in state or side effects on the server.
+		/// </summary>
+		public const string POST = "POST";
+		/// <summary>
+		/// The PUT method replaces all current representations of the target resource with the request payload.
+		/// </summary>
+		public const string PUT = "PUT";
+		/// <summary>
+		/// The DELETE method deletes the specified resource.
+		/// </summary>
+		public const string DELETE = "DELETE";
+		/// <summary>
+		/// The CONNECT method establishes a tunnel to the server identified by the target resource.
+		/// </summary>
+		public const string CONNECT = "CONNECT";
+		/// <summary>
+		/// The OPTIONS method describes the communication options for the target resource.
+		/// </summary>
+		public const string OPTIONS = "OPTIONS";
+		/// <summary>
+		/// The TRACE method performs a message loop-back test along the path to the target resource.
+		/// </summary>
+		public const string TRACE = "TRACE";
+		/// <summary>
+		/// The PATCH method applies partial modifications to a resource.
+		/// </summary>
+		public const string PATCH = "PATCH";
+		/// <summary>
+		/// Static HashSet containing all valid HTTP request method strings.
+		/// </summary>
+		private static HashSet<string> validMethods = GetValidMethods();
+		/// <summary>
+		/// Returns a HashSet containing all valid HTTP request method strings.
+		/// </summary>
+		/// <returns></returns>
+		private static HashSet<string> GetValidMethods()
+		{
+			return new HashSet<string>(new string[] { GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH });
+		}
+		/// <summary>
+		/// Returns true if the given HTTP method (a.k.a. verb) is recognized as one that is valid.
+		/// </summary>
+		/// <param name="method"></param>
+		/// <returns></returns>
+		public static bool IsValid(string method)
+		{
+			return validMethods.Contains(method);
+		}
+	}
 	class SimpleHttpServerThreadArgs
 	{
 		public int port;
