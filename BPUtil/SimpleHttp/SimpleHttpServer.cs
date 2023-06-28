@@ -39,12 +39,12 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// The underlying tcpClient which handles the network connection.
 		/// </summary>
-		public TcpClient tcpClient;
+		public TcpClient tcpClient { get; private set; }
 
 		/// <summary>
 		/// The HttpServer instance that accepted this request.
 		/// </summary>
-		public HttpServer srv;
+		public HttpServer srv { get; private set; }
 
 		/// <summary>
 		/// This stream is for reading and writing binary data.
@@ -53,13 +53,13 @@ namespace BPUtil.SimpleHttp
 		/// 
 		/// This stream is typically either a NetworkStream or a GzipStream.
 		/// </summary>
-		public Stream tcpStream;
+		public Stream tcpStream { get; private set; }
 
 		/// <summary>
 		/// This stream is for writing text data.
 		/// Be careful to flush [tcpStream] or [outputStream] before switching between them!!
 		/// </summary>
-		public StreamWriter outputStream;
+		public StreamWriter outputStream { get; private set; }
 
 		/// <summary>
 		/// Be careful to flush each output stream before using a different one!!
@@ -72,17 +72,17 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// The cookies sent by the remote client.
 		/// </summary>
-		public Cookies requestCookies;
+		public Cookies requestCookies { get; private set; }
 
 		/// <summary>
 		/// The cookies to send to the remote client.
 		/// </summary>
-		public Cookies responseCookies = new Cookies();
+		public Cookies responseCookies { get; private set; } = new Cookies();
 
 		/// <summary>
 		/// The Http method used.  i.e. "POST" or "GET"
 		/// </summary>
-		public string http_method;
+		public string http_method { get; private set; }
 		/// <summary>
 		/// The base Uri for this server, containing its host name and port.
 		/// </summary>
@@ -90,69 +90,69 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// The requested url.
 		/// </summary>
-		public Uri request_url;
+		public Uri request_url { get; private set; }
 		/// <summary>
 		/// The protocol version string sent by the client.  e.g. "HTTP/1.1"
 		/// </summary>
-		public string http_protocol_versionstring;
+		public string http_protocol_versionstring { get; private set; }
 		/// <summary>
 		/// <para>The path to and name of the requested page, not including the first '/'.</para>
 		/// <para>For example, if the URL was "/articles/science/moon.html?date=2011-10-21", requestedPage would be "articles/science/moon.html".</para>
 		/// <para>URL-encoded characters remain url-encoded. E.g. "File%20Name.jpg".</para>
 		/// </summary>
-		public string requestedPage;
+		public string requestedPage { get; private set; }
 		/// <summary>
 		/// A Dictionary mapping http header names to values. Names are all converted to lower case before being added to this Dictionary.
 		/// </summary>
-		public Dictionary<string, string> httpHeaders = new Dictionary<string, string>();
+		public Dictionary<string, string> httpHeaders { get; private set; } = new Dictionary<string, string>();
 
 		/// <summary>
 		/// A Dictionary mapping http header names to values. Names are left in their raw form, and may include capital letters.
 		/// </summary>
-		public Dictionary<string, string> httpHeadersRaw = new Dictionary<string, string>();
+		public Dictionary<string, string> httpHeadersRaw { get; private set; } = new Dictionary<string, string>();
 
 		/// <summary>
 		/// A SortedList mapping lower-case keys to values of parameters.  This list is populated if and only if the request was a POST request with mimetype "application/x-www-form-urlencoded".
 		/// </summary>
-		public SortedList<string, string> PostParams = new SortedList<string, string>();
+		public SortedList<string, string> PostParams { get; private set; } = new SortedList<string, string>();
 		/// <summary>
 		/// A SortedList mapping keys to values of parameters.  No character case conversion is applied in this list.  This list is populated if and only if the request was a POST request with mimetype "application/x-www-form-urlencoded".
 		/// </summary>
-		public SortedList<string, string> RawPostParams = new SortedList<string, string>();
+		public SortedList<string, string> RawPostParams { get; private set; } = new SortedList<string, string>();
 		/// <summary>
 		/// A SortedList mapping lower-case keys to values of parameters.  This list is populated parameters that were appended to the url (the query string).  e.g. if the url is "mypage.html?arg1=value1&amp;arg2=value2", then there will be two parameters ("arg1" with value "value1" and "arg2" with value "value2")
 		/// </summary>
-		public SortedList<string, string> QueryString = new SortedList<string, string>();
+		public SortedList<string, string> QueryString { get; private set; } = new SortedList<string, string>();
 		/// <summary>
 		/// A SortedList mapping keys to values of parameters.  No character case conversion is applied in this list.  This list is populated parameters that were appended to the url (the query string).  e.g. if the url is "mypage.html?arg1=value1&amp;arg2=value2", then there will be two parameters ("arg1" with value "value1" and "arg2" with value "value2")
 		/// </summary>
-		public SortedList<string, string> RawQueryString = new SortedList<string, string>();
+		public SortedList<string, string> RawQueryString { get; private set; } = new SortedList<string, string>();
 
 		/// <summary>
 		/// The mimetype of the posted content.
 		/// </summary>
-		public string postContentType = "";
+		public string postContentType { get; private set; } = "";
 
 		/// <summary>
 		/// The raw posted content as a string, populated only if the mimetype was "application/x-www-form-urlencoded"
 		/// </summary>
-		public string postFormDataRaw = "";
+		public string postFormDataRaw { get; private set; } = "";
 
 		/// <summary>
-		/// A flag that is set when WriteSuccess(), WriteFailure(), or WriteRedirect() is called.
+		/// A flag that is set when writeSuccess(), writeFailure(), or writeRedirect() is called.
 		/// </summary>
 		public bool responseWritten = false;
 
 		/// <summary>
 		/// True if a "Connection: keep-alive;" header was received from the client.
 		/// </summary>
-		public bool keepAliveRequested;
+		public bool keepAliveRequested { get; private set; }
 
 		/// <summary>
 		/// True if a "Connection: keep-alive;" header was sent to the client.
 		/// This flag is reset to false at the start of each request.
 		/// </summary>
-		public bool keepAlive = false;
+		public bool keepAlive { get; internal set; } = false;
 
 		#region Properties dealing with the IP Address of the remote host
 		private int isLanConnection = -1;
@@ -315,9 +315,9 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Gets the MemoryStream containing the POST content. It will be seeked to the beginning before this HttpProcessor is sent to the HttpServer for handling. For non-POST requests, this will be null.
 		/// </summary>
-		public MemoryStream PostBodyStream { get; protected set; }
+		public MemoryStream PostBodyStream { get; private set; }
 
-		public long keepAliveRequestCount { get; protected set; } = 0;
+		public long keepAliveRequestCount { get; private set; } = 0;
 		#endregion
 
 		public HttpProcessor(TcpClient s, HttpServer srv, ICertificateSelector certificateSelector, AllowedConnectionTypes allowedConnectionTypes)
@@ -527,6 +527,8 @@ namespace BPUtil.SimpleHttp
 							this.writeFailure();
 					}
 					outputStream.Flush();
+					if (tcpStream is ChunkedTransferEncodingStream)
+						(tcpStream as ChunkedTransferEncodingStream).WriteFinalChunk();
 					tcpStream.Flush();
 					// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
 					try
@@ -809,7 +811,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Called automatically by writeSuccess method; flushes the existing output streams and wraps them in a gzipstream if gzip compression is to be used.
 		/// </summary>
-		public void EnableCompressionIfSet()
+		private void EnableCompressionIfSet()
 		{
 			if (!responseWritten)
 				return;
@@ -822,6 +824,20 @@ namespace BPUtil.SimpleHttp
 				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, true);
 				outputStream = new StreamWriter(tcpStream, ByteUtil.Utf8NoBOM, tcpClient.SendBufferSize, true);
 			}
+		}
+		/// <summary>
+		/// Called automatically by writeSuccess method; flushes the existing output streams and wraps them in a ChunkedTransferEncodingStream which ensures that all future data written to tcpStream or outputStream will be have appropriate chunk headers and footers written.
+		/// </summary>
+		private void EnableTransferEncodingChunked()
+		{
+			if (!responseWritten)
+				return;
+			if (tcpStream is ChunkedTransferEncodingStream)
+				return;
+			outputStream.Flush();
+			tcpStream.Flush();
+			tcpStream = new ChunkedTransferEncodingStream(tcpStream);
+			outputStream = new StreamWriter(tcpStream, Utf8NoBOM, tcpClient.SendBufferSize, true);
 		}
 		/// <summary>
 		/// Returns true if the client has requested gzip compression.
@@ -845,44 +861,55 @@ namespace BPUtil.SimpleHttp
 		/// Writes the response headers for a successful response.  Call this one time before writing your response, after you have determined that the request is valid.
 		/// </summary>
 		/// <param name="contentType">The MIME type of your response.</param>
-		/// <param name="contentLength">(OPTIONAL) The length of your response, in bytes, if you know it.</param>
+		/// <param name="contentLength">(OPTIONAL) The length of your response, in bytes, if you know it. If you don't know it, provide -1, and if keep-alive is being used, then "Transfer-Encoding: chunked" will be used automatically on the output stream and you don't need to know anything about it.</param>
 		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		/// <param name="keepAlive">(OPTIONAL) If true, sends the header "Connection: keep-alive" instead of "Connection: close". If you use keepAlive, you must either specify a contentLength (and honor it) or use chunked transfer encoding. If you specify keepAlive with a negative contentLength, the header "Transfer-Encoding: chunked" will automatically be added.</param>
-		public virtual void writeSuccess(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null, bool keepAlive = false)
+		public virtual void writeSuccess(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
 
-			if (keepAlive && !this.keepAliveRequested)
-				throw new Exception("writeSuccess was told to use \"Connection: keep-alive\", but the client did not request it.");
-
 			responseWritten = true;
+			HashSet<string> reservedHeaderKeys = new HashSet<string>();
+			reservedHeaderKeys.Add("Connection");
+
 			outputStream.WriteLineRN("HTTP/1.1 " + responseCode);
 			if (!string.IsNullOrEmpty(contentType))
-				outputStream.WriteLineRN("Content-Type: " + contentType);
+				WriteReservedHeader(reservedHeaderKeys, "Content-Type", contentType);
 			if (contentLength > -1)
-				outputStream.WriteLineRN("Content-Length: " + contentLength);
-			else if (keepAlive)
-				outputStream.WriteLineRN("Transfer-Encoding: chunked"); // TODO: Wrap the output stream with one that automatically uses chunked transfer encoding.  See ProxyClient for an example of chunked transfer encoding.
+				WriteReservedHeader(reservedHeaderKeys, "Content-Length", contentLength.ToString());
+			bool chunkedTransferEncoding = this.keepAliveRequested && contentLength < 0;
+			if (chunkedTransferEncoding)
+				WriteReservedHeader(reservedHeaderKeys, "Transfer-Encoding", "chunked");
 			if (compressionType == CompressionType.GZip)
-				outputStream.WriteLineRN("Content-Encoding: gzip");
+				WriteReservedHeader(reservedHeaderKeys, "Content-Encoding", "gzip");
 			string cookieStr = responseCookies.ToString();
 			if (!string.IsNullOrEmpty(cookieStr))
 				outputStream.WriteLineRN(cookieStr);
 			if (additionalHeaders != null)
 				foreach (KeyValuePair<string, string> header in additionalHeaders)
+				{
+					if (reservedHeaderKeys.Contains(header.Key.ToUpper()))
+						throw new ApplicationException("writeSuccess() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
 					outputStream.WriteLineRN(header.Key + ": " + header.Value);
-			if (keepAlive)
+				}
+			if (this.keepAliveRequested)
 				outputStream.WriteLineRN("Connection: keep-alive");
 			else
 				outputStream.WriteLineRN("Connection: close");
 			outputStream.WriteLineRN("");
 
-			this.keepAlive = keepAlive;
+			this.keepAlive = this.keepAliveRequested;
 
 			tcpClient.NoDelay = true;
 			EnableCompressionIfSet();
+			if (chunkedTransferEncoding)
+				EnableTransferEncodingChunked();
+		}
+		private void WriteReservedHeader(HashSet<string> reservedHeaderKeys, string key, string value)
+		{
+			reservedHeaderKeys.Add(key.ToUpper());
+			outputStream.WriteLineRN(key + ": " + value);
 		}
 
 		/// <summary>
@@ -969,7 +996,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		public virtual void writeFullResponseBytes(byte[] body, string contentType, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
 		{
-			writeSuccess(contentType, body.Length, responseCode, additionalHeaders, this.keepAliveRequested);
+			writeSuccess(contentType, body.Length, responseCode, additionalHeaders);
 			this.outputStream.Flush();
 			this.tcpStream.Write(body, 0, body.Length);
 		}

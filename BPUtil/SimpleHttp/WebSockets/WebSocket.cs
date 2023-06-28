@@ -73,7 +73,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 			{
 				List<KeyValuePair<string, string>> additionalHeaders = new List<KeyValuePair<string, string>>();
 				additionalHeaders.Add(new KeyValuePair<string, string>("Sec-WebSocket-Version", "13"));
-				p.writeSuccess(responseCode: "400 Bad Request", additionalHeaders: additionalHeaders);
+				p.writeSuccess(contentLength: 0, responseCode: "400 Bad Request", additionalHeaders: additionalHeaders);
 				p.outputStream.Flush();
 				throw new Exception("An unsupported web socket version was requested (\"" + version + "\").");
 			}

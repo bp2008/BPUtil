@@ -90,7 +90,7 @@ namespace BPUtil.MVC
 
 			if (body == null)
 			{
-				httpProcessor.writeSuccess(actionResult.ContentType, 0, actionResult.ResponseStatus, context.additionalResponseHeaders, keepAlive: httpProcessor.keepAliveRequested);
+				httpProcessor.writeSuccess(actionResult.ContentType, 0, actionResult.ResponseStatus, context.additionalResponseHeaders);
 			}
 			else
 			{
@@ -125,7 +125,7 @@ namespace BPUtil.MVC
 							additionalHeaders.Add(header);
 					}
 				}
-				httpProcessor.writeSuccess(actionResult.ContentType, body.Length, actionResult.ResponseStatus, additionalHeaders, keepAlive: httpProcessor.keepAliveRequested);
+				httpProcessor.writeSuccess(actionResult.ContentType, body.Length, actionResult.ResponseStatus, additionalHeaders);
 				httpProcessor.outputStream.Flush();
 				httpProcessor.tcpStream.Write(body, 0, body.Length);
 			}

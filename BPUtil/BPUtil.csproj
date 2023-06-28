@@ -119,6 +119,7 @@
     <Compile Include="Robust.cs" />
     <Compile Include="SevenZip.cs" />
     <Compile Include="SignatureFactory.cs" />
+    <Compile Include="SimpleHttp\ChunkedTransferEncodingStream.cs" />
     <Compile Include="SimpleHttp\Client\ProxyClient.cs" />
     <Compile Include="SimpleHttp\Client\ProxyResult.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ICertificateSelector.cs" />
