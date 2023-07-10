@@ -28,6 +28,9 @@ using System.Threading.Tasks;
 
 namespace BPUtil.SimpleHttp
 {
+	/// <summary>
+	/// Implements the HTTP 1.1 protocol for a given <see cref="TcpClient"/> and <see cref="HttpServer"/>.
+	/// </summary>
 	public class HttpProcessor : IProcessor
 	{
 		public static UTF8Encoding Utf8NoBOM = new UTF8Encoding(false);
@@ -149,8 +152,9 @@ namespace BPUtil.SimpleHttp
 		public bool keepAliveRequested { get; private set; }
 
 		/// <summary>
-		/// True if a "Connection: keep-alive;" header was sent to the client.
-		/// This flag is reset to false at the start of each request.
+		/// <para>True if a "Connection: keep-alive;" header was sent to the client.</para>
+		/// <para>This flag is reset to false at the start of each request.</para>
+		/// <para>If true at the end of a request, the server will attempt to read another request from this connection.</para>
 		/// </summary>
 		public bool keepAlive { get; internal set; } = false;
 
@@ -306,6 +310,9 @@ namespace BPUtil.SimpleHttp
 		/// If true, the connection is secured with TLS.
 		/// </summary>
 		public bool secure_https { get; private set; }
+		/// <summary>
+		/// An object responsible for delivering TLS server certificates upon demand.
+		/// </summary>
 		private ICertificateSelector certificateSelector;
 		/// <summary>
 		/// The type of compression that will be used for the response stream.
@@ -317,16 +324,31 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public MemoryStream PostBodyStream { get; private set; }
 
+		/// <summary>
+		/// The number of requests that have been read by the current TCP connection.
+		/// </summary>
 		public long keepAliveRequestCount { get; private set; } = 0;
+
+		/// <summary>
+		/// The hostname that was requested by the client.  This is populated from TLS Server Name Indication if available, otherwise from the Host header.  Null if not provided in either place.
+		/// </summary>
+		public string hostName { get; private set; }
 		#endregion
 
-		public HttpProcessor(TcpClient s, HttpServer srv, ICertificateSelector certificateSelector, AllowedConnectionTypes allowedConnectionTypes)
+		/// <summary>
+		/// Constructs an HttpProcessor to handle an HTTP or HTTPS request from a client.
+		/// </summary>
+		/// <param name="client">TcpClient which is managing the client connection.</param>
+		/// <param name="srv">The HttpServer instance which accepted the client connection.</param>
+		/// <param name="certificateSelector"> An object responsible for delivering TLS server certificates upon demand. May be null only if [allowedConnectionTypes] does not include https.</param>
+		/// <param name="allowedConnectionTypes">Enumeration flags indicating which protocols are allowed to be used.</param>
+		public HttpProcessor(TcpClient client, HttpServer srv, ICertificateSelector certificateSelector, AllowedConnectionTypes allowedConnectionTypes)
 		{
-			if ((allowedConnectionTypes == AllowedConnectionTypes.https || allowedConnectionTypes == AllowedConnectionTypes.httpAndHttps) && certificateSelector == null)
+			if (allowedConnectionTypes.HasFlag(AllowedConnectionTypes.https) && certificateSelector == null)
 				throw new ArgumentException("HttpProcessor was instructed to accept https requests but was not provided a certificate selector.", "certificateSelector");
 
 			this.certificateSelector = certificateSelector;
-			this.tcpClient = s;
+			this.tcpClient = client;
 			this.srv = srv;
 			this.allowedConnectionTypes = allowedConnectionTypes;
 		}
@@ -366,34 +388,37 @@ namespace BPUtil.SimpleHttp
 			{
 				tcpClient.SendBufferSize = 65536;
 				tcpStream = tcpClient.GetStream();
-				if (allowedConnectionTypes == AllowedConnectionTypes.https || allowedConnectionTypes == AllowedConnectionTypes.httpAndHttps)
+				if (allowedConnectionTypes.HasFlag(AllowedConnectionTypes.https))
 				{
 					try
 					{
 						X509Certificate cert;
-						if (allowedConnectionTypes == AllowedConnectionTypes.https && certificateSelector is SimpleCertificateSelector)
+						// Read the TLS Client Hello message to get the server name so we can select the correct certificate and
+						//   populate the hostName property of this HttpProcessor.
+						// Note it is possible that the client is not using TLS, in which case no certificate will be selected and the
+						//   request will be processed as plain HTTP.
+						if (TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, out string serverName))
 						{
-							// This connection only supports HTTPS, and SimpleCertificateSelector doesn't require Server Name Indication.
-							// We can skip wrapping the network stream to read the TLS Client Hello message.
-							cert = certificateSelector.GetCertificate(null);
-						}
-						else
-						{
-							// Read the TLS Client Hello message to get the server name so we can select the correct certificate.
-							// This requires wrapping the network stream which makes all further read/write operations slightly less efficient.
-							// Note it is possible that the client is not using TLS, in which case no certificate will be selected and the
-							//   request will be processed as plain HTTP.
-							if (TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, out string serverName))
-								cert = certificateSelector.GetCertificate(serverName);
-							else
-								cert = null;
-						}
-						if (cert != null)
-						{
+							hostName = serverName;
+							cert = certificateSelector.GetCertificate(serverName);
+							if (cert == null)
+							{
+								SimpleHttpLogger.Log("TLS authentication failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (serverName == null ? "null" : ("\"" + serverName + "\"")) + ".");
+								return;
+							}
 							tcpStream = new System.Net.Security.SslStream(tcpStream, false, null, null);
 							const System.Security.Authentication.SslProtocols Tls13 = (System.Security.Authentication.SslProtocols)12288;
 							((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(cert, false, System.Security.Authentication.SslProtocols.Tls12 | Tls13, false);
 							this.secure_https = true;
+						}
+						else
+						{
+							if (!allowedConnectionTypes.HasFlag(AllowedConnectionTypes.http))
+							{
+								SimpleHttpLogger.LogVerbose("Client " + this.RemoteIPAddressStr + " requested plain HTTP from an IP endpoint (" + tcpClient.Client.LocalEndPoint.ToString() + ") that is not configured to support plain HTTP.");
+								return;
+							}
+							cert = null;
 						}
 					}
 					catch (ThreadAbortException) { throw; }
@@ -439,6 +464,10 @@ namespace BPUtil.SimpleHttp
 						if (!parseRequest())
 							return; // End of stream was encountered. Very common with "Connection: keep-alive" when another request does not arrive.
 						readHeaders(tcpStream, httpHeaders, httpHeadersRaw);
+						if (string.IsNullOrWhiteSpace(hostName))
+							hostName = GetHeaderValue("host");
+						if (string.IsNullOrWhiteSpace(hostName))
+							hostName = null;
 						keepAliveRequested = "keep-alive".IEquals(GetHeaderValue("connection"));
 						IPAddress originalRemoteIp = RemoteIPAddress;
 						if (srv.XRealIPHeader)
@@ -495,8 +524,8 @@ namespace BPUtil.SimpleHttp
 							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url?.OriginalString);
 						if (IsOrdinaryDisconnectException(e))
 						{
-							if (keepAliveRequestCount <= 1) // Do not log if this is a kept-alive connection.
-								SimpleHttpLogger.LogVerbose(e);
+							//if (keepAliveRequestCount <= 1) // Do not log if this is a kept-alive connection.
+							//	SimpleHttpLogger.LogVerbose(e);
 							if (!responseWritten)
 								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request."); // This response should probably fail because the client has disconnected.
 							return;
@@ -1041,7 +1070,7 @@ namespace BPUtil.SimpleHttp
 			Uri newUri = new Uri(newUrl);
 			if (string.IsNullOrWhiteSpace(host))
 				host = newUri.DnsSafeHost;
-			using (TcpClient proxyClient = new TcpClient())
+			using (TcpClient proxyClient = new TcpClient(AddressFamily.InterNetworkV6))
 			{
 				proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
 				proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
@@ -1158,16 +1187,54 @@ namespace BPUtil.SimpleHttp
 		/// The "Host" header is rewritten (or added) and output as the first header.
 		/// </summary>
 		/// <param name="newUrl">The URL to proxy the original request to.</param>
-		/// <param name="networkTimeoutMs">The send and receive timeout to set for both TcpClients, in milliseconds.</param>
-		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
-		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
-		/// <param name="host">The value of the host header, also used in SSL authentication. If null or whitespace, it is set from the [newUrl] parameter.</param>
-		/// <param name="bet">Optional event timer for collecting timing data.</param>
-		public async Task ProxyToAsync(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null, BasicEventTimer bet = null)
+		/// <param name="options">Optional options to control the behavior of the proxy request.</param>
+		public async Task ProxyToAsync(string newUrl, ProxyOptions options = null)
 		{
-			bet?.Start("Entering ProxyToAsync");
-			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), networkTimeoutMs, host, acceptAnyCert, snoopy, bet);
-			bet?.Start("Exiting ProxyToAsync");
+			options?.bet?.Start("Entering ProxyToAsync");
+			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), options);
+			options?.bet?.Stop();
+		}
+		public class ProxyOptions
+		{
+			/// <summary>
+			/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds.
+			/// </summary>
+			public int networkTimeoutMs = 60000;
+			/// <summary>
+			/// [Default: false] If true, certificate validation will be disabled for outgoing https connections.
+			/// </summary>
+			public bool acceptAnyCert = false;
+			/// <summary>
+			/// [Default: null] If non-null, proxied communication will be copied into this object so you can snoop on it.
+			/// </summary>
+			public ProxyDataBuffer snoopy = null;
+			/// <summary>
+			/// [Default: null] The value of the host header, also used in SSL authentication. If null or whitespace, it is set from the [newUrl] parameter.
+			/// </summary>
+			public string host = null;
+			/// <summary>
+			/// [Default: null] Optional event timer for collecting timing data.
+			/// </summary>
+			public BasicEventTimer bet = null;
+			/// <summary>
+			/// [Default: true] If true, then this proxy utility will gracefully handle connection failure by responding with "504 Gateway Timeout".  If false, an exception will be thrown upon gateway timeout.
+			/// </summary>
+			public bool allowGatewayTimeoutResponse = true;
+			/// <summary>
+			/// [Default: true] Disable this if the server you're proxying to does not handle "Connection: keep-alive" properly.  For example, some servers may use "Connection: keep-alive" without providing any means to know when the response is completed, which can cause the proxy request to fail.  Similarly, some web servers may associate user/session data with a connection such that the proxied site could malfunction or leak data.  It is slower, but safer, to disable [allowConnectionKeepalive].
+			/// </summary>
+			public bool allowConnectionKeepalive = true;
+
+			/// <summary>
+			/// A StringBuilder suitable for logging operations for one Proxy request.
+			/// </summary>
+			public StringBuilder log = new StringBuilder();
+
+			private static long counter = 0;
+			/// <summary>
+			/// Unique identifier for this request. Counter starts at 0 each time the program is launched.
+			/// </summary>
+			public readonly long RequestId = Interlocked.Increment(ref counter);
 		}
 		#endregion
 
@@ -1510,6 +1577,25 @@ namespace BPUtil.SimpleHttp
 			return "Digest realm=\"" + realm + "\", nonce=\"" + nonce + "\", opaque=\"" + opaque + "\", algorithm=MD5, qop=\"auth\", userhash=true";
 		}
 		/// <summary>
+		/// Removes the given appPath from the start of the incoming request URL, if it is found there.  Updates the <see cref="request_url"/> and <see cref="requestedPage"/> properties.
+		/// </summary>
+		/// <param name="appPath">AppPath string.</param>
+		public void RemoveAppPath(string appPath)
+		{
+			if (appPath == null)
+				return;
+			string ap = "/" + appPath.Trim('/', ' ', '\r', '\n', '\t');
+			if (ap == "/")
+				return;
+			if (request_url.AbsolutePath.StartsWith(ap, StringComparison.OrdinalIgnoreCase))
+			{
+				UriBuilder uriBuilder = new UriBuilder(request_url);
+				uriBuilder.Path = request_url.AbsolutePath.Substring(ap.Length);
+				request_url = uriBuilder.Uri;
+				requestedPage = request_url.AbsolutePath.StartsWith("/") ? request_url.AbsolutePath.Substring(1) : request_url.AbsolutePath;
+			}
+		}
+		/// <summary>
 		/// An exception containing an HTTP response code and text.
 		/// </summary>
 		internal class HttpProcessorException : Exception
@@ -1552,7 +1638,7 @@ namespace BPUtil.SimpleHttp
 			/// <summary>
 			/// Connection types that are allowed, where it is possible to allow plain unencrypted connections or TLS.
 			/// </summary>
-			public readonly AllowedConnectionTypes AllowedConnectionTypes;
+			public AllowedConnectionTypes AllowedConnectionTypes { get; internal set; }
 			/// <summary>
 			/// Constructs an Endpoint.
 			/// </summary>
@@ -1572,10 +1658,46 @@ namespace BPUtil.SimpleHttp
 			/// <param name="port">TCP port number to listen on.</param>
 			/// <param name="address">IP address to listen on.</param>
 			public Binding(AllowedConnectionTypes allowedConnectionTypes, ushort port, IPAddress address = null) : this(allowedConnectionTypes, new IPEndPoint(address ?? IPAddress.Any, port)) { }
+
+			/// <summary>
+			/// Returns true if this Binding is equal to a specified object (another Binding instance).
+			/// </summary>
+			/// <param name="obj">Other binding to compare with.</param>
+			/// <returns></returns>
+			public override bool Equals(object obj)
+			{
+				if (obj != null && obj is Binding)
+				{
+					Binding other = obj as Binding;
+					return AllowedConnectionTypes.Equals(other.AllowedConnectionTypes) && Endpoint.Equals(other.Endpoint);
+				}
+				return false;
+			}
+			/// <inheritdoc/>
+			public override int GetHashCode()
+			{
+				return AllowedConnectionTypes.GetHashCode() ^ Endpoint.GetHashCode();
+			}
+			/// <summary>
+			/// Returns true if this Binding's <see cref="Endpoint"/> is equal to the other's Endpoint.
+			/// </summary>
+			/// <param name="other">Other binding to compare with.</param>
+			/// <returns></returns>
+			public bool SocketEndpointsEqual(Binding other)
+			{
+				if (other != null)
+					return Endpoint.Equals(other.Endpoint);
+				return false;
+			}
+			/// <inheritdoc/>
+			public override string ToString()
+			{
+				return Endpoint.ToString() + " (" + AllowedConnectionTypes + ")";
+			}
 		}
 		public class ListenerData
 		{
-			public readonly Binding Binding;
+			public Binding Binding { get; private set; }
 			private TcpListener tcpListener;
 			private volatile bool isStopping = false;
 			internal HttpServer Server;
@@ -1609,6 +1731,10 @@ namespace BPUtil.SimpleHttp
 							trafficType = "http and https";
 						else
 							trafficType = "unknown";
+
+						if (Binding.Endpoint.Port != ((IPEndPoint)tcpListener.LocalEndpoint).Port)
+							Binding = new Binding(Binding.AllowedConnectionTypes, (IPEndPoint)tcpListener.LocalEndpoint);
+
 						Server.SocketBound.Invoke(this, "Listening on " + Binding.Endpoint.ToString() + " for " + trafficType);
 						while (!isStopping && tcpListener.Server?.IsBound == true)
 						{
@@ -1659,7 +1785,18 @@ namespace BPUtil.SimpleHttp
 				isStopping = true;
 				TcpListener l = tcpListener;
 				tcpListener = null;
-				l?.Stop();
+				try
+				{
+					l?.Stop();
+				}
+				catch (Exception ex)
+				{
+					Logger.Debug(ex);
+				}
+			}
+			public override string ToString()
+			{
+				return "Listener " + Binding.ToString();
 			}
 		}
 		public int? SendBufferSize = null;
@@ -1878,26 +2015,57 @@ namespace BPUtil.SimpleHttp
 			if (newBindings == null)
 				newBindings = new Binding[0];
 
-			ListenerData[] toStart;
-			ListenerData[] toStop;
+			List<ListenerData> toStart = new List<ListenerData>();
+			List<ListenerData> toStop = new List<ListenerData>();
 			lock (listeners)
 			{
-				toStart = newBindings
-					.Where(b => !listeners.Any(l => l.Binding.Equals(b)))
-					.Select(b => new ListenerData(this, b))
-					.ToArray();
+				// Decide what to do with each of our current listeners.
+				foreach (ListenerData l in listeners)
+				{
+					Binding perfectMatch = newBindings.FirstOrDefault(b => b.Equals(l.Binding));
+					if (perfectMatch != null)
+					{
+						// This listener remains unmodified.
+						continue;
+					}
+					Binding socketLevelMatch = newBindings.FirstOrDefault(b => b.SocketEndpointsEqual(l.Binding));
+					if (socketLevelMatch != null)
+					{
+						// This listener needs to change its AllowedConnectionTypes
+						l.Binding.AllowedConnectionTypes = socketLevelMatch.AllowedConnectionTypes;
+						SimpleHttpLogger.LogVerbose("Modified AllowedConnectionTypes on " + l.ToString());
+						continue;
+					}
+					// This listener needs to stop.
+					toStop.Add(l);
+				}
+
+				// Remove listeners that need to be stopped from the collection.
+				listeners.RemoveAll(toStop.Contains);
+
+				// Create new listeners as needed
+				foreach (Binding b in newBindings)
+				{
+					if (!listeners.Any(l => l.Binding.SocketEndpointsEqual(b)))
+						toStart.Add(new ListenerData(this, b));
+				}
+
+				// Add the new listeners to the collection.
 				listeners.AddRange(toStart);
-				toStop = listeners.Where(l => !newBindings.Any(b => l.Binding.Equals(b))).ToArray();
 			}
 
+			// Stop dead listeners
 			foreach (ListenerData listener in toStop)
 			{
 				listener.Stop();
+				SimpleHttpLogger.LogVerbose("Stopped " + listener.ToString());
 			}
 
+			// Start new listeners
 			foreach (ListenerData listener in toStart)
 			{
 				listener.Run();
+				SimpleHttpLogger.LogVerbose("Started " + listener.ToString());
 			}
 		}
 
@@ -1928,6 +2096,17 @@ namespace BPUtil.SimpleHttp
 
 			try { stopServer(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 			try { GlobalThrottledStream.ThrottlingManager.Shutdown(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
+		}
+		/// <summary>
+		/// Returns an array of bindings currently active in this server. Please do not modify the bindings that are returned; instead, send a new set of bindings to <see cref="SetBindings(Binding[])"/>.
+		/// </summary>
+		/// <returns></returns>
+		public Binding[] GetBindings()
+		{
+			lock (listeners)
+			{
+				return listeners.Select(l => l.Binding).ToArray();
+			}
 		}
 
 		/// <summary>
@@ -2062,11 +2241,12 @@ namespace BPUtil.SimpleHttp
 			SetListenerField = setListenerField;
 		}
 	}
+	[Flags]
 	public enum AllowedConnectionTypes
 	{
-		http,
-		https,
-		httpAndHttps
+		http = 0b1,
+		https = 0b10,
+		httpAndHttps = http | https
 	}
 	public enum CompressionType
 	{

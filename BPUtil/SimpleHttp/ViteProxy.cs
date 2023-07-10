@@ -12,22 +12,23 @@ using System.Threading.Tasks;
 namespace BPUtil.SimpleHttp
 {
 	/// <summary>
-	/// Assists in web service development using webpack.
+	/// Assists in web service development using Vite.
 	/// </summary>
-	public class WebpackProxy
+	public class ViteProxy
 	{
-		int webpackPort;
+		int vitePort;
 		string workingDirectory;
-		object webpackStartLock = new object();
+		object viteStartLock = new object();
 		bool hasTriedRecovery = false;
+		string viteHost = IPAddress.IPv6Loopback.ToString();
 
-		public WebpackProxy(int webpackPort, string workingDirectory = null)
+		public ViteProxy(int vitePort, string workingDirectory = null)
 		{
-			this.webpackPort = webpackPort;
+			this.vitePort = vitePort;
 			this.workingDirectory = workingDirectory;
 		}
 		/// <summary>
-		/// Attempts to proxy the connection to webpack, starting webpack dev server if necessary.
+		/// Attempts to proxy the connection to Vite, starting Vite dev server if necessary.
 		/// </summary>
 		/// <param name="p"></param>
 		public void Proxy(HttpProcessor p)
@@ -37,25 +38,35 @@ namespace BPUtil.SimpleHttp
 				return;
 			if (!hasTriedRecovery)
 			{
-				lock (webpackStartLock)
+				lock (viteStartLock)
 				{
 					if (!hasTriedRecovery)
 					{
-						if (TestTcpPortBind(webpackPort))
+						if (TestTcpPortBind(vitePort))
 						{
-							Console.Error.WriteLine("Webpack dev server's TCP port " + webpackPort + " is closed. Trying to start webpack dev server.");
-							if (TryStartWebpack())
+							Console.Error.WriteLine("Vite dev server's TCP port " + vitePort + " is closed. Trying to start Vite dev server.");
+							if (TryStartVite())
 							{
 								Stopwatch sw = new Stopwatch();
 								sw.Start();
-								while (sw.ElapsedMilliseconds < 10000 && !TestTcpPortOpen(webpackPort))
-									Thread.Sleep(100);
+								while (sw.ElapsedMilliseconds < 10000)
+								{
+									if (TestTcpPortOpen(vitePort))
+									{
+										// At the time of this writing, it seems that early requests proxied to Vite's web server can fail because Vite says to use Connection: keep-alive, but does not provide a recognized way to know when the response is finished.
+										// As a workaround, we sleep a little after starting the Vite web server.
+										Thread.Sleep(500);
+										break;
+									}
+									else
+										Thread.Sleep(100);
+								}
 							}
 						}
 						else
-							Console.Error.WriteLine("Webpack dev server's TCP port " + webpackPort + " is open, suggesting that it may be running.");
+							Console.Error.WriteLine("Vite dev server's TCP port " + vitePort + " is open, suggesting that it may be running.");
 						hasTriedRecovery = true;
-						Console.WriteLine(TestTcpPortOpen(webpackPort) ? "Webpack dev server is now running" : "Webpack dev server could not be started");
+						Console.WriteLine(TestTcpPortOpen(vitePort) ? "Vite dev server is now running" : "Vite dev server could not be started");
 					}
 				}
 			}
@@ -63,22 +74,33 @@ namespace BPUtil.SimpleHttp
 				ex = TryProxy(p);
 			if (ex == null)
 				return;
-			Logger.Debug(ex, "Failed to proxy \"" + p.request_url.PathAndQuery + "\" to webpack dev server.");
+			Logger.Debug(ex, "Failed to proxy \"" + p.request_url.PathAndQuery + "\" to Vite dev server.");
+			if (!p.responseWritten)
+				p.writeFailure("504 Gateway Timeout");
 		}
 		private Exception TryProxy(HttpProcessor p)
 		{
 			try
 			{
-				p.ProxyTo("http://" + IPAddress.Loopback.ToString() + ":" + webpackPort + p.request_url.AbsolutePath);
+				// Vite's web server misuses "Connection: keep-alive" by sometimes not offering a way to know when the response is finished.
+				UriBuilder builder = new UriBuilder(p.request_url);
+				builder.Scheme = "http";
+				builder.Host = IPAddress.IPv6Loopback.ToString();
+				builder.Port = vitePort;
+				p.ProxyToAsync(builder.Uri.ToString(), new HttpProcessor.ProxyOptions()
+				{
+					allowGatewayTimeoutResponse = false,
+					allowConnectionKeepalive = true
+				}).Wait();
 				return null;
 			}
 			catch (Exception ex) { return ex; }
 		}
 		/// <summary>
-		/// Returns true if the webpack dev server was started successfully.
+		/// Returns true if the Vite dev server was started successfully.
 		/// </summary>
 		/// <returns></returns>
-		private bool TryStartWebpack()
+		private bool TryStartVite()
 		{
 			try
 			{
@@ -88,7 +110,7 @@ namespace BPUtil.SimpleHttp
 					Logger.Debug("node.js does not seem to be installed.");
 					return false;
 				}
-				ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/C \"npm start\"");
+				ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/C \"npm run-script dev\"");
 				psi.UseShellExecute = true;
 				psi.WorkingDirectory = new DirectoryInfo(workingDirectory).FullName;
 				Process npm = Process.Start(psi);
@@ -96,7 +118,7 @@ namespace BPUtil.SimpleHttp
 			}
 			catch (Exception ex)
 			{
-				Logger.Debug(ex, "Failed to start webpack dev server (cmd.exe /C \"npm start\")");
+				Logger.Debug(ex, "Failed to start Vite dev server (cmd.exe /C \"npm run-script dev\")");
 				return false;
 			}
 		}
@@ -110,7 +132,7 @@ namespace BPUtil.SimpleHttp
 			TcpListener tcpListener = null;
 			try
 			{
-				tcpListener = new TcpListener(IPAddress.Loopback, port);
+				tcpListener = new TcpListener(IPAddress.IPv6Loopback, port);
 				tcpListener.Start();
 				return true;
 			}
@@ -134,9 +156,9 @@ namespace BPUtil.SimpleHttp
 			TcpClient client = null;
 			try
 			{
-				client = new TcpClient();
+				client = new TcpClient(AddressFamily.InterNetworkV6);
 				client.SendTimeout = client.ReceiveTimeout = 1000;
-				client.Connect(IPAddress.Loopback, port);
+				client.Connect(IPAddress.IPv6Loopback, port);
 				return true;
 			}
 			catch

@@ -15,11 +15,46 @@ namespace BPUtil.SimpleHttp
 		public void AddItem(ProxyDataItem item)
 		{
 			lock (Items)
+			{
 				Items.Add(item);
+			}
+		}
+		public byte[] GetRequestBytes()
+		{
+			lock (Items)
+			{
+				List<byte[]> chunks = Items.Where(i => i.Direction == ProxyDataDirection.RequestToServer).Select(i => i.PayloadBytes).ToList();
+				byte[] buf = new byte[chunks.Sum(c => c.Length)];
+				int offset = 0;
+				foreach (byte[] chunk in chunks)
+				{
+					Array.Copy(chunk, 0, buf, offset, chunk.Length);
+					offset += chunk.Length;
+				}
+				return buf;
+			}
+		}
+		public byte[] GetResponseBytes()
+		{
+			lock (Items)
+			{
+				List<byte[]> chunks = Items.Where(i => i.Direction == ProxyDataDirection.ResponseFromServer).Select(i => i.PayloadBytes).ToList();
+				byte[] buf = new byte[chunks.Sum(c => c.Length)];
+				int offset = 0;
+				foreach (byte[] chunk in chunks)
+				{
+					Array.Copy(chunk, 0, buf, offset, chunk.Length);
+					offset += chunk.Length;
+				}
+				return buf;
+			}
 		}
 		public override string ToString()
 		{
-			return string.Join("", Items.Select(i => i.ToString()));
+			lock (Items)
+			{
+				return string.Join("", Items.Select(i => i.ToString()));
+			}
 		}
 	}
 	/// <summary>

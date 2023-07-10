@@ -48,9 +48,25 @@ namespace BPUtil.SimpleHttp.Client
 	}
 	public enum ProxyResultErrorCode
 	{
+		/// <summary>
+		/// Request was proxied successfully.
+		/// </summary>
 		Success = 0,
+		/// <summary>
+		/// The remote server did not respond.
+		/// </summary>
 		GatewayTimeout = 1,
+		/// <summary>
+		/// Failed to perform TLS negotiation with the remote server.
+		/// </summary>
 		TLSNegotiationError = 2,
-		BadGateway = 3
+		/// <summary>
+		/// We think the remote server did something wrong.
+		/// </summary>
+		BadGateway = 3,
+		/// <summary>
+		/// A generic error.
+		/// </summary>
+		Error = 4
 	}
 }

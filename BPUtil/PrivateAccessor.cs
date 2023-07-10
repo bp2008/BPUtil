@@ -6,6 +6,9 @@ using System.Text;
 
 namespace BPUtil
 {
+	/// <summary>
+	/// Accesses private members of objects.  This is dangerous to use as it may violate expectations and cause bugs that would otherwise be impossible.
+	/// </summary>
 	public static class PrivateAccessor
 	{
 		private const BindingFlags instance_flags = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -51,6 +54,16 @@ namespace BPUtil
 		public static void SetPropertyValue(object obj, string name, object value)
 		{
 			obj.GetType().GetProperty(name, instance_flags).SetValue(obj, value, null);
+		}
+		/// <summary>
+		/// Sets the value of the specified private property of the specified object.
+		/// </summary>
+		/// <param name="obj">The object to change.</param>
+		/// <param name="name">The name of the private property.</param>
+		/// <param name="value">The value to set.</param>
+		public static void SetReadOnlyPropertyValue(object obj, string name, object value)
+		{
+			obj.GetType().GetProperty(name).SetValue(obj, value, null);
 		}
 		/// <summary>
 		/// Calls the specified private method of the specified object.

@@ -332,6 +332,18 @@ namespace BPUtil
 			return await internal_send(HttpMethod.Put, url, putBody, contentType, headers, earlyTerminationBytes, fileDownloadPath).ConfigureAwait(false);
 		}
 		/// <summary>
+		/// Performs an HTTP DELETE request.
+		/// </summary>
+		/// <param name="url">The url to DELETE.</param>
+		/// <param name="earlyTerminationBytes">If specified, the connection will be dropped as soon as this many bytes are read, and this much data will be returned. If the full response is shorter than this, then the full response will be returned.</param>
+		/// <param name="headers">Additional header keys and values to set in the request, provided as an array of strings ordered as [key, value, key, value] and so on. e.g.: { "User-Agent", "Mozilla", "Server", "MyServer" }</param>
+		/// <param name="fileDownloadPath">If specified, the response body will be streamed into this file and the response returned by this method will have a null data field.  If the file already exists, it will be overwritten.</param>
+		/// <returns></returns>
+		public async Task<BpWebResponse> DELETEAsync(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
+		{
+			return await internal_send(HttpMethod.Delete, url, null, null, headers, earlyTerminationBytes, fileDownloadPath).ConfigureAwait(false);
+		}
+		/// <summary>
 		/// Performs an HTTP PUT request, sending the specified body content.
 		/// </summary>
 		/// <param name="url">The url to PUT.</param>

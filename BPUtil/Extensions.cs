@@ -226,6 +226,14 @@ namespace BPUtil
 			BinaryExpression assign = Expression.Assign(Expression.Field(target, stackTraceStringField), stackTraceString);
 			return Expression.Lambda<Func<Exception, StackTrace, Exception>>(Expression.Block(assign, target), target, stack).Compile();
 		})();
+		/// <summary>
+		/// Rethrows this caught exception in its original state.  This exists because the "throw;" command in some cases fails to restore the correct state.
+		/// </summary>
+		/// <param name="ex">The exception to be rethrown.</param>
+		public static void Rethrow(this Exception ex)
+		{
+			System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw();
+		}
 		#endregion
 		#region IEnumerable<string>
 		/// <summary>

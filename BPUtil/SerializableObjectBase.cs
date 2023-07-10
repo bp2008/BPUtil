@@ -79,29 +79,32 @@ namespace BPUtil
 						object obj;
 						using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
 							obj = DeserializeObject(fs);
-						foreach (FieldInfo sourceField in obj.GetType().GetFields())
+						if (obj != null)
 						{
-							try
-							{
-								FieldInfo targetField = thistype.GetField(sourceField.Name);
-								if (targetField != null && targetField.MemberType == sourceField.MemberType)
-									targetField.SetValue(this, sourceField.GetValue(obj));
-							}
-							catch (ThreadAbortException) { throw; }
-							catch (Exception) { }
-						}
-						if (obj.GetType().GetCustomAttributes(typeof(SerializeProperties), false).FirstOrDefault() != null)
-						{
-							foreach (PropertyInfo sourceProperty in obj.GetType().GetProperties())
+							foreach (FieldInfo sourceField in obj.GetType().GetFields())
 							{
 								try
 								{
-									PropertyInfo targetProperty = thistype.GetProperty(sourceProperty.Name);
-									if (targetProperty != null && targetProperty.MemberType == sourceProperty.MemberType)
-										targetProperty.SetValue(this, sourceProperty.GetValue(obj));
+									FieldInfo targetField = thistype.GetField(sourceField.Name);
+									if (targetField != null && targetField.MemberType == sourceField.MemberType)
+										targetField.SetValue(this, sourceField.GetValue(obj));
 								}
 								catch (ThreadAbortException) { throw; }
 								catch (Exception) { }
+							}
+							if (obj.GetType().GetCustomAttributes(typeof(SerializeProperties), false).FirstOrDefault() != null)
+							{
+								foreach (PropertyInfo sourceProperty in obj.GetType().GetProperties())
+								{
+									try
+									{
+										PropertyInfo targetProperty = thistype.GetProperty(sourceProperty.Name);
+										if (targetProperty != null && targetProperty.MemberType == sourceProperty.MemberType)
+											targetProperty.SetValue(this, sourceProperty.GetValue(obj));
+									}
+									catch (ThreadAbortException) { throw; }
+									catch (Exception) { }
+								}
 							}
 						}
 					}

@@ -4,13 +4,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
+using System.Runtime.Serialization;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BPUtil.SimpleHttp.Client
 {
 	/// <summary>
-	/// Provides advanced web proxying capability.  This class is very primitive and appears to struggle with effectively using connections that were kept alive, usually failing and needing to retry the request.  The speed/latency of the proxy is also questionable, as several hundred milliseconds of overhead are noticed.
+	/// Provides advanced web proxying capability.
 	/// </summary>
 	public class ProxyClient
 	{
@@ -20,6 +22,12 @@ namespace BPUtil.SimpleHttp.Client
 		public readonly string Origin;
 		private TcpClient proxyClient;
 		private Stream proxyStream;
+		private CountdownStopwatch expireTimer = CountdownStopwatch.StartNew(TimeSpan.FromMinutes(60));
+
+		/// <summary>
+		/// Constructs a ProxyClient and binds it to the specified origin.
+		/// </summary>
+		/// <param name="origin">The ProxyClient will only be able to send requests to this origin.</param>
 		private ProxyClient(string origin)
 		{
 			Origin = origin;
@@ -38,54 +46,77 @@ namespace BPUtil.SimpleHttp.Client
 		/// </summary>
 		/// <param name="p">HttpProcessor instance that is requesting the proxied connection.</param>
 		/// <param name="uri">URI that should be requested.</param>
-		/// <param name="networkTimeoutMs">The send and receive timeout to set for both TcpClients, in milliseconds.</param>
-		/// <param name="host">String to be used for TLS server name indication and the Host header. If null or whitespace, this is automatically populated from the [uri].</param>
-		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
-		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
-		/// <param name="bet">Optional event timer for collecting timing data.</param>
+		/// <param name="options">Optional options to control the behavior of the proxy request.</param>
 		/// <returns></returns>
-		public static async Task ProxyRequest(HttpProcessor p, Uri uri, int networkTimeoutMs = 60000, string host = null, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, BasicEventTimer bet = null)
+		public static async Task ProxyRequest(HttpProcessor p, Uri uri, HttpProcessor.ProxyOptions options = null)
 		{
-			bet?.Start("ProxyRequest Start");
-			string origin = GetOriginLower(uri);
-			ConcurrentQueue<ProxyClient> pool = poolsByOrigin.GetOrAdd(origin, createNewPool);
-
-			int numTries = 0;
-			while (true)
+			if (options == null)
+				options = new HttpProcessor.ProxyOptions();
+			try
 			{
-				numTries++;
-				ProxyClient client;
-				if (!pool.TryDequeue(out client))
-				{
-					client = new ProxyClient(origin);
-					bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with new client");
-				}
-				else
-				{
-					Logger.Info("Got ProxyClient from pool");
-					bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with existing client");
-				}
+				options.bet?.Start("ProxyRequest Start");
 
-				ProxyResult result = await client.BeginProxyRequestAsync(p, uri, networkTimeoutMs, host, acceptAnyCert, snoopy, bet);
-				bet?.Start("ProxyRequest analyze result #" + numTries + ": " + result.ErrorCode);
+				options.log.AppendLine("ProxyClient.ProxyRequest(\"" + uri + "\")");
+				string origin = GetOriginLower(uri);
+				ConcurrentQueue<ProxyClient> pool = poolsByOrigin.GetOrAdd(origin, createNewPool);
 
-				if (result.IsProxyClientReusable)
+				int numTries = 0;
+				while (true)
 				{
-					pool.Enqueue(client);
-					Logger.Info("Recycling ProxyClient for future use.");
-				}
-				if (result.Success)
-					break;
-				else
-				{
-					if (!result.ShouldTryAgainWithAnotherConnection)
+					numTries++;
+					ProxyClient client;
+					if (!pool.TryDequeue(out client))
 					{
-						Logger.Info("ProxyRequest to uri \"" + uri.ToString() + "\" failed with error: " + result.ErrorMessage);
+						client = new ProxyClient(origin);
+						options.log.AppendLine("Using New ProxyClient");
+						options.bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with new client");
+					}
+					else
+					{
+						if (client.expireTimer.Finished)
+						{
+							options.log.AppendLine("Removing Expired ProxyClient");
+							continue;
+						}
+						options.log.AppendLine("Using Existing ProxyClient");
+						options.bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with existing client");
+					}
+
+					ProxyResult result = null;
+					try
+					{
+						result = await client.BeginProxyRequestAsync(p, uri, options);
+					}
+					catch (Exception ex)
+					{
+						options.log.AppendLine("Exception occurred: " + ex.FlattenMessages());
+						ex.Rethrow();
+					}
+					options.bet?.Start("ProxyRequest analyze result #" + numTries + ": " + result.ErrorCode);
+
+					if (result.IsProxyClientReusable)
+					{
+						pool.Enqueue(client);
+						options.log.AppendLine("Recycling ProxyClient for future use.");
+					}
+					if (result.Success)
 						break;
+					else
+					{
+						if (!result.ShouldTryAgainWithAnotherConnection)
+						{
+							options.log.AppendLine("ProxyRequest to uri \"" + uri.ToString() + "\" failed with error: " + result.ErrorMessage);
+							break;
+						}
 					}
 				}
 			}
-			bet?.Start("ProxyRequest Finish Up");
+			finally
+			{
+				Logger.Info("Request ID " + options.RequestId + ":" + Environment.NewLine
+					+ options.log.ToString()
+					+ (options.bet == null ? "" : (Environment.NewLine + Environment.NewLine + options.bet.ToString(Environment.NewLine))));
+			}
 		}
 		/// <summary>
 		/// Polls the socket to see if it has closed.
@@ -117,112 +148,141 @@ namespace BPUtil.SimpleHttp.Client
 		/// </summary>
 		/// <param name="p">HttpProcessor instance that is requesting the proxied connection.</param>
 		/// <param name="uri">The Uri which the request should be forwarded to.</param>
-		/// <param name="networkTimeoutMs">The send and receive timeout to set for both TcpClients, in milliseconds.</param>
-		/// <param name="host">String to be used for TLS server name indication and the Host header. If null or whitespace, this is automatically populated from the [uri].</param>
-		/// <param name="acceptAnyCert">If true, certificate validation will be disabled for outgoing https connections.</param>
-		/// <param name="snoopy">If non-null, proxied communication will be copied into this object so you can snoop on it.</param>
-		/// <param name="bet">Optional event timer for collecting timing data.</param>
+		/// <param name="options">Optional options to control the behavior of the proxy request.</param>
 		/// <returns></returns>
-		public async Task<ProxyResult> BeginProxyRequestAsync(HttpProcessor p, Uri uri, int networkTimeoutMs = 60000, string host = null, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, BasicEventTimer bet = null)
+		public async Task<ProxyResult> BeginProxyRequestAsync(HttpProcessor p, Uri uri, HttpProcessor.ProxyOptions options = null)
 		{
-			// Interally, we shall refer to the original client making the request to this application as "the client", while the destination URI points at "the server".
-			bet?.Start("BeginProxyRequestAsync Init");
-
-			if (p.responseWritten)
-				throw new ApplicationException("This ProxyClient is unable to complete the current request because a response has already been written to the client making this request.");
-
 			string origin = GetOriginLower(uri);
 			if (Origin != origin)
 				throw new ApplicationException("This ProxyClient is bound to a different web origin than the requested Uri.");
 
+			if (p.responseWritten)
+				throw new ApplicationException("This ProxyClient is unable to complete the current request because a response has already been written to the client making this request.");
+
+			if (options == null)
+				options = new HttpProcessor.ProxyOptions();
+
+			string host = options.host;
+			ProxyDataBuffer snoopy = options.snoopy;
+			if (snoopy == null)
+				snoopy = new ProxyDataBuffer(); // TODO: Remove this; let it come only from options.
+
+			// Interally, we shall refer to the original client making the request to this application as "the client", while the destination URI points at "the server".
+			options.bet?.Start("BeginProxyRequestAsync Init");
+
 			if (string.IsNullOrWhiteSpace(host))
 				host = uri.DnsSafeHost;
 
-			bool mustConnect;
+			p.tcpClient.NoDelay = true;
+			p.tcpClient.SendTimeout = p.tcpClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(0, 45000) + 15000;
+
+			//////////////////////
+			// PHASE 1: CONNECT //
+			//////////////////////
+			bool didConnect = false;
 			if (proxyClient == null)
 			{
-				Logger.Info("Constructing new TcpClient");
-				proxyClient = new TcpClient();
-				mustConnect = true;
-			}
-			else
-			{
-				Logger.Info("Reusing old connection");
-				mustConnect = false;
-			}
-
-			proxyClient.ReceiveTimeout = networkTimeoutMs;
-			proxyClient.SendTimeout = networkTimeoutMs;
-			proxyClient.NoDelay = true;
-			p.tcpClient.NoDelay = true;
-
-			if (mustConnect)
-			{
+				options.log.AppendLine("Constructing new TcpClient");
 				try
 				{
-					bet?.Start("BeginProxyRequestAsync Connect");
-					await proxyClient.ConnectAsync(uri.DnsSafeHost, uri.Port);
-					proxyStream = proxyClient.GetStream();
+					await Connect(uri, host, options);
+					didConnect = true;
 				}
-				catch (Exception ex)
+				catch (GatewayTimeoutException ex)
 				{
-					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "504 Gateway Timeout");
-					return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, "ProxyClient failed to connect to the remote host: " + uri.DnsSafeHost + ":" + uri.Port + "\r\n" + ex.ToHierarchicalString(), false, false);
-				}
-				try
-				{
-					if (uri.Scheme.IEquals("https"))
+					if (options.allowGatewayTimeoutResponse)
 					{
-						bet?.Start("BeginProxyRequestAsync TLS Negotiate");
-						System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
-						if (acceptAnyCert)
-							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
-						proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+						p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "504 Gateway Timeout");
+						return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
 					}
+					ex.Rethrow();
 				}
-				catch (Exception ex)
+				catch (TLSNegotiationFailedException ex)
 				{
 					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
-					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, "ProxyClient failed to negotiate TLS with the remote host: " + uri.DnsSafeHost + ":" + uri.Port + "\r\n" + ex.ToHierarchicalString(), false, false);
+					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, ex.ToHierarchicalString(), false, false);
 				}
 			}
-			bet?.Start("BeginProxyRequestAsync Process Request Headers");
+			else
+				options.log.AppendLine("Reusing old connection");
+
+			proxyClient.SendTimeout = proxyClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(0, 45000) + 15000;
 
 			// Connection to remote server is now established and ready for data transfer.
+
+			///////////////////////////
+			// PHASE 2: ANALYZE REQUEST //
+			///////////////////////////
 			// Send the original client's request to the remote server with any necessary modifications.
+			options.bet?.Start("BeginProxyRequestAsync Process Request Headers");
 
-			string requestHeader_Connection = p.GetHeaderValue("connection");
-			bool ourClientWantsConnectionClose = "close".IEquals(requestHeader_Connection);
-			if (ourClientWantsConnectionClose)
-				requestHeader_Connection = "keep-alive"; // Our client requested connection: close, but we we'll use keep-alive for our own proxy connection.
+			// Collection of lower case header names that are "hop-by-hop" and should not be proxied.  Values in the "Connection" header are supposed to be added to this collection on a per-request basis, but this server does not currently recognize comma separated values in the Connection header, therefore that is not happening.
+			HashSet<string> doNotProxyHeaders = new HashSet<string>(new string[] {
+				"keep-alive", "transfer-encoding", "te", "connection", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate"
+			});
 
-			string requestHeader_Host = p.GetHeaderValue("host");
-
-
-			p.tcpClient.ReceiveTimeout = Math.Max(60000, networkTimeoutMs + 15000);
-			p.tcpClient.SendTimeout = Math.Max(60000, networkTimeoutMs + 15000);
-
-			// Send the first line of our HTTP request.
-			bet?.Start("BeginProxyRequestAsync Transmit Proxy Request");
-			string requestLine = p.http_method + ' ' + uri.PathAndQuery + ' ' + p.http_protocol_versionstring;
-			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, requestLine + "\r\n", snoopy);
-			// After the first line comes the request headers.
-			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
-			if (requestHeader_Connection != null)
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: " + requestHeader_Connection + "\r\n", snoopy);
-			foreach (KeyValuePair<string, string> header in p.httpHeadersRaw)
+			// Figure out the Connection header
+			string incomingConnectionHeader = p.GetHeaderValue("connection");
+			bool ourClientWantsConnectionClose = "close".IEquals(incomingConnectionHeader);
+			bool ourClientWantsConnectionKeepAlive = "keep-alive".IEquals(incomingConnectionHeader) || string.IsNullOrEmpty(incomingConnectionHeader);
+			bool ourClientWantsConnectionUpgrade = "upgrade".IEquals(incomingConnectionHeader);
+			if (!ourClientWantsConnectionClose && !ourClientWantsConnectionKeepAlive && !ourClientWantsConnectionUpgrade)
 			{
-				if (!header.Key.IEquals("host") && !header.Key.IEquals("connection"))
-					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
+				p.writeFullResponseUTF8("Connection header had unrecognized value.", "text/plain; charset=UTF-8", "400 Bad Request");
+				return new ProxyResult(ProxyResultErrorCode.Error, "Connection header had unrecognized value: " + incomingConnectionHeader, false, false);
 			}
-			// Now a blank line to indicate the end of the request headers.
-			_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
 
+			string requestHeader_Connection;
+			if (ourClientWantsConnectionUpgrade)
+				requestHeader_Connection = "upgrade";
+			else
+			{
+				if (options.allowConnectionKeepalive)
+					requestHeader_Connection = "keep-alive";
+				else
+					requestHeader_Connection = "close";
+			}
+
+			bool ourClientWantsWebsocket = ourClientWantsConnectionUpgrade && "websocket".IEquals(p.GetHeaderValue("upgrade"));
+
+			string requestHeader_Upgrade = ourClientWantsWebsocket ? "websocket" : null;
+
+			///////////////////////////
+			// PHASE 3: SEND REQUEST //
+			///////////////////////////
+			// Send the first line of our HTTP request.
+			options.bet?.Start("BeginProxyRequestAsync Transmit Proxy Request");
+			string requestLine = p.http_method + ' ' + uri.PathAndQuery + ' ' + p.http_protocol_versionstring;
+			try
+			{
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, requestLine + "\r\n", snoopy);
+				// After the first line comes the request headers.
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: " + requestHeader_Connection + "\r\n", snoopy);
+				if (requestHeader_Upgrade != null)
+					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Upgrade: " + requestHeader_Upgrade + "\r\n", snoopy);
+
+				foreach (KeyValuePair<string, string> header in p.httpHeadersRaw)
+				{
+					if (!doNotProxyHeaders.Contains(header.Key.ToLower()))
+						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
+				}
+				// Now a blank line to indicate the end of the request headers.
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
+			}
+			catch (Exception ex)
+			{
+				if (!didConnect && ex.GetExceptionOfType<SocketException>() != null)
+				{
+					options.log.AppendLine("Recycled proxy stream EOF while sending request to remote server. Will retry.");
+					return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, "ProxyClient encountered unexpected SocketException while sending the request to the remote server. Should retry with a new connection.", false, true);
+				}
+				ex.Rethrow();
+			}
 			// Write the original POST body if there was one.
 			if (p.PostBodyStream != null)
 			{
-				bet?.Start("BeginProxyRequestAsync Transmit POST body");
+				options.bet?.Start("BeginProxyRequestAsync Transmit POST body");
 				long remember_position = p.PostBodyStream.Position;
 				p.PostBodyStream.Seek(0, SeekOrigin.Begin);
 				byte[] buf = p.PostBodyStream.ToArray();
@@ -232,89 +292,125 @@ namespace BPUtil.SimpleHttp.Client
 
 			proxyStream.Flush();
 
+			////////////////////////////
+			// PHASE 4: READ RESPONSE //
+			////////////////////////////
 			// Read response from remote server
-			string responseStatusLine = null;
+			HttpResponseStatusLine responseStatusLine = null;
 			Dictionary<string, string> proxyHttpHeaders = new Dictionary<string, string>();
 			Dictionary<string, string> proxyHttpHeadersRaw = new Dictionary<string, string>();
 			try
 			{
-				bet?.Start("BeginProxyRequestAsync Read Status Line From Remote Server");
-				responseStatusLine = HttpProcessor.streamReadLine(proxyStream);
+				options.bet?.Start("BeginProxyRequestAsync Read Status Line From Remote Server");
+				responseStatusLine = new HttpResponseStatusLine(HttpProcessor.streamReadLine(proxyStream));
 
 				// Read response headers from remote server
-				bet?.Start("BeginProxyRequestAsync Read Response Headers From Remote Server");
+				options.bet?.Start("BeginProxyRequestAsync Read Response Headers From Remote Server");
 				HttpProcessor.readHeaders(proxyStream, proxyHttpHeaders, proxyHttpHeadersRaw);
 			}
 			catch (HttpProcessor.EndOfStreamException ex)
 			{
-				if (!mustConnect)
+				if (!didConnect)
+				{
+					options.log.AppendLine("Recycled proxy stream EOF while reading response from remote server. Will retry.");
 					return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, "ProxyClient encountered unexpected end of stream while reading the response from the remote server. Should retry with a new connection.", false, true);
-				System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw();
+				}
+				ex.Rethrow();
 			}
 
 			// Decide how to respond
-			bet?.Start("BeginProxyRequestAsync Process Response Headers");
-			ProxyResponseDecision decision = ProxyResponseDecision.Undefined;
+			options.bet?.Start("BeginProxyRequestAsync Process Response Headers");
+			ProxyResponseDecision decision;
 			long proxyContentLength = 0;
 			bool remoteServerWantsKeepalive = false;
-			if (proxyHttpHeaders.TryGetValue("connection", out string proxyConnectionHeader))
+			string proxyConnectionHeader;
+			if (!proxyHttpHeaders.TryGetValue("connection", out proxyConnectionHeader))
 			{
-				if (proxyConnectionHeader.IEquals("keep-alive"))
+				if (responseStatusLine.Version.StartsWith("1.0"))
 				{
-					remoteServerWantsKeepalive = true;
-					// keep-alive responses must either specify a "Content-Length" or use "Transfer-Encoding: chunked".
-					if (proxyHttpHeaders.TryGetValue("content-length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
-					{
-						// Content-Length
-						decision = ProxyResponseDecision.ContentLength;
-					}
-					else if (proxyHttpHeaders.TryGetValue("transfer-encoding", out string proxyTransferEncoding) && proxyTransferEncoding.IEquals("chunked"))
-					{
-						// Transfer-Encoding: chunked
-						decision = ProxyResponseDecision.Chunked;
-					}
-					else
-					{
-						p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
-						return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyTo can't process this request because the remote server specified \"Connection: keepalive\" without specifying a \"Content-Length\" or using \"Transfer-Encoding: chunked\". The request was: " + requestLine, false, false);
-					}
+					options.log.AppendLine("No \"Connection\" header in response from remote server.");
+					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
+					return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyClient can't process this request because the remote server did not specify a \"Connection\" header. The request was: " + requestLine, false, false);
 				}
-				else if (proxyConnectionHeader.IEquals("upgrade") && proxyHttpHeaders.TryGetValue("upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
+				proxyConnectionHeader = "keep-alive";
+			}
+			if (ourClientWantsWebsocket)
+			{
+				if (proxyConnectionHeader.IEquals("upgrade") && proxyHttpHeaders.TryGetValue("upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
+				{
+					options.log.AppendLine("This is a websocket connection.");
 					decision = ProxyResponseDecision.Websocket;
+				}
 				else
-					decision = ProxyResponseDecision.UntilClosed;
+				{
+					options.log.AppendLine("We requested a websocket connection but did not get it.");
+					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
+					return new ProxyResult(ProxyResultErrorCode.BadGateway, "We requested a websocket connection but did not get it.", false, false);
+				}
 			}
 			else
 			{
-				p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
-				return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyTo can't process this request because the remote server did not specify a \"Connection\" header. The request was: " + requestLine, false, false);
+				remoteServerWantsKeepalive = proxyConnectionHeader.IEquals("keep-alive");
+
+				if (responseStatusLine.StatusCode.StartsWith("1") || responseStatusLine.StatusCode == "204" || responseStatusLine.StatusCode == "304")
+					decision = ProxyResponseDecision.NoBody;
+				else if (proxyHttpHeaders.TryGetValue("content-length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
+				{
+					// Content-Length
+					decision = ProxyResponseDecision.ContentLength;
+				}
+				else if (proxyHttpHeaders.TryGetValue("transfer-encoding", out string proxyTransferEncoding) && proxyTransferEncoding.IEquals("chunked"))
+				{
+					// Transfer-Encoding: chunked
+					decision = ProxyResponseDecision.ReadChunked;
+				}
+				else
+				{
+					if (remoteServerWantsKeepalive)
+						decision = ProxyResponseDecision.NoBody;
+					else
+						decision = ProxyResponseDecision.UntilClosed;
+				}
+
+				//// keep-alive responses must either specify a "Content-Length" or use "Transfer-Encoding: chunked".
+				//if (remoteServerWantsKeepalive && decision != ProxyResponseDecision.ContentLength && decision != ProxyResponseDecision.Chunked)
+				//{
+				//	p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
+				//	return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyTo can't process this request because the remote server specified \"Connection: keepalive\" without specifying a \"Content-Length\" or using \"Transfer-Encoding: chunked\". The request was: " + requestLine + ". All headers:\r\n" + string.Join("\r\n", proxyHttpHeadersRaw.Select(i => i.Key + ": " + i.Value)), false, false);
+				//}
 			}
 
+			/////////////////////////////
+			// PHASE 5: WRITE RESPONSE //
+			/////////////////////////////
 			// Write response status line
-			bet?.Start("BeginProxyRequestAsync Write Response: " + decision);
+			Stream outgoingStream = p.tcpStream;
+			options.bet?.Start("BeginProxyRequestAsync Write Response: " + decision);
 			p.responseWritten = true;
-			_ProxyString(ProxyDataDirection.ResponseFromServer, p.tcpStream, responseStatusLine + "\r\n", snoopy);
+			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, responseStatusLine + "\r\n", snoopy);
 
 			// Write response headers
-			if (ourClientWantsConnectionClose && !"close".IEquals(proxyConnectionHeader))
-				proxyConnectionHeader = "close";
-			else if (!ourClientWantsConnectionClose && "close".IEquals(proxyConnectionHeader))
-				proxyConnectionHeader = "keep-alive";
-			if (proxyConnectionHeader != null)
-			{
-				if (proxyConnectionHeader.IEquals("keep-alive"))
-					p.keepAlive = true;
-				_ProxyString(ProxyDataDirection.ResponseFromServer, p.tcpStream, "Connection: " + proxyConnectionHeader + "\r\n", snoopy);
-			}
+			string responseConnectionHeader;
+			if (ourClientWantsWebsocket)
+				responseConnectionHeader = "upgrade";
+			else if (ourClientWantsConnectionClose)
+				responseConnectionHeader = "close";
+			else
+				responseConnectionHeader = "keep-alive";
+			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Connection: " + responseConnectionHeader + "\r\n", snoopy);
+
+			if (ourClientWantsWebsocket)
+				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Upgrade: websocket\r\n", snoopy);
 
 			foreach (KeyValuePair<string, string> header in proxyHttpHeadersRaw)
 			{
 				string key = header.Key;
-				string value = header.Value;
-				if (key.IEquals("connection"))
+				if (doNotProxyHeaders.Contains(key.ToLower()))
 					continue;
+				string value = header.Value;
 				if (key.IEquals("location"))
 				{
+					string requestHeader_Host = p.GetHeaderValue("host");
 					if (!string.IsNullOrWhiteSpace(requestHeader_Host)
 						&& Uri.TryCreate(value, UriKind.Absolute, out Uri redirectUri)
 						&& redirectUri.Host.IEquals(host))
@@ -324,34 +420,161 @@ namespace BPUtil.SimpleHttp.Client
 						value = uriBuilder.Uri.ToString();
 					}
 				}
-				_ProxyString(ProxyDataDirection.ResponseFromServer, p.tcpStream, key + ": " + value + "\r\n", snoopy);
+				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, key + ": " + value + "\r\n", snoopy);
+			}
+
+			if (responseConnectionHeader == "keep-alive")
+			{
+				// This MUST occur after all other headers are written.
+				p.keepAlive = true;
+				if (decision != ProxyResponseDecision.ContentLength && decision != ProxyResponseDecision.NoBody)
+				{
+					// No content-length was provided, and there is assumed to be a response body.  We must use "Transfer-Encoding: chunked" for our response.
+					_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Transfer-Encoding: chunked\r\n", snoopy);
+					outgoingStream = new ChunkedTransferEncodingStream(outgoingStream);
+				}
 			}
 
 			// Write blank line to indicate the end of the response headers
-			_ProxyString(ProxyDataDirection.ResponseFromServer, p.tcpStream, "\r\n", snoopy);
+			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "\r\n", snoopy);
 
 			// Handle the rest of the response based on the decision made earlier.
 			if (decision == ProxyResponseDecision.ContentLength)
-				CopyNBytes(proxyContentLength, ProxyDataDirection.ResponseFromServer, proxyStream, p.tcpStream, snoopy);
-			else if (decision == ProxyResponseDecision.Chunked)
-				CopyChunkedResponse(ProxyDataDirection.ResponseFromServer, proxyStream, p.tcpStream, snoopy);
+			{
+				CopyNBytes(proxyContentLength, ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy);
+			}
+			else if (decision == ProxyResponseDecision.ReadChunked)
+			{
+				CopyChunkedResponse(ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy);
+			}
 			else if (decision == ProxyResponseDecision.UntilClosed)
-				ProxyResponseToClient(proxyStream, p.tcpStream, snoopy);
+			{
+				ProxyResponseToClient(proxyStream, outgoingStream, snoopy);
+			}
 			else if (decision == ProxyResponseDecision.Websocket)
 			{
 				// Proxy response to client asynchronously (do not await)
-				_ = ProxyResponseToClientAsync(proxyStream, p.tcpStream, snoopy);
+				_ = ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy);
 
 				// The current thread will handle additional incoming data from our client and proxy it to the remote server.
-				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, p.tcpStream, proxyStream, snoopy);
+				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy);
 			}
-			bet?.Start("BeginProxyRequestAsync Return result");
-			return new ProxyResult(ProxyResultErrorCode.Success, null, remoteServerWantsKeepalive, false);
+			else if (decision == ProxyResponseDecision.NoBody)
+			{
+				// All done!
+			}
+
+			if (outgoingStream is ChunkedTransferEncodingStream)
+				(outgoingStream as ChunkedTransferEncodingStream).WriteFinalChunk();
+
+			//////////////////////
+			// PHASE 6: CLEANUP //
+			//////////////////////
+			options.bet?.Start("BeginProxyRequestAsync Return result");
+			if (snoopy != null)
+			{
+				Directory.CreateDirectory(Globals.WritableDirectoryBase + "ProxyDebug");
+				using (FileStream fs = new FileStream(Globals.WritableDirectoryBase + "ProxyDebug/" + options.RequestId + ".txt", FileMode.Create, FileAccess.Write, FileShare.Read))
+				{
+					byte[] buf;
+					buf = ByteUtil.Utf8NoBOM.GetBytes("***** REQUEST *****\r\n");
+					fs.Write(buf, 0, buf.Length);
+					buf = snoopy.GetRequestBytes();
+					fs.Write(buf, 0, buf.Length);
+					buf = ByteUtil.Utf8NoBOM.GetBytes("\r\n***** RESPONSE *****\r\n");
+					fs.Write(buf, 0, buf.Length);
+					buf = snoopy.GetResponseBytes();
+					fs.Write(buf, 0, buf.Length);
+				}
+			}
+
+			if (remoteServerWantsKeepalive && options.allowConnectionKeepalive)
+			{
+				int seconds = 60;
+				if (proxyHttpHeaders.TryGetValue("keep-alive", out string keepAliveStr))
+				{
+					KeepAliveHeader keepAliveHeader = new KeepAliveHeader(keepAliveStr);
+					if (keepAliveHeader.Timeout != null)
+					{
+						seconds = keepAliveHeader.Timeout.Value.Clamp(0, 60);
+						if (seconds < 1)
+							remoteServerWantsKeepalive = false;
+					}
+				}
+				expireTimer = CountdownStopwatch.StartNew(TimeSpan.FromSeconds(seconds));
+			}
+			return new ProxyResult(ProxyResultErrorCode.Success, null, remoteServerWantsKeepalive && options.allowConnectionKeepalive, false);
+		}
+		/// <summary>
+		/// Connects to the given URI and sets the <see cref="proxyClient"/> and <see cref="proxyStream"/> fields of this ProxyClient.
+		/// </summary>
+		/// <param name="uri">URI to connect to.</param>
+		/// <param name="host">Hostname for TLS Server Name Indication, should match the hostname used later in the Host header.</param>
+		/// <param name="options">Options</param>
+		/// <returns></returns>
+		private async Task Connect(Uri uri, string host, HttpProcessor.ProxyOptions options)
+		{
+			proxyClient = new TcpClient(AddressFamily.InterNetworkV6); // Create TcpClient with IPv6 support.
+			proxyClient.NoDelay = true;
+
+			try
+			{
+				options.bet?.Start("BeginProxyRequestAsync Connect");
+				await proxyClient.ConnectAsync(uri.DnsSafeHost, uri.Port);
+				proxyStream = proxyClient.GetStream();
+			}
+			catch (Exception ex)
+			{
+				// This was a fresh connection attempt and it failed.
+				proxyClient = null;
+				proxyStream = null;
+				throw new GatewayTimeoutException("ProxyClient failed to connect to the remote host: " + uri.DnsSafeHost + ":" + uri.Port, ex);
+			}
+			try
+			{
+				if (uri.Scheme.IEquals("https"))
+				{
+					options.bet?.Start("BeginProxyRequestAsync TLS Negotiate");
+					System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
+					if (options.acceptAnyCert)
+						certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
+					proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
+					((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+				}
+			}
+			catch (Exception ex)
+			{
+				throw new TLSNegotiationFailedException("TLS Negotiation failed with remote host: " + uri.DnsSafeHost + ":" + uri.Port, ex);
+			}
 		}
 		#region Helpers
+		private static long requestNumber = 0;
 		private enum ProxyResponseDecision
 		{
-			Undefined, ContentLength, Chunked, UntilClosed, Websocket
+			/// <summary>
+			/// No decision has been made.
+			/// </summary>
+			Undefined,
+			/// <summary>
+			/// The request should be proxied for the number of bytes specified by the "Content-Length" header.
+			/// </summary>
+			ContentLength,
+			/// <summary>
+			/// The remote server is going to deliver the response using "Transfer-Encoding: chunked", so we can use that to identify when the response is complete.
+			/// </summary>
+			ReadChunked,
+			/// <summary>
+			/// The request should be proxied until the connection to the remote server is closed.
+			/// </summary>
+			UntilClosed,
+			/// <summary>
+			/// The request should be proxied as a WebSocket.
+			/// </summary>
+			Websocket,
+			/// <summary>
+			/// The request should be considered fully proxied after the response headers are written.
+			/// </summary>
+			NoBody
 		}
 		private static void _ProxyString(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy)
 		{
@@ -368,7 +591,7 @@ namespace BPUtil.SimpleHttp.Client
 				if (buf.Length != length)
 					item = new ProxyDataItem(Direction, ByteUtil.SubArray(buf, 0, length));
 				else
-					item = new ProxyDataItem(Direction, buf);
+					item = new ProxyDataItem(Direction, (byte[])buf.Clone());
 				snoopy?.AddItem(item);
 			}
 			target.Write(buf, 0, length);
@@ -416,7 +639,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			catch (Exception ex)
 			{
-				if (HttpProcessor.IsOrdinaryDisconnectException(ex))
+				if (HttpProcessor.IsOrdinaryDisconnectException(ex) || ex.GetExceptionOfType<ObjectDisposedException>() != null)
 					return;
 				SimpleHttpLogger.LogVerbose(ex);
 			}
@@ -484,9 +707,10 @@ namespace BPUtil.SimpleHttp.Client
 
 				int chunkSize = int.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
 
+				// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
 				// Write chunk size
-				byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
-				_ProxyData(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy);
+				//byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
+				//_ProxyData(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy);
 
 				// Copy chunk data
 				int bytesRemaining = chunkSize;
@@ -505,8 +729,9 @@ namespace BPUtil.SimpleHttp.Client
 				if (trailerLine != "")
 					throw new InvalidDataException();
 
-				byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
-				_ProxyData(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy);
+				// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
+				//byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
+				//_ProxyData(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy);
 
 				if (chunkSize == 0)
 					break;
@@ -551,6 +776,120 @@ namespace BPUtil.SimpleHttp.Client
 
 				if (chunkSize == 0)
 					break;
+			}
+		}
+
+		[Serializable]
+		private class GatewayTimeoutException : Exception
+		{
+			public GatewayTimeoutException()
+			{
+			}
+
+			public GatewayTimeoutException(string message) : base(message)
+			{
+			}
+
+			public GatewayTimeoutException(string message, Exception innerException) : base(message, innerException)
+			{
+			}
+
+			protected GatewayTimeoutException(SerializationInfo info, StreamingContext context) : base(info, context)
+			{
+			}
+		}
+
+		[Serializable]
+		private class TLSNegotiationFailedException : Exception
+		{
+			public TLSNegotiationFailedException()
+			{
+			}
+
+			public TLSNegotiationFailedException(string message) : base(message)
+			{
+			}
+
+			public TLSNegotiationFailedException(string message, Exception innerException) : base(message, innerException)
+			{
+			}
+
+			protected TLSNegotiationFailedException(SerializationInfo info, StreamingContext context) : base(info, context)
+			{
+			}
+		}
+		private class HttpResponseStatusLine
+		{
+			/// <summary>
+			/// HTTP version, e.g. "1.1"
+			/// </summary>
+			public string Version;
+			/// <summary>
+			/// Status code, e.g. "200" or "404".
+			/// </summary>
+			public string StatusCode;
+			/// <summary>
+			/// Status text, e.g. "OK" or "Not Found".
+			/// </summary>
+			public string StatusText;
+			/// <summary>
+			/// Original string sent into the constructor.
+			/// </summary>
+			public string OriginalStatusLine;
+			public HttpResponseStatusLine(string line)
+			{
+				OriginalStatusLine = line;
+				string[] parts = line.Split(' ');
+				if (parts.Length < 3)
+					throw new ArgumentException("Invalid HTTP response status line does not contain at least 2 spaces.", "line");
+				if (parts[0].StartsWith("HTTP/"))
+					Version = parts[0].Substring("HTTP/".Length);
+				else
+					throw new ArgumentException("Invalid HTTP response status line does begin with \"HTTP/\"", "line");
+				StatusCode = parts[1];
+				StatusText = string.Join(" ", line.Skip(2));
+			}
+			/// <summary>
+			/// Gets <see cref="OriginalStatusLine"/>.
+			/// </summary>
+			/// <returns></returns>
+			public override string ToString()
+			{
+				return OriginalStatusLine;
+			}
+		}
+		public class KeepAliveHeader
+		{
+			public int? Timeout;
+			public int? Max;
+
+			public KeepAliveHeader(string headerValue)
+			{
+				if (!string.IsNullOrEmpty(headerValue))
+				{
+					if (int.TryParse(headerValue.Trim(), out int num))
+						Timeout = num;
+					else
+					{
+						string[] parts = headerValue.Split(',');
+						foreach (string part in parts)
+						{
+							string[] keyValue = part.Split('=');
+							if (keyValue.Length == 2)
+							{
+								string value = keyValue[1].Trim();
+								if (int.TryParse(value, out int v))
+								{
+									string key = keyValue[0].Trim().ToLower();
+									if (key == "timeout")
+										Timeout = v;
+									else if (key == "max")
+										Max = v;
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 		#endregion
