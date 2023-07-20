@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace BPUtil.Linux.InputListener
 {
-	public class LinuxInputEventArgs
+	public class LinuxInputEventArgs : EventArgs
 	{
 		public readonly LinuxInputEvent RawEventData;
 		public LinuxInputEventType Type
