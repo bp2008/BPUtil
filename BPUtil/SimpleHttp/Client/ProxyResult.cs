@@ -67,6 +67,10 @@ namespace BPUtil.SimpleHttp.Client
 		/// <summary>
 		/// A generic error.
 		/// </summary>
-		Error = 4
+		Error = 4,
+		/// <summary>
+		/// Indicates the connection to the remote server was lost and a new connection should be used.
+		/// </summary>
+		ConnectionLost = 5
 	}
 }

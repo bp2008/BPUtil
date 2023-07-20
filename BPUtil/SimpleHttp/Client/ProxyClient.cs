@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
+using System.Security.Authentication;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -89,7 +91,10 @@ namespace BPUtil.SimpleHttp.Client
 					}
 					catch (Exception ex)
 					{
-						options.log.AppendLine("Exception occurred: " + ex.FlattenMessages());
+						if (HttpProcessor.IsOrdinaryDisconnectException(ex))
+							options.log.AppendLine("Unexpected disconnection!");
+						else
+							options.log.AppendLine("Exception occurred: " + ex.FlattenMessages());
 						ex.Rethrow();
 					}
 					options.bet?.Start("ProxyRequest analyze result #" + numTries + ": " + result.ErrorCode);
@@ -168,7 +173,7 @@ namespace BPUtil.SimpleHttp.Client
 				snoopy = new ProxyDataBuffer(); // TODO: Remove this; let it come only from options.
 
 			// Interally, we shall refer to the original client making the request to this application as "the client", while the destination URI points at "the server".
-			options.bet?.Start("BeginProxyRequestAsync Init");
+			options.bet?.Start("Proxy Init");
 
 			if (string.IsNullOrWhiteSpace(host))
 				host = uri.DnsSafeHost;
@@ -214,7 +219,7 @@ namespace BPUtil.SimpleHttp.Client
 			// PHASE 2: ANALYZE REQUEST //
 			///////////////////////////
 			// Send the original client's request to the remote server with any necessary modifications.
-			options.bet?.Start("BeginProxyRequestAsync Process Request Headers");
+			options.bet?.Start("Proxy Process Request Headers");
 
 			// Collection of lower case header names that are "hop-by-hop" and should not be proxied.  Values in the "Connection" header are supposed to be added to this collection on a per-request basis, but this server does not currently recognize comma separated values in the Connection header, therefore that is not happening.
 			HashSet<string> doNotProxyHeaders = new HashSet<string>(new string[] {
@@ -251,7 +256,7 @@ namespace BPUtil.SimpleHttp.Client
 			// PHASE 3: SEND REQUEST //
 			///////////////////////////
 			// Send the first line of our HTTP request.
-			options.bet?.Start("BeginProxyRequestAsync Transmit Proxy Request");
+			options.bet?.Start("Proxy Request");
 			string requestLine = p.http_method + ' ' + uri.PathAndQuery + ' ' + p.http_protocol_versionstring;
 			try
 			{
@@ -275,7 +280,7 @@ namespace BPUtil.SimpleHttp.Client
 				if (!didConnect && ex.GetExceptionOfType<SocketException>() != null)
 				{
 					options.log.AppendLine("Recycled proxy stream EOF while sending request to remote server. Will retry.");
-					return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, "ProxyClient encountered unexpected SocketException while sending the request to the remote server. Should retry with a new connection.", false, true);
+					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered unexpected SocketException while sending the request to the remote server. Should retry with a new connection.", false, true);
 				}
 				ex.Rethrow();
 			}
@@ -302,7 +307,10 @@ namespace BPUtil.SimpleHttp.Client
 			try
 			{
 				options.bet?.Start("BeginProxyRequestAsync Read Status Line From Remote Server");
-				responseStatusLine = new HttpResponseStatusLine(HttpProcessor.streamReadLine(proxyStream));
+				string statusLineStr = HttpProcessor.streamReadLine(proxyStream);
+				if (statusLineStr == null)
+					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
+				responseStatusLine = new HttpResponseStatusLine(statusLineStr);
 
 				// Read response headers from remote server
 				options.bet?.Start("BeginProxyRequestAsync Read Response Headers From Remote Server");
@@ -313,13 +321,13 @@ namespace BPUtil.SimpleHttp.Client
 				if (!didConnect)
 				{
 					options.log.AppendLine("Recycled proxy stream EOF while reading response from remote server. Will retry.");
-					return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, "ProxyClient encountered unexpected end of stream while reading the response from the remote server. Should retry with a new connection.", false, true);
+					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered unexpected end of stream while reading the response from the remote server. Should retry with a new connection.", false, true);
 				}
 				ex.Rethrow();
 			}
 
 			// Decide how to respond
-			options.bet?.Start("BeginProxyRequestAsync Process Response Headers");
+			options.bet?.Start("Proxy Process Response Headers");
 			ProxyResponseDecision decision;
 			long proxyContentLength = 0;
 			bool remoteServerWantsKeepalive = false;
@@ -385,7 +393,7 @@ namespace BPUtil.SimpleHttp.Client
 			/////////////////////////////
 			// Write response status line
 			Stream outgoingStream = p.tcpStream;
-			options.bet?.Start("BeginProxyRequestAsync Write Response: " + decision);
+			options.bet?.Start("Proxy Write Response: " + decision);
 			p.responseWritten = true;
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, responseStatusLine + "\r\n", snoopy);
 
@@ -423,6 +431,7 @@ namespace BPUtil.SimpleHttp.Client
 				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, key + ": " + value + "\r\n", snoopy);
 			}
 
+			bool wrapOutputStreamChunked = false;
 			if (responseConnectionHeader == "keep-alive")
 			{
 				// This MUST occur after all other headers are written.
@@ -431,12 +440,20 @@ namespace BPUtil.SimpleHttp.Client
 				{
 					// No content-length was provided, and there is assumed to be a response body.  We must use "Transfer-Encoding: chunked" for our response.
 					_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Transfer-Encoding: chunked\r\n", snoopy);
-					outgoingStream = new ChunkedTransferEncodingStream(outgoingStream);
+					wrapOutputStreamChunked = true;
 				}
 			}
 
+			if (options.bet != null)
+				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Server-Timing: " + options.bet.ToServerTimingHeader() + "\r\n", snoopy);
+
 			// Write blank line to indicate the end of the response headers
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "\r\n", snoopy);
+
+			// RESPONSE HEADERS ARE WRITTEN
+
+			if (wrapOutputStreamChunked)
+				outgoingStream = new ChunkedTransferEncodingStream(outgoingStream);
 
 			// Handle the rest of the response based on the decision made earlier.
 			if (decision == ProxyResponseDecision.ContentLength)
@@ -470,7 +487,7 @@ namespace BPUtil.SimpleHttp.Client
 			//////////////////////
 			// PHASE 6: CLEANUP //
 			//////////////////////
-			options.bet?.Start("BeginProxyRequestAsync Return result");
+			options.bet?.Start("Proxy Finish");
 			if (snoopy != null)
 			{
 				Directory.CreateDirectory(Globals.WritableDirectoryBase + "ProxyDebug");
@@ -514,13 +531,16 @@ namespace BPUtil.SimpleHttp.Client
 		/// <returns></returns>
 		private async Task Connect(Uri uri, string host, HttpProcessor.ProxyOptions options)
 		{
-			proxyClient = new TcpClient(AddressFamily.InterNetworkV6); // Create TcpClient with IPv6 support.
+			options.bet?.Start("DNS Lookup");
+			IPAddress ip = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost);
+
+			proxyClient = new TcpClient(ip.AddressFamily); // Create TcpClient with IPv4 or IPv6 support as needed. We are unable to construct one that can use both.
 			proxyClient.NoDelay = true;
 
 			try
 			{
-				options.bet?.Start("BeginProxyRequestAsync Connect");
-				await proxyClient.ConnectAsync(uri.DnsSafeHost, uri.Port);
+				options.bet?.Start("Proxy Connect");
+				await proxyClient.ConnectAsync(ip, uri.Port);
 				proxyStream = proxyClient.GetStream();
 			}
 			catch (Exception ex)
@@ -534,12 +554,12 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				if (uri.Scheme.IEquals("https"))
 				{
-					options.bet?.Start("BeginProxyRequestAsync TLS Negotiate");
+					options.bet?.Start("Proxy TLS Negotiate");
 					System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
 					if (options.acceptAnyCert)
 						certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
 					proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-					((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+					((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, HttpProcessor.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
 				}
 			}
 			catch (Exception ex)
@@ -548,7 +568,6 @@ namespace BPUtil.SimpleHttp.Client
 			}
 		}
 		#region Helpers
-		private static long requestNumber = 0;
 		private enum ProxyResponseDecision
 		{
 			/// <summary>

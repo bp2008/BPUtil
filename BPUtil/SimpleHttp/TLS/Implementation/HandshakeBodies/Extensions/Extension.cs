@@ -33,6 +33,9 @@ namespace BPUtil.SimpleHttp.TLS.Implementation.HandshakeBodies.Extensions
 				case ExtensionType.Server_Name:
 					extension = new ServerNameExtension();
 					break;
+				case ExtensionType.Application_Layer_Protocol_Negotiation:
+					extension = new ApplicationLayerProtocolNegotiationExtension();
+					break;
 				default:
 					extension = new DefaultExtension();
 					break;

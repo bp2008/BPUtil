@@ -2,14 +2,17 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.NetworkInformation;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
+using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -34,6 +37,10 @@ namespace BPUtil.SimpleHttp
 	public class HttpProcessor : IProcessor
 	{
 		public static UTF8Encoding Utf8NoBOM = new UTF8Encoding(false);
+		/// <summary>
+		/// SslProtocols typed Tls13 that is available in earlier versions of .NET Framework.
+		/// </summary>
+		public const SslProtocols Tls13 = (SslProtocols)12288;
 		private const int BUF_SIZE = 4096;
 		private static int MAX_POST_SIZE = 10 * 1024 * 1024; // 10MB
 		private readonly AllowedConnectionTypes allowedConnectionTypes;
@@ -390,26 +397,31 @@ namespace BPUtil.SimpleHttp
 				tcpStream = tcpClient.GetStream();
 				if (allowedConnectionTypes.HasFlag(AllowedConnectionTypes.https))
 				{
+					X509Certificate cert = null;
 					try
 					{
-						X509Certificate cert;
 						// Read the TLS Client Hello message to get the server name so we can select the correct certificate and
 						//   populate the hostName property of this HttpProcessor.
 						// Note it is possible that the client is not using TLS, in which case no certificate will be selected and the
 						//   request will be processed as plain HTTP.
-						if (TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, out string serverName))
+						if (TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, out string serverName, out bool isTlsAlpn01Validation))
 						{
 							hostName = serverName;
-							cert = certificateSelector.GetCertificate(serverName);
+							if (isTlsAlpn01Validation)
+								cert = certificateSelector.GetAcmeTls1Certificate(this, serverName).Result;
+							else
+								cert = certificateSelector.GetCertificate(this, serverName).Result;
 							if (cert == null)
 							{
-								SimpleHttpLogger.Log("TLS authentication failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (serverName == null ? "null" : ("\"" + serverName + "\"")) + ".");
+								SimpleHttpLogger.LogVerbose("TLS negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (serverName == null ? "null" : ("\"" + serverName + "\"")) + ".");
 								return;
 							}
-							tcpStream = new System.Net.Security.SslStream(tcpStream, false, null, null);
-							const System.Security.Authentication.SslProtocols Tls13 = (System.Security.Authentication.SslProtocols)12288;
-							((System.Net.Security.SslStream)tcpStream).AuthenticateAsServer(cert, false, System.Security.Authentication.SslProtocols.Tls12 | Tls13, false);
+							tcpStream = new SslStream(tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
+							((SslStream)tcpStream).AuthenticateAsServer(cert, false, Tls13 | SslProtocols.Tls12, false);
+							SimpleHttpLogger.LogVerbose("Client connected using SslProtocol." + (tcpStream as SslStream).SslProtocol);
 							this.secure_https = true;
+							if (isTlsAlpn01Validation)
+								return; // This connection is not allowed to be used for data transmission after TLS negotiation is complete.
 						}
 						else
 						{
@@ -425,6 +437,20 @@ namespace BPUtil.SimpleHttp
 					catch (SocketException) { throw; }
 					catch (Exception ex)
 					{
+						if (ex is AuthenticationException)
+						{
+							AuthenticationException aex = (AuthenticationException)ex;
+							if (ex.InnerException is Win32Exception)
+							{
+								Win32Exception wex = (Win32Exception)ex.InnerException;
+								if (wex.NativeErrorCode == unchecked((int)0x80090327))
+								{
+									// Happens unpredictably to some certificates when used with some clients.
+									SimpleHttpLogger.LogVerbose("SslStream.AuthenticateAsServer --> An unknown error occurred while processing the certificate.");
+									return;
+								}
+							}
+						}
 						SimpleHttpLogger.LogVerbose(ex);
 						return;
 					}
@@ -1081,11 +1107,11 @@ namespace BPUtil.SimpleHttp
 				{
 					//try
 					//{
-					System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
+					RemoteCertificateValidationCallback certCallback = null;
 					if (acceptAnyCert)
 						certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
-					proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-					((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+					proxyStream = new SslStream(proxyStream, false, certCallback, null);
+					((SslStream)proxyStream).AuthenticateAsClient(host, null, Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
 					//}
 					//catch (ThreadAbortException) { throw; }
 					//catch (SocketException) { throw; }
@@ -1758,17 +1784,24 @@ namespace BPUtil.SimpleHttp
 							catch (ObjectDisposedException ex)
 							{
 								if (!isStopping)
-									Logger.Debug(ex, "SimpleHttp.HttpServer.ListenerData error processing TcpClient.");
+									SimpleHttpLogger.Log(ex, "SimpleHttp.HttpServer.ListenerData error processing TcpClient.");
 							}
 							catch (Exception ex)
 							{
-								Logger.Debug(ex, "SimpleHttp.HttpServer.ListenerData error processing TcpClient.");
+								if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
+									SimpleHttpLogger.Log(ex, "SimpleHttp.HttpServer.ListenerData error processing TcpClient.");
 							}
 						}
 					}
+					catch (SocketException ex)
+					{
+						SimpleHttpLogger.Log(ex, "SimpleHttp.HttpServer.ListenerData SocketException managing socket.");
+						Thread.Sleep(10000);
+					}
 					catch (Exception ex)
 					{
-						Logger.Debug(ex, "SimpleHttp.HttpServer.ListenerData error managing socket.");
+						SimpleHttpLogger.Log(ex, "SimpleHttp.HttpServer.ListenerData Exception managing socket.");
+						Thread.Sleep(1000);
 					}
 					finally
 					{
@@ -1791,7 +1824,7 @@ namespace BPUtil.SimpleHttp
 				}
 				catch (Exception ex)
 				{
-					Logger.Debug(ex);
+					SimpleHttpLogger.Log(ex);
 				}
 			}
 			public override string ToString()

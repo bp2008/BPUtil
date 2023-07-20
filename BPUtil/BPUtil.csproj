@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>BPUtil</RootNamespace>
     <AssemblyName>BPUtil</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SccProjectName>SAK</SccProjectName>
     <SccLocalPath>SAK</SccLocalPath>
@@ -68,6 +68,7 @@
     <Compile Include="CertificateValidation.cs" />
     <Compile Include="Compass.cs" />
     <Compile Include="CountdownStopwatch.cs" />
+    <Compile Include="DnsHelper.cs" />
     <Compile Include="Encryption.cs" />
     <Compile Include="EnumHelper.cs" />
     <Compile Include="FileUtil.cs" />
@@ -130,6 +131,7 @@
     <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\DefaultExtension.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\Extension.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\Enums\ExtensionType.cs" />
+    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\ApplicationLayerProtocolNegotiationExtension.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\ServerNameExtension.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\HandshakeMessage.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\Enums\HandshakeType.cs" />

@@ -19,10 +19,11 @@ namespace BPUtil.SimpleHttp.TLS
 		/// <param name="tcpStream">The stream that is expected to begin a TLS 1.0, 1.1, or 1.2 handshake.</param>
 		/// <param name="serverName">The server name from the TLS Server Name extension.  Or null.</param>
 		/// <param name="clientUsedTls">True if the client used the TLS protocol (https), false if not.</param>
+		/// <param name="isTlsAlpn01Validation">True if the client requested protocol `acme-tls/1` via ALPN. This is part of ACME validation.</param>
 		/// <returns></returns>
 		/// <exception cref="Exception">Throws if there is a problem parsing the TLS Client Hello.</exception>
 		[Obsolete("Use TlsServerNameReader.TryGetTlsClientHelloServerNames instead of TlsServerNameReader.Read.  The former is more efficient because it does not require an UnreadableStream.")]
-		public static Stream Read(Stream tcpStream, out string serverName, out bool clientUsedTls)
+		public static Stream Read(Stream tcpStream, out string serverName, out bool clientUsedTls, out bool isTlsAlpn01Validation)
 		{
 			clientUsedTls = true;
 
@@ -51,9 +52,13 @@ namespace BPUtil.SimpleHttp.TLS
 			{
 				ClientHello clientHello = firstHandshakeMessage.body as ClientHello;
 				serverName = clientHello.serverName;
+				isTlsAlpn01Validation = clientHello.isTlsAlpn01Validation;
 			}
 			else
+			{
 				serverName = null;
+				isTlsAlpn01Validation = false;
+			}
 
 			return unread;
 		}
@@ -64,8 +69,9 @@ namespace BPUtil.SimpleHttp.TLS
 		/// </summary>
 		/// <param name="socket">The network socket.</param>
 		/// <param name="serverName">The server name as indicated by the TLS Server Name Indication extension.  The server name will be null if the client did not provide it.</param>
+		/// <param name="isTlsAlpn01Validation">True if the client requested protocol `acme-tls/1` via ALPN. This is part of ACME validation.</param>
 		/// <returns></returns>
-		public static bool TryGetTlsClientHelloServerNames(Socket socket, out string serverName)
+		public static bool TryGetTlsClientHelloServerNames(Socket socket, out string serverName, out bool isTlsAlpn01Validation)
 		{
 			// Create a buffer to hold the data
 			byte[] buffer = new byte[10];
@@ -79,7 +85,7 @@ namespace BPUtil.SimpleHttp.TLS
 				// Load the entire "Client Hello" into the buffer
 				int length = (buffer[3] << 8) + buffer[4] + 5;
 				buffer = new byte[length];
-				bytesRead = socket.Receive(buffer, 0, length, SocketFlags.Peek);
+				bytesRead = socket.Receive(buffer, 0, buffer.Length, SocketFlags.Peek);
 
 				using (MemoryStream ms = new MemoryStream(buffer))
 				{
@@ -102,11 +108,13 @@ namespace BPUtil.SimpleHttp.TLS
 					{
 						ClientHello clientHello = firstHandshakeMessage.body as ClientHello;
 						serverName = clientHello.serverName;
+						isTlsAlpn01Validation = clientHello.isTlsAlpn01Validation;
 						return true;
 					}
 					else
 					{
 						serverName = null;
+						isTlsAlpn01Validation = false;
 						return false;
 					}
 
@@ -161,6 +169,7 @@ namespace BPUtil.SimpleHttp.TLS
 			else
 			{
 				serverName = null;
+				isTlsAlpn01Validation = false;
 				return false;
 			}
 		}

@@ -11,7 +11,14 @@ namespace BPUtil.SimpleHttp.TLS.Implementation
 {
 	public class ClientHello : HandshakeBody
 	{
-		public string serverName;
+		/// <summary>
+		/// The server name specified by the client. Null if not specified.
+		/// </summary>
+		public readonly string serverName;
+		/// <summary>
+		/// If true, this ClientHello specifies that the request is for TLS-ALPN-01 validation, which is part of ACME domain validation for automated certificate signing.
+		/// </summary>
+		public readonly bool isTlsAlpn01Validation = false;
 		public ClientHello(IDataStream stream)
 		{
 			byte[] clientRandom = stream.ReadNBytes(32);
@@ -35,6 +42,8 @@ namespace BPUtil.SimpleHttp.TLS.Implementation
 					Extension extension = Extension.Read(mds);
 					if (extension is ServerNameExtension)
 						serverName = (extension as ServerNameExtension).ServerNames.FirstOrDefault();
+					else if (extension is ApplicationLayerProtocolNegotiationExtension)
+						isTlsAlpn01Validation = (extension as ApplicationLayerProtocolNegotiationExtension).isTlsAlpn01();
 				}
 			}
 		}

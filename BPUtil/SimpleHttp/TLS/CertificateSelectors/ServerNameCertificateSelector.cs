@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading.Tasks;
 
 namespace BPUtil.SimpleHttp
 {
@@ -11,11 +12,12 @@ namespace BPUtil.SimpleHttp
 		public ConcurrentDictionary<string, X509Certificate> allCertsByDomain = new ConcurrentDictionary<string, X509Certificate>();
 
 		/// <summary>
-		/// Returns an X509Certificate appropriate for the specified serverName, or null.
+		/// Returns an X509Certificate or null if no certificate is available (the connection will be closed).
 		/// </summary>
-		/// <param name="serverName">The server name as indicated by ServerNameIndication. May be null or empty. Not case sensitive.</param>
+		/// <param name="p">The HttpProcessor instance in its current early state of processing.  Many fields have not been initialized yet.</param>
+		/// <param name="serverName">The server name as indicated by ServerNameIndication. May be null or empty. May be omitted if the configured certificate resolver is known to ignore this value.</param>
 		/// <returns>an X509Certificate or null</returns>
-		public X509Certificate GetCertificate(string serverName)
+		public Task<X509Certificate> GetCertificate(HttpProcessor p, string serverName)
 		{
 			if (serverName == null)
 				serverName = "";
@@ -24,11 +26,11 @@ namespace BPUtil.SimpleHttp
 
 			X509Certificate cert;
 			if (allCertsByDomain.TryGetValue(serverName, out cert))
-				return cert;
+				return Task.FromResult(cert);
 			else if (allCertsByDomain.TryGetValue("", out cert)) // Fallback to default
-				return cert;
+				return Task.FromResult(cert);
 			else
-				return null; // Fallback to null
+				return Task.FromResult<X509Certificate>(null); // Fallback to null
 		}
 
 		/// <summary>
@@ -44,6 +46,16 @@ namespace BPUtil.SimpleHttp
 				serverName = serverName.ToUpper();
 
 			allCertsByDomain[serverName] = cert;
+		}
+		/// <summary>
+		/// Returns null.
+		/// </summary>
+		/// <param name="p">The HttpProcessor instance in its current early state of processing.  Many fields have not been initialized yet.</param>
+		/// <param name="serverName">The server name as indicated by ServerNameIndication.  This is a required parameter and should not be null or empty.</param>
+		/// <returns>null</returns>
+		public Task<X509Certificate> GetAcmeTls1Certificate(HttpProcessor p, string serverName)
+		{
+			return Task.FromResult<X509Certificate>(null);
 		}
 	}
 }
