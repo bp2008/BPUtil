@@ -45,7 +45,7 @@ namespace BPUtil
 		}
 
 		/// <summary>
-		/// Returns a random number between 0.0 and 1.0.
+		/// Returns a random double-precision floating point number greater than or equal to 0.0, and less than 1.0.
 		/// </summary>
 		/// <returns>
 		/// A double-precision floating point number greater than or equal to 0.0, and less than 1.0.
@@ -114,7 +114,9 @@ namespace BPUtil
 		/// </summary>
 		private class CryptoRandom : Random
 		{
+#if !NET6_0
 			private RNGCryptoServiceProvider _rng = new RNGCryptoServiceProvider();
+#endif
 
 			private byte[] _buffer;
 
@@ -167,7 +169,11 @@ namespace BPUtil
 						_buffer = new byte[4];
 				}
 
+#if NET6_0
+				RandomNumberGenerator.Fill(_buffer);
+#else
 				_rng.GetBytes(_buffer);
+#endif
 				_bufferPosition = 0;
 			}
 
@@ -276,7 +282,12 @@ namespace BPUtil
 					else
 					{
 						// Draw bytes directly from the RNGCryptoProvider
-						_rng.GetBytes(buffer);
+
+#if NET6_0
+						RandomNumberGenerator.Fill(_buffer);
+#else
+						_rng.GetBytes(_buffer);
+#endif
 					}
 				}
 			}

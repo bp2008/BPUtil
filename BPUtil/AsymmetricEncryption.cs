@@ -294,19 +294,19 @@ namespace BPUtil
 			switch (hashAlg)
 			{
 				case HashAlgSelector.MD5:
-					using (MD5Cng hasher = new MD5Cng())
+					using (MD5 hasher = MD5.Create())
 						return hasher.ComputeHash(data);
 				case HashAlgSelector.SHA1:
-					using (SHA1Cng hasher = new SHA1Cng())
+					using (SHA1 hasher = SHA1.Create())
 						return hasher.ComputeHash(data);
 				case HashAlgSelector.SHA256:
-					using (SHA256Cng hasher = new SHA256Cng())
+					using (SHA256 hasher = SHA256.Create())
 						return hasher.ComputeHash(data);
 				case HashAlgSelector.SHA384:
-					using (SHA384Cng hasher = new SHA384Cng())
+					using (SHA384 hasher = SHA384.Create())
 						return hasher.ComputeHash(data);
 				case HashAlgSelector.SHA512:
-					using (SHA512Cng hasher = new SHA512Cng())
+					using (SHA512 hasher = SHA512.Create())
 						return hasher.ComputeHash(data);
 				default:
 					throw new Exception("Unimplemented HashAlgSelector value: " + hashAlg);
@@ -327,9 +327,11 @@ namespace BPUtil
 			if (keystore == Keystore.Machine)
 			{
 				cspParams.Flags |= CspProviderFlags.UseMachineKeyStore;
+#if !NET6_0
 				CryptoKeyAccessRule rule = new CryptoKeyAccessRule("everyone", CryptoKeyRights.FullControl, AccessControlType.Allow);
 				cspParams.CryptoKeySecurity = new CryptoKeySecurity();
 				cspParams.CryptoKeySecurity.SetAccessRule(rule);
+#endif
 			}
 			return cspParams;
 		}

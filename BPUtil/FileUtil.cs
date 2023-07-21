@@ -18,7 +18,8 @@ namespace BPUtil
 		{
 			FileSecurity oFileSecurity = new FileSecurity();
 			oFileSecurity.AddAccessRule(new FileSystemAccessRule("Users", FileSystemRights.FullControl, AccessControlType.Allow));
-			File.SetAccessControl(filePath, oFileSecurity);
+			FileInfo fi = new FileInfo(filePath);
+			fi.SetAccessControl(oFileSecurity);
 		}
 
 		/// <summary>
