@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Configurations>Debug;Release</Configurations>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <BaseIntermediateOutputPath>obj6\</BaseIntermediateOutputPath>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DebugType>embedded</DebugType>
@@ -13,6 +15,11 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DebugType>embedded</DebugType>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="obj\**" />
+    <EmbeddedResource Remove="obj\**" />
+    <None Remove="obj\**" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Management" Version="7.0.2" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="7.0.1" />

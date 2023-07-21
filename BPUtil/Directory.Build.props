@@ -1,0 +1,8 @@
+<Project>
+	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'BPUtil'">
+		<GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'BPUtil6'">
+		<BaseIntermediateOutputPath>obj6</BaseIntermediateOutputPath>
+	</PropertyGroup>
+</Project>
