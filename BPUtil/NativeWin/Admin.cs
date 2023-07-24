@@ -49,6 +49,7 @@ namespace BPUtil.NativeWin
 				processInfo.WorkingDirectory = workingDirectory;
 			if (!string.IsNullOrEmpty(args))
 				processInfo.Arguments = args;
+			processInfo.UseShellExecute = true;
 			try
 			{
 				Process.Start(processInfo);

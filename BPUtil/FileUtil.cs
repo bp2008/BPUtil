@@ -154,5 +154,22 @@ namespace BPUtil
 		{
 			return Directory.Exists(path) || File.Exists(path);
 		}
+		/// <summary>
+		/// Moves up through the directory tree until the directory with the specified name is found (case-sensitive), then returns the absolute path to that directory.  If the requested ancestor directory is not found, returns null.
+		/// </summary>
+		/// <param name="path">Path to start at.</param>
+		/// <param name="ancestorDirectoryName">Name of the directory to find (case-sensitive).</param>
+		/// <returns></returns>
+		public static string FindAncestorDirectory(string path, string ancestorDirectoryName)
+		{
+			DirectoryInfo di;
+			if (IsFile(path))
+				di = new FileInfo(path).Directory;
+			else
+				di = new DirectoryInfo(path);
+			while (di != null && di.Name != ancestorDirectoryName)
+				di = di.Parent;
+			return di?.FullName;
+		}
 	}
 }

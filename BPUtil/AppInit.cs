@@ -77,7 +77,7 @@ namespace BPUtil
 					additionalButtons.Add(new ButtonDefinition("Update Settings File", (sender, ignored) =>
 											{
 												settingsObj.Save();
-												Process.Start(settingsObj.GetType().Name + ".cfg");
+												ProcessRunner.Start(settingsObj.GetType().Name + ".cfg");
 											}));
 				if (options.ServiceManagerButtons != null)
 				{
@@ -161,7 +161,7 @@ namespace BPUtil
 
 		private static void btnOpenDataFolder_Click(object sender, EventArgs e)
 		{
-			Process.Start(Globals.WritableDirectoryBase);
+			ProcessRunner.Start(Globals.WritableDirectoryBase);
 		}
 		#endregion
 	}

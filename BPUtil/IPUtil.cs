@@ -68,10 +68,10 @@ namespace BPUtil
 		{
 			byte[] addressBytes = address.GetAddressBytes();
 			byte[] maskBytes = mask.GetAddressBytes();
-			if (addressBytes.Length != 4 || maskBytes.Length != 4)
+			if (addressBytes.Length != maskBytes.Length || (addressBytes.Length != 4 && addressBytes.Length != 16))
 				return IPAddress.None;
-			byte[] lowest = new byte[4];
-			for (var i = 0; i < 4; i++)
+			byte[] lowest = new byte[addressBytes.Length];
+			for (var i = 0; i < addressBytes.Length; i++)
 				lowest[i] = (byte)(addressBytes[i] & maskBytes[i]);
 			return new IPAddress(lowest);
 		}
@@ -79,12 +79,41 @@ namespace BPUtil
 		{
 			byte[] addressBytes = address.GetAddressBytes();
 			byte[] maskBytes = mask.GetAddressBytes();
-			if (addressBytes.Length != 4 || maskBytes.Length != 4)
+			if (addressBytes.Length != maskBytes.Length || (addressBytes.Length != 4 && addressBytes.Length != 16))
 				return IPAddress.None;
-			byte[] highest = new byte[4];
-			for (var i = 0; i < 4; i++)
+			byte[] highest = new byte[addressBytes.Length];
+			for (var i = 0; i < addressBytes.Length; i++)
 				highest[i] = (byte)((addressBytes[i] & maskBytes[i]) | ~maskBytes[i]);
 			return new IPAddress(highest);
+		}
+		/// <summary>
+		/// Returns a byte array containing the subnet mask with the given prefixSize.
+		/// </summary>
+		/// <param name="ipv4">If true, generate a subnet mask for IPv4.  If false, generate a subnet mask for IPv6.</param>
+		/// <param name="prefixSize">Prefix size in bits (0-32 for IPv4, 0-128 for IPv6).</param>
+		/// <returns></returns>
+		public static byte[] GenerateMaskBytesFromPrefixSize(bool ipv4, int prefixSize)
+		{
+			int maxPrefixSize = ipv4 ? 32 : 128;
+			if (prefixSize < 0 || prefixSize > maxPrefixSize)
+				throw new ArgumentException("Prefix size for " + (ipv4 ? "IPv4" : "IPv6") + " must be between 0 and " + maxPrefixSize + ".", nameof(prefixSize));
+
+			byte[] maskBytes = new byte[ipv4 ? 4 : 16];
+			int remainingBits = prefixSize;
+			for (int i = 0; i < maskBytes.Length; i++)
+			{
+				if (remainingBits >= 8)
+				{
+					maskBytes[i] = 0xFF;
+					remainingBits -= 8;
+				}
+				else
+				{
+					maskBytes[i] = (byte)(0xFF << (8 - remainingBits));
+					break;
+				}
+			}
+			return maskBytes;
 		}
 	}
 	public static class IPAddressExtensions

@@ -408,7 +408,26 @@ namespace BPUtil.SimpleHttp
 						{
 							hostName = serverName;
 							if (isTlsAlpn01Validation)
+							{
+#if NET6_0
 								cert = certificateSelector.GetAcmeTls1Certificate(this, serverName).Result;
+								if (cert == null)
+								{
+									SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (serverName == null ? "null" : ("\"" + serverName + "\"")) + ".");
+									return;
+								}
+								SslServerAuthenticationOptions sslOptions = new SslServerAuthenticationOptions();
+								sslOptions.ApplicationProtocols = new List<SslApplicationProtocol> { new SslApplicationProtocol("acme-tls/1") };
+								sslOptions.ServerCertificate = cert;
+								tcpStream = new SslStream(tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
+								((SslStream)tcpStream).AuthenticateAsServer(sslOptions);
+								SimpleHttpLogger.LogVerbose("\"acme-tls/1\" client connected using SslProtocol." + (tcpStream as SslStream).SslProtocol);
+								return; // This connection is not allowed to be used for data transmission after TLS negotiation is complete.
+#else
+								SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the current .NET version does not support the \"acme-tls/1\" protocol.");
+								return;
+#endif
+							}
 							else
 								cert = certificateSelector.GetCertificate(this, serverName).Result;
 							if (cert == null)
@@ -420,8 +439,6 @@ namespace BPUtil.SimpleHttp
 							((SslStream)tcpStream).AuthenticateAsServer(cert, false, Tls13 | SslProtocols.Tls12, false);
 							SimpleHttpLogger.LogVerbose("Client connected using SslProtocol." + (tcpStream as SslStream).SslProtocol);
 							this.secure_https = true;
-							if (isTlsAlpn01Validation)
-								return; // This connection is not allowed to be used for data transmission after TLS negotiation is complete.
 						}
 						else
 						{

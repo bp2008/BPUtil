@@ -50,12 +50,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Helpers\IterateOverKeyContainers.cs" />
+    <Compile Include="IPAddressRangeTests.cs" />
     <Compile Include="TestBackupRotate.cs" />
     <Compile Include="TestBase64UrlMod.cs" />
     <Compile Include="TestByteUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TestFileInfoExtensions.cs" />
     <Compile Include="TestHttpProcessor.cs" />
+    <Compile Include="TestIPUtil.cs" />
     <Compile Include="TestSimpleThreadPool.cs" />
     <Compile Include="TestSignatureFactory.cs" />
     <Compile Include="TestEncryption.cs" />

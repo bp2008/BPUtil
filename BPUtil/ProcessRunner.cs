@@ -269,6 +269,25 @@ namespace BPUtil
 				stderrReader = new ProcessStreamBinaryReader(p.StandardError.BaseStream, err)
 			};
 		}
+		/// <summary>
+		/// <para>Opens the specified path using <see cref="ProcessStartInfo.UseShellExecute"/> == true, and if that fails, tries with <see cref="ProcessStartInfo.UseShellExecute"/> == false.</para>
+		/// <para>This method exists because <see cref="ProcessStartInfo.UseShellExecute"/> is true by default in .NET Framework apps, but false in .NET Core apps including .NET 5.0+.</para>
+		/// </summary>
+		/// <param name="path">Path to open.  Could be a URL, a path to an executable or a text file, etc.</param>
+		public static Process Start(string path)
+		{
+			ProcessStartInfo psi = new ProcessStartInfo(path);
+			psi.UseShellExecute = true;
+			try
+			{
+				return Process.Start(psi);
+			}
+			catch
+			{
+				psi.UseShellExecute = false;
+				return Process.Start(psi);
+			}
+		}
 	}
 
 	/// <summary>
