@@ -1637,7 +1637,7 @@ namespace BPUtil.SimpleHttp
 			string ap = "/" + appPath.Trim('/', ' ', '\r', '\n', '\t');
 			if (ap == "/")
 				return;
-			if (request_url.AbsolutePath.StartsWith(ap, StringComparison.OrdinalIgnoreCase))
+			if (request_url.AbsolutePath.IStartsWith(ap))
 			{
 				UriBuilder uriBuilder = new UriBuilder(request_url);
 				uriBuilder.Path = request_url.AbsolutePath.Substring(ap.Length);
