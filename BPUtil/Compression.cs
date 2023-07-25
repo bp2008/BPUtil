@@ -86,5 +86,53 @@ namespace BPUtil
 				return outStream.ToArray();
 			}
 		}
+
+		/// <summary>
+		/// Adds a file to a .zip file, creating the zip file if necessary, otherwise opening and modifying it if it already exists.
+		/// </summary>
+		/// <param name="zipFilePath">The .zip file path.</param>
+		/// <param name="fileName">The file name to add.</param>
+		/// <param name="fileBody">The file body to add.</param>
+		public static void AddFileToZip(string zipFilePath, string fileName, byte[] fileBody)
+		{
+			Robust.RetryPeriodic(() =>
+			{
+				using (FileStream fileStream = new FileStream(zipFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read))
+				{
+					using (ZipArchive archive = new ZipArchive(fileStream, ZipArchiveMode.Update))
+					{
+						ZipArchiveEntry entry = archive.CreateEntry(fileName);
+						using (Stream entryStream = entry.Open())
+						{
+							entryStream.Write(fileBody, 0, fileBody.Length);
+						}
+					}
+				}
+			}, 50, 6);
+		}
+
+		/// <summary>
+		/// Asynchronously adds a file to a .zip file, creating the zip file if necessary, otherwise opening and modifying it if it already exists.
+		/// </summary>
+		/// <param name="zipFilePath">The .zip file path.</param>
+		/// <param name="fileName">The file name to add.</param>
+		/// <param name="fileBody">The file body to add.</param>
+		public static async Task AddFileToZipAsync(string zipFilePath, string fileName, byte[] fileBody)
+		{
+			await Robust.RetryPeriodicAsync(async () =>
+			{
+				using (FileStream fileStream = new FileStream(zipFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read))
+				{
+					using (ZipArchive archive = new ZipArchive(fileStream, ZipArchiveMode.Update))
+					{
+						ZipArchiveEntry entry = archive.CreateEntry(fileName);
+						using (Stream entryStream = entry.Open())
+						{
+							await entryStream.WriteAsync(fileBody, 0, fileBody.Length);
+						}
+					}
+				}
+			}, 50, 6);
+		}
 	}
 }

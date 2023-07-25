@@ -66,6 +66,29 @@ namespace BPUtil
 			action();
 		}
 		/// <summary>
+		/// Runs the specified action. If the action throws an exception, this method sleeps for a time and runs the action again. Sleep time is defined by the [sleepTimeMs] argument, and the maximum number of retries is defined by the [maxRetries] argument.
+		/// </summary>
+		/// <param name="action">Action to run.</param>
+		/// <param name="sleepTimeMs">Time in milliseconds to sleep after the action fails.</param>
+		/// <param name="maxRetries">Maximum number of times to retry.</param>
+		public static async Task RetryPeriodicAsync(Func<Task> action, int sleepTimeMs, int maxRetries)
+		{
+			for (int i = 0; i < maxRetries; i++)
+			{
+				try
+				{
+					await action();
+					return;
+				}
+				catch
+				{
+					await Task.Delay(sleepTimeMs);
+				}
+			}
+			// This will be the final attempt to run the action, and we will not swallow exceptions.
+			await action();
+		}
+		/// <summary>
 		/// Runs the specified action. If the result is unacceptable or if the action throws an exception, this method sleeps for a time and runs the action again. Sleep time is defined by the [delays] arguments, and the maximum number of retries is defined by the number of [delays] arguments.
 		/// </summary>
 		/// <param name="action">Action to run.</param>

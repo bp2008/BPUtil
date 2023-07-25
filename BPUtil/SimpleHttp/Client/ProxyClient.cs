@@ -167,8 +167,9 @@ namespace BPUtil.SimpleHttp.Client
 			if (options == null)
 				options = new HttpProcessor.ProxyOptions();
 
-			if (options.includeServerTimingHeader && options.bet == null)
-				options.bet = new BasicEventTimer();
+			BasicEventTimer proxyTiming = null;
+			if (options.includeServerTimingHeader)
+				proxyTiming = new BasicEventTimer();
 
 			string host = options.host;
 			ProxyDataBuffer snoopy = options.snoopy;
@@ -228,7 +229,7 @@ namespace BPUtil.SimpleHttp.Client
 				options.log.AppendLine("Constructing new TcpClient");
 				try
 				{
-					await Connect(uri, host, options);
+					await Connect(uri, host, options, proxyTiming);
 					didConnect = true;
 				}
 				catch (GatewayTimeoutException ex)
@@ -245,10 +246,6 @@ namespace BPUtil.SimpleHttp.Client
 					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
 					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, ex.ToHierarchicalString(), false, false);
 				}
-				finally
-				{
-					options.bet?.Stop();
-				}
 			}
 			else
 				options.log.AppendLine("Reusing old connection");
@@ -260,6 +257,7 @@ namespace BPUtil.SimpleHttp.Client
 			// PHASE 3: SEND REQUEST //
 			///////////////////////////
 			// Send the first line of our HTTP request.
+			proxyTiming?.Start("Send Request");
 			options.bet?.Start("Send Request");
 			string requestLine = p.http_method + ' ' + uri.PathAndQuery + ' ' + p.http_protocol_versionstring;
 			try
@@ -306,7 +304,8 @@ namespace BPUtil.SimpleHttp.Client
 			// PHASE 4: READ RESPONSE //
 			////////////////////////////
 			// Read response from remote server
-			options.bet?.Start("Read Response");
+			proxyTiming?.Start("Read Response Headers");
+			options.bet?.Start("Read Response Headers");
 			HttpResponseStatusLine responseStatusLine = null;
 			HttpHeaderCollection proxyHttpHeaders = new HttpHeaderCollection();
 			try
@@ -330,11 +329,12 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			finally
 			{
+				proxyTiming?.Stop();
 				options.bet?.Stop();
 			}
 
-			if (options.bet != null && options.includeServerTimingHeader)
-				proxyHttpHeaders["Server-Timing"] = options.bet.ToServerTimingHeader();
+			if (proxyTiming != null)
+				proxyHttpHeaders["Server-Timing"] = proxyTiming.ToServerTimingHeader();
 
 			// Decide how to respond
 			options.bet?.Start("Proxy Process Response Headers");
@@ -550,43 +550,55 @@ namespace BPUtil.SimpleHttp.Client
 		/// <param name="uri">URI to connect to.</param>
 		/// <param name="host">Hostname for TLS Server Name Indication, should match the hostname used later in the Host header.</param>
 		/// <param name="options">Options</param>
+		/// <param name="proxyTiming">Possibly null, this BasicEventTimer is used to log timing of each step of the connection process.</param>
 		/// <returns></returns>
-		private async Task Connect(Uri uri, string host, HttpProcessor.ProxyOptions options)
+		private async Task Connect(Uri uri, string host, HttpProcessor.ProxyOptions options, BasicEventTimer proxyTiming)
 		{
-			options.bet?.Start("DNS Lookup");
-			IPAddress ip = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost);
-
-			proxyClient = new TcpClient(ip.AddressFamily); // Create TcpClient with IPv4 or IPv6 support as needed. We are unable to construct one that can use both.
-			proxyClient.NoDelay = true;
-
 			try
 			{
-				options.bet?.Start("Connect");
-				await proxyClient.ConnectAsync(ip, uri.Port);
-				proxyStream = proxyClient.GetStream();
-			}
-			catch (Exception ex)
-			{
-				// This was a fresh connection attempt and it failed.
-				proxyClient = null;
-				proxyStream = null;
-				throw new GatewayTimeoutException("ProxyClient failed to connect to the remote host: " + uri.DnsSafeHost + ":" + uri.Port, ex);
-			}
-			try
-			{
-				if (uri.Scheme.IEquals("https"))
+				proxyTiming?.Start("DNS Lookup");
+				options.bet?.Start("DNS Lookup");
+				IPAddress ip = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost);
+
+				proxyClient = new TcpClient(ip.AddressFamily); // Create TcpClient with IPv4 or IPv6 support as needed. We are unable to construct one that can use both.
+				proxyClient.NoDelay = true;
+
+				try
 				{
-					options.bet?.Start("TLS Negotiate");
-					System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
-					if (options.acceptAnyCert)
-						certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
-					proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-					((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, HttpProcessor.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
+					proxyTiming?.Start("Connect");
+					options.bet?.Start("Connect");
+					await proxyClient.ConnectAsync(ip, uri.Port);
+					proxyStream = proxyClient.GetStream();
+				}
+				catch (Exception ex)
+				{
+					// This was a fresh connection attempt and it failed.
+					proxyClient = null;
+					proxyStream = null;
+					throw new GatewayTimeoutException("ProxyClient failed to connect to the remote host: " + uri.DnsSafeHost + ":" + uri.Port, ex);
+				}
+				try
+				{
+					if (uri.Scheme.IEquals("https"))
+					{
+						proxyTiming?.Start("TLS Negotiate");
+						options.bet?.Start("TLS Negotiate");
+						System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
+						if (options.acceptAnyCert)
+							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
+						proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
+						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, HttpProcessor.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
+					}
+				}
+				catch (Exception ex)
+				{
+					throw new TLSNegotiationFailedException("TLS Negotiation failed with remote host: " + uri.DnsSafeHost + ":" + uri.Port, ex);
 				}
 			}
-			catch (Exception ex)
+			finally
 			{
-				throw new TLSNegotiationFailedException("TLS Negotiation failed with remote host: " + uri.DnsSafeHost + ":" + uri.Port, ex);
+				proxyTiming?.Stop();
+				options.bet?.Stop();
 			}
 		}
 		#region Helpers
