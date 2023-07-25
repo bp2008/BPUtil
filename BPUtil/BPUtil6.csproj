@@ -8,6 +8,7 @@
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <BaseIntermediateOutputPath>obj6\</BaseIntermediateOutputPath>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <RootNamespace>BPUtil</RootNamespace>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DebugType>embedded</DebugType>

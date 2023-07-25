@@ -112,14 +112,9 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public string requestedPage { get; private set; }
 		/// <summary>
-		/// A Dictionary mapping http header names to values. Names are all converted to lower case before being added to this Dictionary.
+		/// A map of HTTP header names and values. Header names are all normalized to standard capitalization, and header names are treated as case-insensitive.
 		/// </summary>
-		public Dictionary<string, string> httpHeaders { get; private set; } = new Dictionary<string, string>();
-
-		/// <summary>
-		/// A Dictionary mapping http header names to values. Names are left in their raw form, and may include capital letters.
-		/// </summary>
-		public Dictionary<string, string> httpHeadersRaw { get; private set; } = new Dictionary<string, string>();
+		public HttpHeaderCollection httpHeaders { get; private set; } = new HttpHeaderCollection();
 
 		/// <summary>
 		/// A SortedList mapping lower-case keys to values of parameters.  This list is populated if and only if the request was a POST request with mimetype "application/x-www-form-urlencoded".
@@ -480,7 +475,6 @@ namespace BPUtil.SimpleHttp
 					{
 						responseCookies = new Cookies();
 						httpHeaders.Clear();
-						httpHeadersRaw.Clear();
 						PostParams.Clear();
 						RawPostParams.Clear();
 						QueryString.Clear();
@@ -506,7 +500,7 @@ namespace BPUtil.SimpleHttp
 						tcpClient.ReceiveTimeout = keepAliveRequestCount <= 1 ? 10000 : 60000;
 						if (!parseRequest())
 							return; // End of stream was encountered. Very common with "Connection: keep-alive" when another request does not arrive.
-						readHeaders(tcpStream, httpHeaders, httpHeadersRaw);
+						readHeaders(tcpStream, httpHeaders);
 						if (string.IsNullOrWhiteSpace(hostName))
 							hostName = GetHeaderValue("host");
 						if (string.IsNullOrWhiteSpace(hostName))
@@ -719,7 +713,9 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Parses the http headers
 		/// </summary>
-		internal static void readHeaders(Stream tcpStream, Dictionary<string, string> httpHeaders, Dictionary<string, string> httpHeadersRaw)
+		/// <param name="tcpStream">Input stream.</param>
+		/// <param name="httpHeaders">Http header collection where parsed headers should be stored.</param>
+		internal static void readHeaders(Stream tcpStream, HttpHeaderCollection httpHeaders)
 		{
 			string line;
 			while ((line = streamReadLine(tcpStream)) != "")
@@ -735,7 +731,7 @@ namespace BPUtil.SimpleHttp
 					pos++; // strip any spaces
 
 				string value = line.Substring(pos);
-				AddOrUpdateHeaderValue(httpHeaders, httpHeadersRaw, name, value);
+				httpHeaders.Add(name, value);
 			}
 		}
 
@@ -745,29 +741,6 @@ namespace BPUtil.SimpleHttp
 			if (str.Length >= maxLength)
 				throw new HttpProcessorException("413 Entity Too Large");
 			return str; // Null if end of stream.
-		}
-
-		/// <summary>
-		/// Adds or updates the header with the specified value.  If the header already has a value in our map(s), a comma will be appended, then the new value will be appended.
-		/// </summary>
-		/// <param name="httpHeaders">Collection into which the header is inserted with lower case key.</param>
-		/// <param name="httpHeadersRaw">Collection into which the header is inserted.</param>
-		/// <param name="headerName">Header name (key).</param>
-		/// <param name="value">Header value.</param>
-		private static void AddOrUpdateHeaderValue(Dictionary<string, string> httpHeaders, Dictionary<string, string> httpHeadersRaw, string headerName, string value)
-		{
-			string lower = headerName.ToLower();
-			string existingValue = "";
-
-			if (httpHeaders.TryGetValue(lower, out existingValue))
-				httpHeaders[lower] = existingValue + "," + value;
-			else
-				httpHeaders[lower] = value;
-
-			if (httpHeadersRaw.TryGetValue(headerName, out existingValue))
-				httpHeadersRaw[headerName] = existingValue + "," + value;
-			else
-				httpHeadersRaw[headerName] = value;
 		}
 
 		/// <summary>
@@ -1146,10 +1119,9 @@ namespace BPUtil.SimpleHttp
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
 				if (!allowKeepalive)
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
-				foreach (KeyValuePair<string, string> header in httpHeadersRaw)
+				foreach (KeyValuePair<string, string> header in httpHeaders)
 				{
-					string keyLower = header.Key.ToLower();
-					if (keyLower != "host" && (allowKeepalive || keyLower != "connection"))
+					if (header.Key != "Host" && (allowKeepalive || header.Key != "Connection"))
 						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
 				}
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
@@ -1239,6 +1211,12 @@ namespace BPUtil.SimpleHttp
 		}
 		public class ProxyOptions
 		{
+			private static long counter = 0;
+
+			/// <summary>
+			/// Unique identifier for this request. Counter starts at 0 each time the program is launched.
+			/// </summary>
+			public readonly long RequestId = Interlocked.Increment(ref counter);
 			/// <summary>
 			/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds.
 			/// </summary>
@@ -1273,11 +1251,40 @@ namespace BPUtil.SimpleHttp
 			/// </summary>
 			public StringBuilder log = new StringBuilder();
 
-			private static long counter = 0;
 			/// <summary>
-			/// Unique identifier for this request. Counter starts at 0 each time the program is launched.
+			/// If true, a "Server-Timing" header will added to the response including proxy timing details. If a <see cref="bet"/> instance is not provided, one will be automatically created.
 			/// </summary>
-			public readonly long RequestId = Interlocked.Increment(ref counter);
+			public bool includeServerTimingHeader = false;
+			/// <summary>
+			/// An event that is raised before response headers are proxied from our client to the remote server, allowing for those headers to be viewed or modified.
+			/// </summary>
+			public event EventHandler<HttpHeaderCollection> BeforeRequestHeadersSent = delegate { };
+			/// <summary>
+			/// An event that is raised before response headers are sent to from the remote server to our client, allowing for those headers to be viewed or modified.
+			/// </summary>
+			public event EventHandler<HttpHeaderCollection> BeforeResponseHeadersSent = delegate { };
+			internal void RaiseBeforeRequestHeadersSent(object sender, HttpHeaderCollection headers)
+			{
+				try
+				{
+					BeforeRequestHeadersSent(sender, headers);
+				}
+				catch (Exception ex)
+				{
+					Logger.Debug(ex);
+				}
+			}
+			internal void RaiseBeforeResponseHeadersSent(object sender, HttpHeaderCollection headers)
+			{
+				try
+				{
+					BeforeResponseHeadersSent(sender, headers);
+				}
+				catch (Exception ex)
+				{
+					Logger.Debug(ex);
+				}
+			}
 		}
 		#endregion
 

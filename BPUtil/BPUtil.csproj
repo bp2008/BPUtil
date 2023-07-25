@@ -124,6 +124,7 @@
     <Compile Include="SimpleHttp\ChunkedTransferEncodingStream.cs" />
     <Compile Include="SimpleHttp\Client\ProxyClient.cs" />
     <Compile Include="SimpleHttp\Client\ProxyResult.cs" />
+    <Compile Include="SimpleHttp\HttpHeaderCollection.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ICertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ServerNameCertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\SimpleCertificateSelector.cs" />

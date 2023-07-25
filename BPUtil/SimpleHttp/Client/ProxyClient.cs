@@ -118,9 +118,9 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			finally
 			{
-				Logger.Info("Request ID " + options.RequestId + ":" + Environment.NewLine
-					+ options.log.ToString()
-					+ (options.bet == null ? "" : (Environment.NewLine + Environment.NewLine + options.bet.ToString(Environment.NewLine))));
+				//Logger.Info("Request ID " + options.RequestId + ":" + Environment.NewLine
+				//	+ options.log.ToString()
+				//	+ (options.bet == null ? "" : (Environment.NewLine + Environment.NewLine + options.bet.ToString(Environment.NewLine))));
 			}
 		}
 		/// <summary>
@@ -167,13 +167,15 @@ namespace BPUtil.SimpleHttp.Client
 			if (options == null)
 				options = new HttpProcessor.ProxyOptions();
 
+			if (options.includeServerTimingHeader && options.bet == null)
+				options.bet = new BasicEventTimer();
+
 			string host = options.host;
 			ProxyDataBuffer snoopy = options.snoopy;
 			if (snoopy == null)
 				snoopy = new ProxyDataBuffer(); // TODO: Remove this; let it come only from options.
 
 			// Interally, we shall refer to the original client making the request to this application as "the client", while the destination URI points at "the server".
-			options.bet?.Start("Proxy Init");
 
 			if (string.IsNullOrWhiteSpace(host))
 				host = uri.DnsSafeHost;
@@ -181,45 +183,10 @@ namespace BPUtil.SimpleHttp.Client
 			p.tcpClient.NoDelay = true;
 			p.tcpClient.SendTimeout = p.tcpClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(0, 45000) + 15000;
 
-			//////////////////////
-			// PHASE 1: CONNECT //
-			//////////////////////
-			bool didConnect = false;
-			if (proxyClient == null)
-			{
-				options.log.AppendLine("Constructing new TcpClient");
-				try
-				{
-					await Connect(uri, host, options);
-					didConnect = true;
-				}
-				catch (GatewayTimeoutException ex)
-				{
-					if (options.allowGatewayTimeoutResponse)
-					{
-						p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "504 Gateway Timeout");
-						return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
-					}
-					ex.Rethrow();
-				}
-				catch (TLSNegotiationFailedException ex)
-				{
-					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
-					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, ex.ToHierarchicalString(), false, false);
-				}
-			}
-			else
-				options.log.AppendLine("Reusing old connection");
-
-			proxyClient.SendTimeout = proxyClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(0, 45000) + 15000;
-
-			// Connection to remote server is now established and ready for data transfer.
-
 			///////////////////////////
-			// PHASE 2: ANALYZE REQUEST //
+			// PHASE 1: ANALYZE REQUEST //
 			///////////////////////////
 			// Send the original client's request to the remote server with any necessary modifications.
-			options.bet?.Start("Proxy Process Request Headers");
 
 			// Collection of lower case header names that are "hop-by-hop" and should not be proxied.  Values in the "Connection" header are supposed to be added to this collection on a per-request basis, but this server does not currently recognize comma separated values in the Connection header, therefore that is not happening.
 			HashSet<string> doNotProxyHeaders = new HashSet<string>(new string[] {
@@ -252,11 +219,48 @@ namespace BPUtil.SimpleHttp.Client
 
 			string requestHeader_Upgrade = ourClientWantsWebsocket ? "websocket" : null;
 
+			//////////////////////
+			// PHASE 2: CONNECT //
+			//////////////////////
+			bool didConnect = false;
+			if (proxyClient == null)
+			{
+				options.log.AppendLine("Constructing new TcpClient");
+				try
+				{
+					await Connect(uri, host, options);
+					didConnect = true;
+				}
+				catch (GatewayTimeoutException ex)
+				{
+					if (options.allowGatewayTimeoutResponse)
+					{
+						p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "504 Gateway Timeout");
+						return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
+					}
+					ex.Rethrow();
+				}
+				catch (TLSNegotiationFailedException ex)
+				{
+					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
+					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, ex.ToHierarchicalString(), false, false);
+				}
+				finally
+				{
+					options.bet?.Stop();
+				}
+			}
+			else
+				options.log.AppendLine("Reusing old connection");
+
+			proxyClient.SendTimeout = proxyClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(0, 45000) + 15000;
+
+			// Connection to remote server is now established and ready for data transfer.
 			///////////////////////////
 			// PHASE 3: SEND REQUEST //
 			///////////////////////////
 			// Send the first line of our HTTP request.
-			options.bet?.Start("Proxy Request");
+			options.bet?.Start("Send Request");
 			string requestLine = p.http_method + ' ' + uri.PathAndQuery + ' ' + p.http_protocol_versionstring;
 			try
 			{
@@ -267,9 +271,11 @@ namespace BPUtil.SimpleHttp.Client
 				if (requestHeader_Upgrade != null)
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Upgrade: " + requestHeader_Upgrade + "\r\n", snoopy);
 
-				foreach (KeyValuePair<string, string> header in p.httpHeadersRaw)
+				options.RaiseBeforeRequestHeadersSent(this, p.httpHeaders);
+
+				foreach (KeyValuePair<string, string> header in p.httpHeaders)
 				{
-					if (!doNotProxyHeaders.Contains(header.Key.ToLower()))
+					if (!doNotProxyHeaders.Contains(header.Key, true))
 						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
 				}
 				// Now a blank line to indicate the end of the request headers.
@@ -287,7 +293,6 @@ namespace BPUtil.SimpleHttp.Client
 			// Write the original POST body if there was one.
 			if (p.PostBodyStream != null)
 			{
-				options.bet?.Start("BeginProxyRequestAsync Transmit POST body");
 				long remember_position = p.PostBodyStream.Position;
 				p.PostBodyStream.Seek(0, SeekOrigin.Begin);
 				byte[] buf = p.PostBodyStream.ToArray();
@@ -301,20 +306,18 @@ namespace BPUtil.SimpleHttp.Client
 			// PHASE 4: READ RESPONSE //
 			////////////////////////////
 			// Read response from remote server
+			options.bet?.Start("Read Response");
 			HttpResponseStatusLine responseStatusLine = null;
-			Dictionary<string, string> proxyHttpHeaders = new Dictionary<string, string>();
-			Dictionary<string, string> proxyHttpHeadersRaw = new Dictionary<string, string>();
+			HttpHeaderCollection proxyHttpHeaders = new HttpHeaderCollection();
 			try
 			{
-				options.bet?.Start("BeginProxyRequestAsync Read Status Line From Remote Server");
 				string statusLineStr = HttpProcessor.streamReadLine(proxyStream);
 				if (statusLineStr == null)
 					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
 				responseStatusLine = new HttpResponseStatusLine(statusLineStr);
 
 				// Read response headers from remote server
-				options.bet?.Start("BeginProxyRequestAsync Read Response Headers From Remote Server");
-				HttpProcessor.readHeaders(proxyStream, proxyHttpHeaders, proxyHttpHeadersRaw);
+				HttpProcessor.readHeaders(proxyStream, proxyHttpHeaders);
 			}
 			catch (HttpProcessor.EndOfStreamException ex)
 			{
@@ -325,6 +328,13 @@ namespace BPUtil.SimpleHttp.Client
 				}
 				ex.Rethrow();
 			}
+			finally
+			{
+				options.bet?.Stop();
+			}
+
+			if (options.bet != null && options.includeServerTimingHeader)
+				proxyHttpHeaders["Server-Timing"] = options.bet.ToServerTimingHeader();
 
 			// Decide how to respond
 			options.bet?.Start("Proxy Process Response Headers");
@@ -332,7 +342,7 @@ namespace BPUtil.SimpleHttp.Client
 			long proxyContentLength = 0;
 			bool remoteServerWantsKeepalive = false;
 			string proxyConnectionHeader;
-			if (!proxyHttpHeaders.TryGetValue("connection", out proxyConnectionHeader))
+			if (!proxyHttpHeaders.TryGetValue("Connection", out proxyConnectionHeader))
 			{
 				if (responseStatusLine.Version.StartsWith("1.0"))
 				{
@@ -344,7 +354,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			if (ourClientWantsWebsocket)
 			{
-				if (proxyConnectionHeader.IEquals("upgrade") && proxyHttpHeaders.TryGetValue("upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
+				if (proxyConnectionHeader.IEquals("upgrade") && proxyHttpHeaders.TryGetValue("Upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
 				{
 					options.log.AppendLine("This is a websocket connection.");
 					decision = ProxyResponseDecision.Websocket;
@@ -362,12 +372,12 @@ namespace BPUtil.SimpleHttp.Client
 
 				if (responseStatusLine.StatusCode.StartsWith("1") || responseStatusLine.StatusCode == "204" || responseStatusLine.StatusCode == "304")
 					decision = ProxyResponseDecision.NoBody;
-				else if (proxyHttpHeaders.TryGetValue("content-length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
+				else if (proxyHttpHeaders.TryGetValue("Content-Length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
 				{
 					// Content-Length
 					decision = ProxyResponseDecision.ContentLength;
 				}
-				else if (proxyHttpHeaders.TryGetValue("transfer-encoding", out string proxyTransferEncoding) && proxyTransferEncoding.IEquals("chunked"))
+				else if (proxyHttpHeaders.TryGetValue("Transfer-Encoding", out string proxyTransferEncoding) && proxyTransferEncoding.IEquals("chunked"))
 				{
 					// Transfer-Encoding: chunked
 					decision = ProxyResponseDecision.ReadChunked;
@@ -388,12 +398,25 @@ namespace BPUtil.SimpleHttp.Client
 				//}
 			}
 
+			// Rewrite redirect location to point at this server
+			if (proxyHttpHeaders.ContainsKey("Location"))
+			{
+				string requestHeader_Host = p.GetHeaderValue("host");
+				if (!string.IsNullOrWhiteSpace(requestHeader_Host)
+					&& Uri.TryCreate(proxyHttpHeaders["Location"], UriKind.Absolute, out Uri redirectUri)
+					&& redirectUri.Host.IEquals(host))
+				{
+					UriBuilder uriBuilder = new UriBuilder(redirectUri);
+					uriBuilder.Host = requestHeader_Host;
+					proxyHttpHeaders["Location"] = uriBuilder.Uri.ToString();
+				}
+			}
 			/////////////////////////////
 			// PHASE 5: WRITE RESPONSE //
 			/////////////////////////////
 			// Write response status line
-			Stream outgoingStream = p.tcpStream;
 			options.bet?.Start("Proxy Write Response: " + decision);
+			Stream outgoingStream = p.tcpStream;
 			p.responseWritten = true;
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, responseStatusLine + "\r\n", snoopy);
 
@@ -410,13 +433,15 @@ namespace BPUtil.SimpleHttp.Client
 			if (ourClientWantsWebsocket)
 				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Upgrade: websocket\r\n", snoopy);
 
-			foreach (KeyValuePair<string, string> header in proxyHttpHeadersRaw)
+			options.RaiseBeforeResponseHeadersSent(this, proxyHttpHeaders);
+
+			foreach (KeyValuePair<string, string> header in proxyHttpHeaders)
 			{
 				string key = header.Key;
-				if (doNotProxyHeaders.Contains(key.ToLower()))
+				if (doNotProxyHeaders.Contains(key, true))
 					continue;
 				string value = header.Value;
-				if (key.IEquals("location"))
+				if (key == "Location")
 				{
 					string requestHeader_Host = p.GetHeaderValue("host");
 					if (!string.IsNullOrWhiteSpace(requestHeader_Host)
@@ -443,9 +468,6 @@ namespace BPUtil.SimpleHttp.Client
 					wrapOutputStreamChunked = true;
 				}
 			}
-
-			if (options.bet != null)
-				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Server-Timing: " + options.bet.ToServerTimingHeader() + "\r\n", snoopy);
 
 			// Write blank line to indicate the end of the response headers
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "\r\n", snoopy);
@@ -539,7 +561,7 @@ namespace BPUtil.SimpleHttp.Client
 
 			try
 			{
-				options.bet?.Start("Proxy Connect");
+				options.bet?.Start("Connect");
 				await proxyClient.ConnectAsync(ip, uri.Port);
 				proxyStream = proxyClient.GetStream();
 			}
@@ -554,7 +576,7 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				if (uri.Scheme.IEquals("https"))
 				{
-					options.bet?.Start("Proxy TLS Negotiate");
+					options.bet?.Start("TLS Negotiate");
 					System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
 					if (options.acceptAnyCert)
 						certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
