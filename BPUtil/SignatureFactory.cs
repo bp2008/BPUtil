@@ -1,4 +1,6 @@
-﻿using System;
+﻿#if NETFRAMEWORK || NET6_0_WIN
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -108,3 +110,5 @@ namespace BPUtil
 		}
 	}
 }
+
+#endif

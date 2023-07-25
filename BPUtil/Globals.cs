@@ -21,7 +21,7 @@ namespace BPUtil
 			ServicePointManager.DefaultConnectionLimit = int.MaxValue;
 			try
 			{
-				System.Reflection.Assembly assembly = System.Reflection.Assembly.GetEntryAssembly();
+				Assembly assembly = Assembly.GetEntryAssembly();
 				InitializeProgram(assembly.Location, assembly.GetName().Name);
 			}
 			catch { }
@@ -53,7 +53,7 @@ namespace BPUtil
 				catch { }
 			}
 			if (fiExe == null)
-				fiExe = new FileInfo(System.Windows.Forms.Application.ExecutablePath);
+				fiExe = new FileInfo(Assembly.GetEntryAssembly().Location);
 			executableNameWithExtension = fiExe.Name.Replace('\\', '/');
 			executableNameWithoutExtension = executableNameWithExtension.Substring(0, executableNameWithExtension.Length - fiExe.Extension.Length);
 			applicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
@@ -201,7 +201,7 @@ namespace BPUtil
 				AssemblyTitleAttribute attr = Assembly.GetEntryAssembly().GetCustomAttributes<AssemblyTitleAttribute>().FirstOrDefault();
 				if (attr != null && !string.IsNullOrWhiteSpace(attr.Title))
 					return attr.Title;
-				return Path.GetFileNameWithoutExtension(Assembly.GetEntryAssembly().CodeBase);
+				return Path.GetFileNameWithoutExtension(Assembly.GetEntryAssembly().Location);
 			}
 		}
 

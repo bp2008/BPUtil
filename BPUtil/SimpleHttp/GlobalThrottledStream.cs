@@ -230,6 +230,7 @@ namespace BPUtil.SimpleHttp
 		public static class ThrottlingManager
 		{
 			#region Public API
+			private static volatile bool abort = false;
 			/// <summary>
 			/// Calling this will enable web server bandwidth throttling and create the specified number of throttling rule sets and initialize them all to "unlimited" speed.
 			/// 
@@ -258,8 +259,7 @@ namespace BPUtil.SimpleHttp
 			/// </summary>
 			public static void Shutdown()
 			{
-				if (thrIOScheduler != null)
-					thrIOScheduler.Abort();
+				abort = true;
 			}
 
 			/// <summary>
@@ -322,7 +322,7 @@ namespace BPUtil.SimpleHttp
 					Stopwatch watch = new Stopwatch();
 					EventWaitHandle ewh = new EventWaitHandle(false, EventResetMode.ManualReset);
 					int lastIntervalMs = BurstIntervalMs;
-					while (true)
+					while (!abort)
 					{
 						try
 						{

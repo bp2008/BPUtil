@@ -21,7 +21,7 @@ namespace BPUtil
 		/// </summary>
 		public Encryption()
 		{
-			using (AesCryptoServiceProvider aes = new AesCryptoServiceProvider())
+			using (Aes aes = Aes.Create())
 			{
 				if (aes.KeySize != 256 && aes.ValidKeySize(256))
 					aes.KeySize = 256;
@@ -52,7 +52,7 @@ namespace BPUtil
 
 		public byte[] Encrypt(byte[] plain)
 		{
-			using (AesCryptoServiceProvider aes = new AesCryptoServiceProvider())
+			using (Aes aes = Aes.Create())
 			{
 				aes.Mode = CipherMode.CBC;
 				aes.IV = IV;
@@ -67,7 +67,7 @@ namespace BPUtil
 		}
 		public byte[] Decrypt(byte[] cipher)
 		{
-			using (AesCryptoServiceProvider aes = new AesCryptoServiceProvider())
+			using (Aes aes = Aes.Create())
 			{
 				aes.Mode = CipherMode.CBC;
 				aes.IV = IV;

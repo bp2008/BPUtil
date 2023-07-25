@@ -1,4 +1,6 @@
-﻿using System;
+﻿#if NETFRAMEWORK || NET6_0_WIN
+
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -68,7 +70,7 @@ namespace BPUtil
 			get { return img.Height; }
 		}
 
-		#region IDisposable Support
+#region IDisposable Support
 		private bool disposedValue = false; // To detect redundant calls
 
 		protected virtual void Dispose(bool disposing)
@@ -120,7 +122,7 @@ namespace BPUtil
 			// uncomment the following line if the finalizer is overridden above.
 			GC.SuppressFinalize(this);
 		}
-		#endregion
+#endregion
 		/// <summary>
 		/// <para>Gets a thumbnail of this image using the exact dimensions specified.</para>
 		/// <para>You will be responsible for disposing the returned Bitmap.</para>
@@ -373,3 +375,4 @@ namespace BPUtil
 		}
 	}
 }
+#endif

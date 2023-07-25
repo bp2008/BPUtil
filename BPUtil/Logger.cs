@@ -5,7 +5,9 @@ using System.Text;
 using System.IO;
 using System.Collections.Concurrent;
 using System.Threading;
+#if NETFRAMEWORK || NET6_0_WIN
 using System.Windows.Forms;
+#endif
 
 namespace BPUtil
 {
@@ -157,39 +159,69 @@ namespace BPUtil
 			httpLogger.StopLoggingThreads();
 		}
 
+		private static object catchAllLock = new object();
+		private static bool didDefaultCatchAll = false;
 		/// <summary>
-		/// Registers handlers for <see cref="Application.ThreadException"/> and AppDomain.CurrentDomain.UnhandledException, assigned to call <see cref="Debug(Exception, string)"/>.
+		/// Registers handlers for <c>Application.ThreadException</c> and AppDomain.CurrentDomain.UnhandledException, assigned to call <see cref="Debug(Exception, string)"/>.
 		/// </summary>
 		public static void CatchAll()
 		{
-			AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+			lock (catchAllLock)
 			{
-				Logger.Debug(e.ExceptionObject as Exception);
-			};
-			Application.ThreadException += (sender, e) =>
-			{
-				Logger.Debug(e.Exception);
-			};
+				if (didDefaultCatchAll)
+					return;
+				didDefaultCatchAll = true;
+				AppDomain.CurrentDomain.UnhandledException += HandleUnhandledException;
+#if NETFRAMEWORK || NET6_0_WIN
+				Application.ThreadException += HandleThreadException;
+#endif
+			}
+		}
+
+		private static void HandleUnhandledException(object sender, UnhandledExceptionEventArgs e)
+		{
+			Logger.Debug(e.ExceptionObject as Exception);
+		}
+		private static void HandleThreadException(object sender, ThreadExceptionEventArgs e)
+		{
+			Logger.Debug(e.Exception);
 		}
 
 		/// <summary>
-		/// Registers handlers for <see cref="Application.ThreadException"/> and AppDomain.CurrentDomain.UnhandledException, assigned to call the given callback.
+		/// Registers handlers for <c>Application.ThreadException</c> and AppDomain.CurrentDomain.UnhandledException, assigned to call the given callback. This will undo any previous call to CatchAll() that was done without arguments.
 		/// </summary>
 		/// <param name="callback">A callback method where the first argument is the name of the exception catcher which caught the exception, and the second argument is the exception that was caught.</param>
 		public static void CatchAll(Action<string, Exception> callback)
 		{
+			lock (catchAllLock)
+			{
+				if (didDefaultCatchAll)
+				{
+					didDefaultCatchAll = false;
+					AppDomain.CurrentDomain.UnhandledException -= HandleUnhandledException;
+
+#if NETFRAMEWORK || NET6_0_WIN
+					Application.ThreadException -= HandleThreadException;
+#endif
+
+				}
+			}
 			AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 			{
 				callback("AppDomain.CurrentDomain.UnhandledException", e.ExceptionObject as Exception);
 			};
+
+#if NETFRAMEWORK || NET6_0_WIN
 			Application.ThreadException += (sender, e) =>
 			{
 				callback("Application.ThreadException", e.Exception);
 			};
+#endif
 		}
 	}
 	public class HttpLogger : SimpleHttp.ILogger
 	{
+		private volatile bool abort = false;
 		void SimpleHttp.ILogger.Log(Exception ex, string additionalInformation)
 		{
 			Logger.Debug(ex, additionalInformation);
@@ -216,7 +248,7 @@ namespace BPUtil
 			try
 			{
 				Tuple<DateTime, string> nextItemToLog;
-				while (true)
+				while (!abort)
 				{
 					try
 					{
@@ -246,18 +278,15 @@ namespace BPUtil
 		}
 		public void StopLoggingThreads()
 		{
-			try
-			{
-				if (loggingThread != null)
-					loggingThread.Abort();
-			}
-			catch (ThreadAbortException) { throw; }
-			catch { }
+			abort = true;
 		}
 
 		public void StartLoggingThreads()
 		{
 			StopLoggingThreads();
+			if (loggingThread != null && loggingThread.IsAlive)
+				loggingThread.Join(500);
+			abort = false;
 			loggingThread = new Thread(loggingThreadLoop);
 			loggingThread.Name = "HttpLogger thread";
 			loggingThread.IsBackground = true;

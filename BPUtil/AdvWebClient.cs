@@ -6,6 +6,7 @@ using System.Text;
 
 namespace BPUtil
 {
+#if NETFRAMEWORK
 	/// <summary>
 	/// <para>A WebClient with custom extensions:</para>
 	/// <list type="bullet">
@@ -14,6 +15,7 @@ namespace BPUtil
 	/// </list>
 	/// </summary>
 	[System.ComponentModel.DesignerCategory("Code")]
+	[Obsolete("Use WebRequestUtility instead.")]
 	public class AdvWebClient : WebClient
 	{
 		/// <summary>
@@ -65,4 +67,5 @@ namespace BPUtil
 	public class CookieAwareWebClient : AdvWebClient
 	{
 	}
+#endif
 }

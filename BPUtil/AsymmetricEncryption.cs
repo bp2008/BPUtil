@@ -1,4 +1,6 @@
-﻿using System;
+﻿#if NETFRAMEWORK || NET6_0_WIN
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.AccessControl;
@@ -152,7 +154,7 @@ namespace BPUtil
 				rsa.Dispose();
 			}
 		}
-		#region Encrypt/Decrypt With Given Key
+#region Encrypt/Decrypt With Given Key
 		/// <summary>
 		/// Encrypts the given data using the public key from the given base64-encoded CspBlob.
 		/// </summary>
@@ -183,8 +185,8 @@ namespace BPUtil
 				return rsa.Decrypt(data, true);
 			}
 		}
-		#endregion
-		#region Encrypt/Decrypt With Keystore
+#endregion
+#region Encrypt/Decrypt With Keystore
 		/// <summary>
 		/// Encrypts the given data using a public key from the operating system's keystore. If the key does not already exist, a new one is created.
 		/// </summary>
@@ -215,8 +217,8 @@ namespace BPUtil
 				return rsa.Decrypt(data, true);
 			}
 		}
-		#endregion
-		#region Sign/Verify With Given Key
+#endregion
+#region Sign/Verify With Given Key
 		/// <summary>
 		/// Verifies the given signature against a hash of the data using the public key from the given base64-encoded CspBlob. Returns true if the signature is verified.
 		/// </summary>
@@ -252,8 +254,8 @@ namespace BPUtil
 				return rsa.SignHash(data, hashAlg.ToString());
 			}
 		}
-		#endregion
-		#region Sign/Verify With Keystore
+#endregion
+#region Sign/Verify With Keystore
 		/// <summary>
 		/// Verifies the given signature against a hash of the data using a public key from the operating system's keystore. If the key does not already exist, verification will fail. Returns true if the signature is verified.
 		/// </summary>
@@ -312,7 +314,7 @@ namespace BPUtil
 					throw new Exception("Unimplemented HashAlgSelector value: " + hashAlg);
 			}
 		}
-		#endregion
+#endregion
 		/// <summary>
 		/// Returns a new CspParameters object configured for the specified keystore and key container name.
 		/// </summary>
@@ -373,3 +375,5 @@ namespace BPUtil
 		SHA512
 	}
 }
+
+#endif

@@ -4,7 +4,11 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+#if NETFRAMEWORK || NET6_0_WIN
 using System.Windows.Forms;
+#elif NET6_0_LINUX
+using BPUtil.Forms;
+#endif
 
 namespace BPUtil
 {
@@ -13,6 +17,8 @@ namespace BPUtil
 	/// </summary>
 	public static class SetTimeout
 	{
+
+#if NETFRAMEWORK || NET6_0_WIN
 		/// <summary>
 		/// Invokes on the GUI thread the specified action after the specified timeout.
 		/// </summary>
@@ -26,6 +32,8 @@ namespace BPUtil
 		{
 			return _internal_setTimeout(TheAction, Timeout, true, contextForInvoking, ReportException);
 		}
+#endif
+
 		/// <summary>
 		/// Invokes on a background thread the specified action after the specified timeout.
 		/// </summary>
@@ -37,6 +45,8 @@ namespace BPUtil
 		{
 			return _internal_setTimeout(TheAction, Timeout, false, null, ReportException);
 		}
+
+#if NETFRAMEWORK || NET6_0_WIN
 		/// <summary>
 		/// Invokes a call to SetTimeout.OnBackground on the Gui Thread, so that other UI events have a chance to finish first.
 		/// This timeout will not be cancelable.
@@ -53,6 +63,8 @@ namespace BPUtil
 				OnBackground(TheAction, Timeout - 1, ReportException);
 			}), 1, contextForInvoking, ReportException);
 		}
+#endif
+
 		private static TimeoutHandle _internal_setTimeout(Action TheAction, int Timeout, bool invokeOnGuiThread, Control contextForInvoking, Action<Exception> ReportException)
 		{
 			if (Timeout < 0)

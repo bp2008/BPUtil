@@ -5,7 +5,7 @@ using System.ComponentModel;
 
 namespace BPUtil.NativeWin
 {
-#if NET6_0
+#if NET6_0_WIN
 	/// <summary>
 	/// <para>
 	/// ORIGINALLY FROM https://www.codeproject.com/Articles/10090/A-small-C-Class-for-impersonating-a-User
@@ -48,6 +48,7 @@ namespace BPUtil.NativeWin
 		/// <param name="userName">The name of the user to act as.</param>
 		/// <param name="domain">The domain name of the user to act as.</param>
 		/// <param name="password">The password of the user to act as.</param>
+		/// <param name="action">Action to run as the user.</param>
 		public static void ImpersonateValidUser(string userName, string domain, string password, Action action)
 		{
 			IntPtr token = IntPtr.Zero;
@@ -100,7 +101,7 @@ namespace BPUtil.NativeWin
 			}
 		}
 	}
-#else
+#elif NETFRAMEWORK
 	/// <summary>
 	/// <para>
 	/// FROM https://www.codeproject.com/Articles/10090/A-small-C-Class-for-impersonating-a-User
@@ -252,5 +253,5 @@ namespace BPUtil.NativeWin
 
 		#endregion
 	}
-	#endif
+#endif
 }

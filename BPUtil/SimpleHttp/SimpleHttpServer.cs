@@ -1974,6 +1974,7 @@ namespace BPUtil.SimpleHttp
 				}
 				catch
 				{
+#if NETFRAMEWORK || NET6_0_WIN
 					try
 					{
 						fiExe = new FileInfo(System.Windows.Forms.Application.ExecutablePath);
@@ -1982,6 +1983,9 @@ namespace BPUtil.SimpleHttp
 					{
 						fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
 					}
+#else
+					fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
+#endif
 				}
 				string autoCertPassword = "N0t_V3ry-S3cure#lol";
 				FileInfo fiCert = new FileInfo(fiExe.Directory.FullName + "/SimpleHttpServer-SslCert.pfx");

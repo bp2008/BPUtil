@@ -17,6 +17,7 @@ namespace BPUtil
 		private volatile LogLine[] logLines = new LogLine[50000];
 		private const int MaxLinesToReadAtOnce = 1000;
 		private volatile int logLineCount = 0;
+		private volatile bool abort = false;
 		private Thread thrFileRead;
 		public readonly long readerId;
 		private int StreamingSleepLength;
@@ -53,7 +54,7 @@ namespace BPUtil
 		}
 		public void Stop()
 		{
-			thrFileRead?.Abort();
+			abort = true;
 		}
 		private void AddLogLine(string line)
 		{
@@ -64,7 +65,7 @@ namespace BPUtil
 		{
 			try
 			{
-				while (true)
+				while (!abort)
 				{
 					try
 					{

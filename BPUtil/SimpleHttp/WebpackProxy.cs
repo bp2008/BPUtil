@@ -80,6 +80,7 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		private bool TryStartWebpack()
 		{
+#if NETFRAMEWORK || NET6_0_WIN
 			try
 			{
 				string npmPath = NativeWin.PathCheck.GetFullPath("npm.cmd");
@@ -99,6 +100,9 @@ namespace BPUtil.SimpleHttp
 				Logger.Debug(ex, "Failed to start webpack dev server (cmd.exe /C \"npm start\")");
 				return false;
 			}
+#else
+			throw new Exception("Unsupported Platform");
+#endif
 		}
 		/// <summary>
 		/// Attempts to briefly bind the specified TCP port, returning true if successful or false otherwise.

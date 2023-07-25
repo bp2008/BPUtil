@@ -31,7 +31,12 @@ namespace BPUtil
 		/// </summary>
 		/// <typeparam name="ServiceType">Type of Service class.</typeparam>
 		/// <param name="options">Optional options for service initialization.</param>
-		public static void WindowsService<ServiceType>(WindowsServiceInitOptions options = null) where ServiceType : ServiceBase, new()
+		public static void WindowsService<ServiceType>(WindowsServiceInitOptions options = null)
+#if NET6_0_LINUX
+			where ServiceType : new()
+#elif NETFRAMEWORK || NET6_0_WIN
+			where ServiceType : ServiceBase, new()
+#endif
 		{
 			if (options == null)
 				options = new WindowsServiceInitOptions();
@@ -40,7 +45,8 @@ namespace BPUtil
 			Globals.OverrideErrorFilePath(() => Globals.WritableDirectoryBase + "Logs/" + Globals.AssemblyName + "_" + DateTime.Now.Year + "_" + DateTime.Now.Month.ToString().PadLeft(2, '0') + ".txt");
 			Environment.CurrentDirectory = Globals.WritableDirectoryBase;
 
-			Logger.CatchAll();
+			if (options.LoggerCatchAll)
+				Logger.CatchAll();
 			SimpleHttpLogger.RegisterLogger(Logger.httpLogger, false);
 
 			ServiceType myService = new ServiceType();
@@ -60,11 +66,14 @@ namespace BPUtil
 				settingsObj.SaveIfNoExist();
 			}
 
+#if NETFRAMEWORK || NET6_0_LINUX
 			if (Platform.IsUnix() || Platform.IsRunningOnMono())
 			{
 				LinuxWindowsService(myService, options, settingsObj);
 				return;
 			}
+#endif
+#if NETFRAMEWORK || NET6_0_WIN
 			string serviceName = !string.IsNullOrWhiteSpace(options.ServiceName) ? options.ServiceName : myService.ServiceName;
 			if (Environment.UserInteractive)
 			{
@@ -106,6 +115,7 @@ namespace BPUtil
 			{
 				ServiceBase.Run(myService);
 			}
+#endif
 		}
 
 		/// <summary>
@@ -115,32 +125,37 @@ namespace BPUtil
 		/// <param name="myService"></param>
 		/// <param name="options"></param>
 		/// <param name="settingsObj"></param>
-		private static void LinuxWindowsService<ServiceType>(ServiceType myService, WindowsServiceInitOptions options, SerializableObjectBase settingsObj) where ServiceType : ServiceBase, new()
+		private static void LinuxWindowsService<ServiceType>(ServiceType myService, WindowsServiceInitOptions options, SerializableObjectBase settingsObj)
+#if NET6_0_LINUX
+			where ServiceType : new()
+#elif NETFRAMEWORK || NET6_0_WIN
+			where ServiceType : ServiceBase, new()
+#endif
 		{
 			string[] args = Environment.GetCommandLineArgs();
+			string serviceName = !string.IsNullOrWhiteSpace(options.ServiceName) ? options.ServiceName : Globals.AssemblyName;
 			if (args.Length == 1)
 			{
-				Console.WriteLine(myService.ServiceName + " " + Globals.AssemblyVersion);
-				Console.WriteLine("To run as a Windows Service: " + args[0] + " run");
+				Console.WriteLine(serviceName + " " + Globals.AssemblyVersion);
 				Console.WriteLine("To run as a command line app: " + args[0] + " cmd");
+				Console.WriteLine("To install : " + args[0] + " cmd");
 				if (settingsObj != null)
 					Console.WriteLine("To update the settings file: " + args[0] + " savesettings");
 				Console.WriteLine("Data directory: " + Globals.WritableDirectoryBase);
-			}
-			else if (args.Length > 1 && args[1] == "run")
-			{
-				ServiceBase.Run(myService);
 			}
 			else if (args.Length > 1 && args[1] == "cmd")
 			{
 				PrivateAccessor.CallMethod<ServiceType>(myService, "OnStart", new object[] { new string[0] });
 				try
 				{
-					do
-					{
-						Console.WriteLine("Running " + myService.ServiceName + " " + Globals.AssemblyVersion + " in command-line mode. Type \"exit\" to close.");
-					}
-					while (Console.ReadLine() != "exit");
+					if (options.LinuxShellInterface != null)
+						options.LinuxShellInterface();
+					else
+						do
+						{
+							Console.WriteLine("Running " + serviceName + " " + Globals.AssemblyVersion + " in default command-line mode. Type \"exit\" to close.");
+						}
+						while (Console.ReadLine() != "exit");
 				}
 				finally
 				{
@@ -190,5 +205,13 @@ namespace BPUtil
 		/// If not null or whitespace, this service name will override what was defined in the service's designer file.
 		/// </summary>
 		public string ServiceName = null;
+		/// <summary>
+		/// If true, <see cref="Logger.CatchAll()"/> will be called.
+		/// </summary>
+		public bool LoggerCatchAll = true;
+		/// <summary>
+		/// If provided, this action is called by AppInit and is expected to operate a command-line interface to the service.  The action is responsible for all console input and output and will be called when it is time for the service to run in command-line mode.  Once the action returns, the service is stopped and the program will exit.
+		/// </summary>
+		public Action LinuxShellInterface;
 	}
 }

@@ -9,7 +9,9 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+#if NETFRAMEWORK || NET6_0_WIN
 using System.Windows.Forms;
+#endif
 
 namespace BPUtil
 {
@@ -294,6 +296,7 @@ namespace BPUtil
 			return fi.FullName.Remove(fi.FullName.Length - fi.Extension.Length);
 		}
 		#endregion
+#if NETFRAMEWORK || NET6_0_WIN
 		#region System.Windows.Forms.Form
 		/// <summary>
 		/// Sets the location of the form to be near the mouse pointer, preferably not directly on top of the mouse pointer, but entirely on-screen if possible.
@@ -380,6 +383,7 @@ namespace BPUtil
 			pb.Value = value;               // Move to correct value
 		}
 		#endregion
+#endif
 		#region String
 		/// <summary>
 		/// Case-insensitive equals. Shorthand for Equals(other, StringComparison.OrdinalIgnoreCase).

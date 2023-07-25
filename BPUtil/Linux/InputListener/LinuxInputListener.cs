@@ -48,11 +48,6 @@ namespace BPUtil.Linux.InputListener
 				if (disposing)
 				{
 					// dispose managed state (managed objects).
-					if (listenerThread != null)
-					{
-						listenerThread.Abort();
-						listenerThread = null;
-					}
 				}
 
 				// free unmanaged resources (unmanaged objects) and override a finalizer below.
@@ -84,7 +79,7 @@ namespace BPUtil.Linux.InputListener
 			{
 				using (FileStream fs = new FileStream(inputDevicePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
 				{
-					while (true)
+					while (!disposedValue)
 					{
 						LinuxInputEvent e = new LinuxInputEvent(fs);
 						LinuxInputEventArgs args = new LinuxInputEventArgs(e);

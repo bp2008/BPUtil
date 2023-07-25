@@ -5,4 +5,7 @@
 	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'BPUtil6'">
 		<BaseIntermediateOutputPath>obj6</BaseIntermediateOutputPath>
 	</PropertyGroup>
+	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'BPUtil6Linux'">
+		<BaseIntermediateOutputPath>obj6l</BaseIntermediateOutputPath>
+	</PropertyGroup>
 </Project>

@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests", "UnitTests\Unit
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BPUtil6", "BPUtil\BPUtil6.csproj", "{CAC874C5-29DA-4701-87A6-1EAE5BA37117}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BPUtil6Linux", "BPUtil\BPUtil6Linux.csproj", "{834E14BE-291B-46C5-986F-97E2955C7BEF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{CAC874C5-29DA-4701-87A6-1EAE5BA37117}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CAC874C5-29DA-4701-87A6-1EAE5BA37117}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CAC874C5-29DA-4701-87A6-1EAE5BA37117}.Release|Any CPU.Build.0 = Release|Any CPU
+		{834E14BE-291B-46C5-986F-97E2955C7BEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{834E14BE-291B-46C5-986F-97E2955C7BEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{834E14BE-291B-46C5-986F-97E2955C7BEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{834E14BE-291B-46C5-986F-97E2955C7BEF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

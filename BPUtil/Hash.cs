@@ -25,7 +25,7 @@ namespace BPUtil
 				Array.Copy(salt, 0, salted, data.Length, salt.Length);
 				data = salted;
 			}
-			using (SHA512 sha = new SHA512CryptoServiceProvider())
+			using (SHA512 sha = SHA512.Create())
 			{
 				byte[] result = sha.ComputeHash(data);
 				return result;
@@ -67,7 +67,7 @@ namespace BPUtil
 				Array.Copy(salt, 0, salted, data.Length, salt.Length);
 				data = salted;
 			}
-			using (SHA256 sha = new SHA256CryptoServiceProvider())
+			using (SHA256 sha = SHA256.Create())
 			{
 				byte[] result = sha.ComputeHash(data);
 				return result;
@@ -121,7 +121,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public static byte[] GetSHA1Bytes(byte[] data)
 		{
-			using (SHA1 sha = new SHA1CryptoServiceProvider())
+			using (SHA1 sha = SHA1.Create())
 			{
 				byte[] result = sha.ComputeHash(data);
 				return result;
@@ -164,7 +164,7 @@ namespace BPUtil
 				Array.Copy(salt, 0, salted, data.Length, salt.Length);
 				data = salted;
 			}
-			using (MD5 md5 = new MD5CryptoServiceProvider())
+			using (MD5 md5 = MD5.Create())
 			{
 				byte[] result = md5.ComputeHash(data);
 				return result;
@@ -188,7 +188,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public static string GetMD5HexOfFile(string path)
 		{
-			using (HashAlgorithm hasher = new MD5CryptoServiceProvider())
+			using (HashAlgorithm hasher = MD5.Create())
 			{
 				using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
 				{

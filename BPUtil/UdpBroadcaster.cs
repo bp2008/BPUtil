@@ -96,16 +96,7 @@ namespace BPUtil
 		{
 			running = false;
 			sendWaiter.Set();
-			Try.Catch(() =>
-			{
-				if (receiver != null)
-					receiver.Abort();
-			});
-			Try.Catch(() =>
-			{
-				if (sender != null)
-					sender.Abort();
-			});
+			udp.Close();
 		}
 		/// <summary>
 		/// Broadcasts the specified packet.
@@ -149,7 +140,8 @@ namespace BPUtil
 			catch (ThreadAbortException) { }
 			catch (Exception ex)
 			{
-				Logger.Debug(ex);
+				if (running)
+					Logger.Debug(ex);
 			}
 		}
 		private void bgSender()
@@ -160,11 +152,13 @@ namespace BPUtil
 				{
 					try
 					{
-						sendWaiter.WaitOne();
-						byte[] data;
-						while (outgoingPacketQueue.TryDequeue(out data))
+						if (sendWaiter.WaitOne(500))
 						{
-							udp.Send(data, data.Length, sendEP);
+							byte[] data;
+							while (running && outgoingPacketQueue.TryDequeue(out data))
+							{
+								udp.Send(data, data.Length, sendEP);
+							}
 						}
 					}
 					catch (ThreadAbortException) { throw; }
@@ -178,7 +172,8 @@ namespace BPUtil
 			catch (ThreadAbortException) { }
 			catch (Exception ex)
 			{
-				Logger.Debug(ex);
+				if (running)
+					Logger.Debug(ex);
 			}
 		}
 	}

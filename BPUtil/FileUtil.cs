@@ -10,6 +10,7 @@ namespace BPUtil
 {
 	public static class FileUtil
 	{
+#if NETFRAMEWORK || NET6_0_WIN
 		/// <summary>
 		/// Allows "Full Control" permission to "Users".
 		/// </summary>
@@ -21,6 +22,7 @@ namespace BPUtil
 			FileInfo fi = new FileInfo(filePath);
 			fi.SetAccessControl(oFileSecurity);
 		}
+#endif
 
 		/// <summary>
 		/// Copies a directory and its contents to a new location.
