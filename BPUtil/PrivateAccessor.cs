@@ -75,7 +75,15 @@ namespace BPUtil
 		/// <returns></returns>
 		public static T CallMethod<T>(object obj, string name, params object[] param)
 		{
-			return (T)obj.GetType().GetMethod(name, instance_flags).Invoke(obj, param);
+			if (obj == null)
+				throw new ArgumentNullException(nameof(obj));
+			if (name == null)
+				throw new ArgumentNullException(nameof(name));
+			Type t = obj.GetType();
+			MethodInfo m = t.GetMethod(name, instance_flags);
+			if (m == null)
+				throw new ArgumentException("Unable to find method named \"" + name + "\" in type \"" + t.Name + "\" using BindingFlags " + instance_flags.GetAllMatchedFlagsStr());
+			return (T)m.Invoke(obj, param);
 		}
 		/// <summary>
 		/// Gets the value of the specified private static field.

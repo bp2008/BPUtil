@@ -502,7 +502,15 @@ namespace BPUtil.SimpleHttp
 							return; // End of stream was encountered. Very common with "Connection: keep-alive" when another request does not arrive.
 						readHeaders(tcpStream, httpHeaders);
 						if (string.IsNullOrWhiteSpace(hostName))
+						{
 							hostName = GetHeaderValue("host");
+							if (hostName != null)
+							{
+								string portSuffix = ":" + ((IPEndPoint)tcpClient.Client.LocalEndPoint).Port;
+								if (hostName.EndsWith(portSuffix))
+									hostName = hostName.Substring(0, hostName.Length - portSuffix.Length);
+							}
+						}
 						if (string.IsNullOrWhiteSpace(hostName))
 							hostName = null;
 						keepAliveRequested = "keep-alive".IEquals(GetHeaderValue("connection"));

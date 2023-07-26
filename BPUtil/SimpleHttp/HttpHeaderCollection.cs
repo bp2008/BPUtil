@@ -167,5 +167,26 @@ namespace BPUtil.SimpleHttp
 			}
 			return string.Join("-", words);
 		}
+		/// <summary>
+		/// Given a complete HTTP header ("Name: value"), attempts to assign the header to this collection.  Throw an exception upon failure.
+		/// </summary>
+		/// <param name="header">A complete HTTP header ("Name: value")</param>
+		public void AssignHeaderFromString(string header)
+		{
+			if (string.IsNullOrWhiteSpace(header))
+				throw new ApplicationException("Header string was null or whitespace.");
+
+			int separator = header.IndexOf(':');
+			if (separator == -1)
+				throw new ApplicationException("Invalid http header string: " + header);
+
+			string name = header.Substring(0, separator);
+			int pos = separator + 1;
+			while (pos < header.Length && header[pos] == ' ')
+				pos++; // strip any spaces
+
+			string value = header.Substring(pos);
+			this[name] = value;
+		}
 	}
 }

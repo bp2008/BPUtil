@@ -327,6 +327,37 @@ namespace BPUtil
 
 			return b.ToString();
 		}
+
+		/// <summary>
+		/// Replaces all line breaks in the string with '\n' for best linux compatibility.
+		/// </summary>
+		/// <param name="str">String to replace line breaks in.</param>
+		/// <returns>A copy of the string with all line breaks replaced.</returns>
+		public static string LinuxLineBreaks(string str)
+		{
+			return str.Replace("\r\n", "\n").Replace("\r", "\n");
+		}
+
+		/// <summary>
+		/// Replaces all line breaks in the string with '\r' for best Mac compatibility.
+		/// </summary>
+		/// <param name="str">String to replace line breaks in.</param>
+		/// <returns>A copy of the string with all line breaks replaced.</returns>
+		public static string MacLineBreaks(string str)
+		{
+			return str.Replace("\r\n", "\r").Replace("\n", "\r");
+		}
+
+		/// <summary>
+		/// Replaces all line breaks in the string with "\r\n" for best Windows compatibility.
+		/// </summary>
+		/// <param name="str">String to replace line breaks in.</param>
+		/// <returns>A copy of the string with all line breaks replaced.</returns>
+		public static string WindowsLineBreaks(string str)
+		{
+			return LinuxLineBreaks(str).Replace("\n", "\r\n");
+		}
+
 		/// <summary>
 		/// Based on .NET reference source.
 		/// </summary>
