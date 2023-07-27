@@ -47,7 +47,7 @@ namespace BPUtil
 		{
 			if (inputFile != null)
 				inputFile.Close();
-			inputFile = new StreamReader(new FileStream(fiInputFile.FullName, FileMode.OpenOrCreate, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete), Encoding.UTF8);
+			inputFile = new StreamReader(new FileStream(fiInputFile.FullName, FileMode.OpenOrCreate, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete), ByteUtil.Utf8NoBOM);
 			string line;
 			while ((line = inputFile.ReadLine()) != null)
 				AddLogLine(line);
@@ -147,6 +147,136 @@ namespace BPUtil
 		{
 			this.text = text;
 			this.lineIndex = lineIndex;
+		}
+	}
+	/// <summary>
+	/// <para>A log reader similar to StreamingLogReader that offers a simpler API and doesn't run its own thread, but also doesn't share resources with multiple consumers.</para>
+	/// <para>This reader is only capable of reading the application's regular log (see <see cref="Logger"/>) but is capable of transitioning seamlessly between log files as they roll over.</para>
+	/// <para>Not thread safe.</para>
+	/// </summary>
+	public class StreamingLogReader2 : IDisposable
+	{
+		private string lastFilePath = null;
+		private bool disposedValue;
+		private StreamReader streamReader;
+		/// <summary>
+		/// Opens the current log file (see <see cref="Logger"/>) and seeks to the position that is the given number of lines away from the end.
+		/// </summary>
+		/// <param name="initialLineCount">Number of lines of text that should be passed while seeking backwards from the end of the file.</param>
+		public StreamingLogReader2(uint initialLineCount = 100)
+		{
+			string filePathNow = Globals.ErrorFilePath;
+			// Open stream, seek backwards until [initialLineCount] lines are found.
+			FileStream fs = new FileStream(filePathNow, FileMode.OpenOrCreate, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+			try
+			{
+				byte[] buffer = new byte[256];
+				long offset = fs.Seek(0, SeekOrigin.End);
+				uint lineEndingsSeen = 0;
+				while (fs.Position > 0 && lineEndingsSeen < initialLineCount)
+				{
+					long toRead = Math.Min(buffer.Length, fs.Position);
+					fs.Seek(-toRead, SeekOrigin.Current);
+					fs.Read(buffer, 0, (int)toRead);
+
+					for (int i = (int)toRead - 1; i >= 0; i--)
+					{
+						if (buffer[i] == '\n')
+						{
+							lineEndingsSeen++;
+							if (lineEndingsSeen >= initialLineCount)
+								break;
+						}
+						offset--;
+					}
+					fs.Seek(offset, SeekOrigin.Begin);
+				}
+				// Create StreamReader at current position
+				streamReader = new StreamReader(fs, ByteUtil.Utf8NoBOM);
+				lastFilePath = filePathNow;
+			}
+			catch
+			{
+				fs.Close();
+				throw;
+			}
+		}
+		/// <summary>
+		/// <para>Reads from the current position to the end of the file, appending all text to the given <see cref="StringBuilder"/>.</para>
+		/// <para>If we're already (still) at the end of the file, no text will be inserted into the StringBuilder.</para>
+		/// <para>This method knows how to transition to the next log file when the current one is finished or deleted.</para>
+		/// </summary>
+		/// <param name="sb">StringBuilder to read text into.</param>
+		public void ReadInto(StringBuilder sb)
+		{
+			int chances = 3;
+			string line;
+			do
+			{
+				try
+				{
+					line = streamReader.ReadLine();
+					if (line != null)
+						sb.AppendLine(line);
+				}
+				catch
+				{
+					if (--chances > 0)
+					{
+						ReopenLatestLogFile();
+						line = "";
+					}
+					else
+						throw;
+				}
+			}
+			while (line != null);
+
+			string filePathNow = Globals.ErrorFilePath;
+			if (lastFilePath != filePathNow)
+			{
+				ReopenLatestLogFile();
+				ReadInto(sb);
+			}
+		}
+
+		private void ReopenLatestLogFile()
+		{
+			string filePathNow = Globals.ErrorFilePath;
+			streamReader.Close();
+			FileStream fs = new FileStream(filePathNow, FileMode.OpenOrCreate, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+			streamReader = new StreamReader(fs, ByteUtil.Utf8NoBOM);
+			lastFilePath = filePathNow;
+		}
+
+		protected virtual void Dispose(bool disposing)
+		{
+			if (!disposedValue)
+			{
+				if (disposing)
+				{
+					// dispose managed state (managed objects)
+					streamReader.Close();
+				}
+
+				// free unmanaged resources (unmanaged objects) and override finalizer
+				// set large fields to null
+				disposedValue = true;
+			}
+		}
+
+		// //  override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+		// ~StreamingLogReader2()
+		// {
+		//     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+		//     Dispose(disposing: false);
+		// }
+
+		public void Dispose()
+		{
+			// Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+			Dispose(disposing: true);
+			GC.SuppressFinalize(this);
 		}
 	}
 }
