@@ -119,6 +119,8 @@ namespace BPUtil
 #endif
 		}
 
+		private static EConsole c = EConsole.I;
+
 		/// <summary>
 		/// Scriptable interface for service management on Linux.  Requires systemd for service install and uninstall.
 		/// </summary>
@@ -143,19 +145,24 @@ namespace BPUtil
 			if (args.Length == 1)
 			{
 				Console.WriteLine();
-				Console.WriteLine(serviceName + " " + Globals.AssemblyVersion);
+				c.CyanLine(serviceName + " " + Globals.AssemblyVersion);
 
 				Console.WriteLine();
 				Console.WriteLine("Arguments:");
-				Console.WriteLine("\t" + "svc          - Run the service interactively");
+				ConsoleAppHelper.MaxCommandSize = 12;
+				ConsoleAppHelper.WriteUsageCommand("svc", "Run the service interactively.");
 				if (options.LinuxCommandLineInterface != null)
-					Console.WriteLine("\t" + "cmd          - Run the interactive command line interface");
-				Console.WriteLine("\t" + "install      - install service via systemd");
-				Console.WriteLine("\t" + "uninstall    - uninstall service via systemd");
+					ConsoleAppHelper.WriteUsageCommand("cmd", "Run the interactive command line interface.");
+				ConsoleAppHelper.WriteUsageCommand("install", "Install as service using systemd.");
+				ConsoleAppHelper.WriteUsageCommand("uninstall", "Uninstall as service using systemd.");
+				ConsoleAppHelper.WriteUsageCommand("status", "Display the service status.");
+				ConsoleAppHelper.WriteUsageCommand("start", "Start the service.");
+				ConsoleAppHelper.WriteUsageCommand("stop", "Stop the service.");
+				ConsoleAppHelper.WriteUsageCommand("restart", "Restart the service.");
 				if (settingsObj != null)
-					Console.WriteLine("\t" + "savesettings - save a copy of the settings.");
+					ConsoleAppHelper.WriteUsageCommand("savesettings", "Save a copy of the settings.");
 				Console.WriteLine();
-				Console.WriteLine("Data directory:\n\t" + Globals.WritableDirectoryBase);
+				c.Line("Data directory:").CyanLine("\t" + Globals.WritableDirectoryBase);
 				Console.WriteLine();
 			}
 			else if (args.Length > 1 && args[1] == "svc")
@@ -165,11 +172,11 @@ namespace BPUtil
 				{
 					if (invocationId != null)
 					{
-						Console.WriteLine("Running " + serviceName + " " + Globals.AssemblyVersion + " in systemd service mode (INVOCATION_ID=" + invocationId + ")");
+						c.CyanLine("Running " + serviceName + " " + Globals.AssemblyVersion + " in systemd service mode (INVOCATION_ID=" + invocationId + ")");
 						EventWaitHandle ewhExitSignal = new EventWaitHandle(false, EventResetMode.ManualReset);
 						AppDomain.CurrentDomain.ProcessExit += (sender, e) => { ewhExitSignal.Set(); };
 						ewhExitSignal.WaitOne();
-						Console.WriteLine("Received SIGTERM. " + serviceName + " will now shut down.");
+						c.CyanLine("Received SIGTERM. " + serviceName + " will now shut down.");
 					}
 					else
 					{
@@ -190,7 +197,7 @@ namespace BPUtil
 				if (options.LinuxCommandLineInterface != null)
 					options.LinuxCommandLineInterface();
 				else
-					Console.WriteLine("This program does not implement an interactive command line interface.");
+					c.RedLine("This program does not implement an interactive command line interface.");
 			}
 			else if (args.Length > 1 && args[1] == "install")
 			{
@@ -200,18 +207,34 @@ namespace BPUtil
 			{
 				UninstallLinuxSystemdService(serviceName);
 			}
+			else if (args.Length > 1 && args[1] == "status")
+			{
+				StatusLinuxSystemdService(serviceName);
+			}
+			else if (args.Length > 1 && args[1] == "start")
+			{
+				StartLinuxSystemdService(serviceName);
+			}
+			else if (args.Length > 1 && args[1] == "stop")
+			{
+				StopLinuxSystemdService(serviceName);
+			}
+			else if (args.Length > 1 && args[1] == "restart")
+			{
+				RestartLinuxSystemdService(serviceName);
+			}
 			else if (args.Length > 1 && args[1] == "savesettings")
 			{
 				if (settingsObj != null)
 				{
 					settingsObj.Save();
-					Console.WriteLine("Saved settings file in " + Globals.WritableDirectoryBase);
+					c.GreenLine("Saved settings file in " + Globals.WritableDirectoryBase);
 				}
 				else
-					Console.WriteLine("This program was not configured to use a standard settings file.");
+					c.RedLine("This program was not configured to use a standard settings file.");
 			}
 			else
-				Console.WriteLine("Unrecognized argument.");
+				c.RedLine("Unrecognized argument.");
 		}
 
 		/// <summary>
@@ -230,13 +253,10 @@ namespace BPUtil
 		/// <param name="serviceName">Name of the service.  If not provided, the entry assembly's name will be converted to lower case and used as the name.</param>
 		public static void InstallLinuxSystemdService(string serviceName = null)
 		{
-			if (string.IsNullOrWhiteSpace(serviceName))
-				serviceName = DefaultLinuxSystemdServiceName;
-			serviceName = StringUtil.MakeSafeForFileName(serviceName);
-			string servicePath = "/etc/systemd/system/" + serviceName + ".service";
+			GetServiceInfo(ref serviceName, out string servicePath);
 
 			if (File.Exists(servicePath))
-				Console.WriteLine("Service was already installed. Service unit configuration file: " + servicePath);
+				c.CyanLine("Service was already installed. Service unit configuration file: " + servicePath);
 			else
 			{
 				try
@@ -259,42 +279,30 @@ WantedBy=multi-user.target";
 					cfgFile = StringUtil.LinuxLineBreaks(cfgFile);
 					File.WriteAllText(servicePath, cfgFile, ByteUtil.Utf8NoBOM);
 
-					Console.WriteLine("Running systemctl enable \"" + serviceName + "\"");
-					bool bThreadAbort = false;
-					int exitCode = ProcessRunner.RunProcessAndWait("systemctl", "enable \"" + serviceName + "\"", out string std, out string err, ref bThreadAbort);
-
-					if (!string.IsNullOrWhiteSpace(std))
-						Console.WriteLine(std);
-					if (!string.IsNullOrWhiteSpace(err))
-						Console.WriteLine(err);
+					int exitCode = RunSystemctl("enable", serviceName);
 
 					if (exitCode == 0)
 					{
-						Console.WriteLine("Install completed and service enabled for automatic startup. Service unit configuration file: " + servicePath);
+						c.GreenLine("Install completed and service enabled for automatic startup. Service unit configuration file: " + servicePath);
 					}
 					else
 					{
-						Console.WriteLine("Install completed, but we were unable to enable the service. Service unit configuration file: " + servicePath);
+						c.RedLine("Install completed, but we were unable to enable the service. Service unit configuration file: " + servicePath);
 					}
 
-					Console.BackgroundColor = ConsoleColor.Black;
-					Console.ForegroundColor = ConsoleColor.Gray;
-					Console.WriteLine("----------------------------");
-					Console.WriteLine("Service management commands:");
-					Console.ForegroundColor = ConsoleColor.White;
-					Console.WriteLine("sudo systemctl enable " + serviceName + "   # Enable service for automatic startup");
-					Console.WriteLine("sudo systemctl disable " + serviceName + "  # Disable service for automatic startup");
-					Console.WriteLine("sudo systemctl status " + serviceName);
-					Console.WriteLine("sudo systemctl start " + serviceName);
-					Console.WriteLine("sudo systemctl stop " + serviceName);
-					Console.WriteLine("sudo systemctl restart " + serviceName);
-					Console.ForegroundColor = ConsoleColor.Gray;
-					Console.WriteLine("----------------------------");
-					Console.ResetColor();
+					c.Line("----------------------------");
+					c.Line("Service management commands:");
+					c.Yellow("sudo systemctl enable " + serviceName).Line("   # Enable service for automatic startup");
+					c.Yellow("sudo systemctl disable " + serviceName).Line("  # Disable service for automatic startup");
+					c.Yellow("sudo systemctl status " + serviceName).Line();
+					c.Yellow("sudo systemctl start " + serviceName).Line();
+					c.Yellow("sudo systemctl stop " + serviceName).Line();
+					c.Yellow("sudo systemctl restart " + serviceName).Line();
+					c.Line("----------------------------");
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine("Failed to install. " + ex.ToHierarchicalString());
+					c.RedLine("Failed to install. " + ex.ToHierarchicalString());
 				}
 			}
 		}
@@ -305,50 +313,111 @@ WantedBy=multi-user.target";
 		/// <param name="serviceName">Name of the service.  If not provided, the entry assembly's name will be converted to lower case and used as the name.</param>
 		public static void UninstallLinuxSystemdService(string serviceName = null)
 		{
-			if (string.IsNullOrWhiteSpace(serviceName))
-				serviceName = DefaultLinuxSystemdServiceName;
-			serviceName = StringUtil.MakeSafeForFileName(serviceName);
-			string servicePath = "/etc/systemd/system/" + serviceName + ".service";
-
+			GetServiceInfo(ref serviceName, out string servicePath);
 			if (File.Exists(servicePath))
 			{
 				try
 				{
 					File.Delete(servicePath);
-					Console.WriteLine("Uninstall completed. Service unit configuration file was removed: " + servicePath);
+					c.GreenLine("Uninstall completed. Service unit configuration file was removed: " + servicePath);
 
-					Console.WriteLine("Running systemctl disable \"" + serviceName + "\"");
-					bool bThreadAbort = false;
-					int exitCode = ProcessRunner.RunProcessAndWait("systemctl", "disable \"" + serviceName + "\"", out string std, out string err, ref bThreadAbort);
-
-					if (!string.IsNullOrWhiteSpace(std))
-						Console.WriteLine(std);
-					if (!string.IsNullOrWhiteSpace(err))
-						Console.WriteLine(err);
+					int exitCode = RunSystemctl("disable", serviceName);
 
 					if (exitCode == 0)
 					{
-						Console.WriteLine("Service disabled.");
+						c.GreenLine("Service disabled.");
 					}
 					else
 					{
-						Console.WriteLine("Unable to disable the service.");
+						c.RedLine("Unable to disable the service.");
 					}
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine("Failed to uninstall. " + ex.ToHierarchicalString());
+					c.RedLine("Failed to uninstall. " + ex.ToHierarchicalString());
 				}
 			}
 			else
-				Console.WriteLine("Unable to uninstall. Service unit configuration file was not found: " + servicePath);
+				c.YellowLine("Unable to uninstall. Service unit configuration file was not found: " + servicePath);
+		}
+		/// <summary>
+		/// Writes to console the status of the service in the systemd service manager.
+		/// </summary>
+		/// <param name="serviceName">Name of the service.  If not provided, the entry assembly's name will be converted to lower case and used as the name.</param>
+		public static void StatusLinuxSystemdService(string serviceName = null)
+		{
+			GetServiceInfo(ref serviceName, out string servicePath);
+
+			int exitCode = RunSystemctl("status", serviceName);
+
+			if (exitCode != 0)
+				c.RedLine("systemctl exited with code " + exitCode);
+		}
+		/// <summary>
+		/// Starts the service in the systemd service manager.
+		/// </summary>
+		/// <param name="serviceName">Name of the service.  If not provided, the entry assembly's name will be converted to lower case and used as the name.</param>
+		public static void StartLinuxSystemdService(string serviceName = null)
+		{
+			GetServiceInfo(ref serviceName, out string servicePath);
+
+			int exitCode = RunSystemctl("start", serviceName);
+
+			if (exitCode != 0)
+				c.RedLine("systemctl exited with code " + exitCode);
+		}
+		/// <summary>
+		/// Stop the service in the systemd service manager.
+		/// </summary>
+		/// <param name="serviceName">Name of the service.  If not provided, the entry assembly's name will be converted to lower case and used as the name.</param>
+		public static void StopLinuxSystemdService(string serviceName = null)
+		{
+			GetServiceInfo(ref serviceName, out string servicePath);
+
+			int exitCode = RunSystemctl("stop", serviceName);
+
+			if (exitCode != 0)
+				c.RedLine("systemctl exited with code " + exitCode);
+		}
+		/// <summary>
+		/// Restarts the service in the systemd service manager.
+		/// </summary>
+		/// <param name="serviceName">Name of the service.  If not provided, the entry assembly's name will be converted to lower case and used as the name.</param>
+		public static void RestartLinuxSystemdService(string serviceName = null)
+		{
+			GetServiceInfo(ref serviceName, out string servicePath);
+
+			int exitCode = RunSystemctl("restart", serviceName);
+
+			if (exitCode != 0)
+				c.RedLine("systemctl exited with code " + exitCode);
+		}
+		private static int RunSystemctl(string command, string serviceName)
+		{
+			c.YellowLine("Running systemctl " + command + " \"" + serviceName + "\"");
+			bool bThreadAbort = false;
+			int exitCode = ProcessRunner.RunProcessAndWait("systemctl", command + " \"" + serviceName + "\"", out string std, out string err, ref bThreadAbort);
+
+			if (!string.IsNullOrWhiteSpace(std))
+				c.GreenLine(std);
+			if (!string.IsNullOrWhiteSpace(err))
+				c.RedLine(err);
+
+			return exitCode;
+		}
+		private static void GetServiceInfo(ref string serviceName, out string servicePath)
+		{
+			if (string.IsNullOrWhiteSpace(serviceName))
+				serviceName = DefaultLinuxSystemdServiceName;
+			serviceName = StringUtil.MakeSafeForFileName(serviceName);
+			servicePath = "/etc/systemd/system/" + serviceName + ".service";
 		}
 
 		private static void btnOpenDataFolder_Click(object sender, EventArgs e)
 		{
 			ProcessRunner.Start(Globals.WritableDirectoryBase);
 		}
-#endregion
+		#endregion
 	}
 	/// <summary>
 	/// Options for <see cref="AppInit.WindowsService{ServiceType}(WindowsServiceInitOptions)"/>.

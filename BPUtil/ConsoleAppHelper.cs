@@ -38,5 +38,43 @@ namespace BPUtil
 			string dqWrap = wrapInDoubleQuotes ? "\"" : "";
 			return dqWrap + str.Replace("\\", "\\\\").Replace("\"", "\\\"") + dqWrap;
 		}
+		/// <summary>
+		/// Gets or sets the max command size in characters for the <c>WriteUsageCommand</c> overload that does not accept a <c>commandSize</c> argument.
+		/// </summary>
+		public static byte MaxCommandSize = 12;
+		/// <summary>
+		/// Writes a usage command with the given name and description, and a max command size of <see cref="MaxCommandSize"/>.
+		/// </summary>
+		/// <param name="command">Command string.</param>
+		/// <param name="commandDescription">Description of the command.</param>
+		public static void WriteUsageCommand(string command, string commandDescription)
+		{
+			WriteUsageCommand(MaxCommandSize, command, commandDescription);
+		}
+		/// <summary>
+		/// Writes a usage command with the given name and description.
+		/// </summary>
+		/// <param name="commandSize">Max length of a command string (strings are padded for consistent spacing).</param>
+		/// <param name="command">Command string.</param>
+		/// <param name="commandDescription">Description of the command.</param>
+		public static void WriteUsageCommand(int commandSize, string command, string commandDescription)
+		{
+			int leftMarginSize = 4 + commandSize + 2;
+			int descriptionLineSize = Console.BufferWidth - leftMarginSize;
+			if (descriptionLineSize < 16)
+			{
+				leftMarginSize = 4;
+				descriptionLineSize = 256;
+			}
+			EConsole.I.Write("    ").Yellow(command.PadRight(commandSize, ' ')).Write("- ");
+
+			List<string> segments = StringUtil.SplitIntoSegments(commandDescription, descriptionLineSize, true);
+			if (segments.Count > 0)
+			{
+				EConsole.I.Line(segments[0]);
+				for (int i = 1; i < segments.Count; i++)
+					EConsole.I.Write(new string(' ', leftMarginSize)).Line(segments[i]);
+			}
+		}
 	}
 }

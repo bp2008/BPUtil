@@ -2017,6 +2017,7 @@ namespace BPUtil.SimpleHttp
 				}
 				else
 				{
+#if NETFRAMEWORK
 					using (BPUtil.SimpleHttp.Crypto.CryptContext ctx = new BPUtil.SimpleHttp.Crypto.CryptContext())
 					{
 						ctx.Open();
@@ -2034,20 +2035,22 @@ namespace BPUtil.SimpleHttp
 						byte[] certData = ssl_certificate.Export(X509ContentType.Pfx, autoCertPassword);
 						File.WriteAllBytes(fiCert.FullName, certData);
 					}
+#elif NET6_0
 					// Native cert generator. .NET 4.7.2 required.
-					//using (System.Security.Cryptography.RSA key = System.Security.Cryptography.RSA.Create(2048))
-					//{
-					//	CertificateRequest request = new CertificateRequest("cn=localhost", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+					using (System.Security.Cryptography.RSA key = System.Security.Cryptography.RSA.Create(2048))
+					{
+						CertificateRequest request = new CertificateRequest("cn=localhost", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
 
-					//	SubjectAlternativeNameBuilder sanBuilder = new SubjectAlternativeNameBuilder();
-					//	sanBuilder.AddDnsName("localhost");
-					//	request.CertificateExtensions.Add(sanBuilder.Build());
+						SubjectAlternativeNameBuilder sanBuilder = new SubjectAlternativeNameBuilder();
+						sanBuilder.AddDnsName("localhost");
+						request.CertificateExtensions.Add(sanBuilder.Build());
 
-					//	ssl_certificate = request.CreateSelfSigned(DateTime.Today.AddDays(-1), DateTime.Today.AddYears(100));
+						ssl_certificate = request.CreateSelfSigned(DateTime.Today.AddDays(-1), DateTime.Today.AddYears(100));
 
-					//	byte[] certData = ssl_certificate.Export(X509ContentType.Pfx);
-					//	File.WriteAllBytes(fiCert.FullName, certData);
-					//}
+						byte[] certData = ssl_certificate.Export(X509ContentType.Pfx, autoCertPassword);
+						File.WriteAllBytes(fiCert.FullName, certData);
+					}
+#endif
 				}
 				return ssl_certificate;
 			}
@@ -2102,7 +2105,7 @@ namespace BPUtil.SimpleHttp
 					{
 						// This listener needs to change its AllowedConnectionTypes
 						l.Binding.AllowedConnectionTypes = socketLevelMatch.AllowedConnectionTypes;
-						SimpleHttpLogger.LogVerbose("Modified AllowedConnectionTypes on " + l.ToString());
+						SocketLog("Modified AllowedConnectionTypes on " + l.ToString());
 						continue;
 					}
 					// This listener needs to stop.
@@ -2127,15 +2130,22 @@ namespace BPUtil.SimpleHttp
 			foreach (ListenerData listener in toStop)
 			{
 				listener.Stop();
-				SimpleHttpLogger.LogVerbose("Stopped " + listener.ToString());
+				SocketLog("Stopped " + listener.ToString());
 			}
 
 			// Start new listeners
 			foreach (ListenerData listener in toStart)
 			{
 				listener.Run();
-				SimpleHttpLogger.LogVerbose("Started " + listener.ToString());
+				SocketLog("Started " + listener.ToString());
 			}
+		}
+		private void SocketLog(string str)
+		{
+			if (shouldLogSocketBind())
+				SimpleHttpLogger.Log(str);
+			else
+				SimpleHttpLogger.LogVerbose(str);
 		}
 
 		/// <summary>
@@ -2225,6 +2235,14 @@ namespace BPUtil.SimpleHttp
 		/// <param name="remoteIpAddress"></param>
 		/// <returns></returns>
 		public virtual bool IsTrustedProxyServer(IPAddress remoteIpAddress)
+		{
+			return false;
+		}
+		/// <summary>
+		/// If this method returns true, socket bind events will be logged normally.  If false, they will use the LogVerbose call.
+		/// </summary>
+		/// <returns></returns>
+		public virtual bool shouldLogSocketBind()
 		{
 			return false;
 		}

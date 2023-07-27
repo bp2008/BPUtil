@@ -144,7 +144,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// If provided, all web requests will attempt basic authentication using these credentials.
+		/// If provided, all web requests will attempt basic or digest authentication using these credentials.
 		/// </summary>
 		public NetworkCredential BasicAuthCredentials
 		{
