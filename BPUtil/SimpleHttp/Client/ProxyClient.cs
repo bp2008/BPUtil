@@ -19,6 +19,10 @@ namespace BPUtil.SimpleHttp.Client
 	public class ProxyClient
 	{
 		/// <summary>
+		/// A pool which provides byte arrays with length of 65536.
+		/// </summary>
+		private static ObjectPool<byte[]> bufferPool = new ObjectPool<byte[]>(() => new byte[65536], 256);
+		/// <summary>
 		/// Web origin which this client is bound to, all lower case. e.g. "https://example.com"
 		/// </summary>
 		public readonly string Origin;
@@ -415,23 +419,40 @@ namespace BPUtil.SimpleHttp.Client
 			// PHASE 5: WRITE RESPONSE //
 			/////////////////////////////
 			// Write response status line
+			responseStatusLine.Version = "1.1"; // We do not speak HTTP 1.0, but the server we talked to might.
 			options.bet?.Start("Proxy Write Response: " + decision);
 			Stream outgoingStream = p.tcpStream;
 			p.responseWritten = true;
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, responseStatusLine + "\r\n", snoopy);
 
 			// Write response headers
+			bool wrapOutputStreamChunked = false;
 			string responseConnectionHeader;
 			if (ourClientWantsWebsocket)
 				responseConnectionHeader = "upgrade";
 			else if (ourClientWantsConnectionClose)
 				responseConnectionHeader = "close";
 			else
+			{
 				responseConnectionHeader = "keep-alive";
+				p.keepAlive = true;
+			}
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Connection: " + responseConnectionHeader + "\r\n", snoopy);
 
 			if (ourClientWantsWebsocket)
 				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Upgrade: websocket\r\n", snoopy);
+			else
+			{
+				if (p.keepAlive)
+				{
+					if (decision != ProxyResponseDecision.ContentLength && decision != ProxyResponseDecision.NoBody)
+					{
+						// No content-length was provided, and there is assumed to be a response body.  We must use "Transfer-Encoding: chunked" for our response.
+						_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Transfer-Encoding: chunked\r\n", snoopy);
+						wrapOutputStreamChunked = true;
+					}
+				}
+			}
 
 			options.RaiseBeforeResponseHeadersSent(this, proxyHttpHeaders);
 
@@ -456,19 +477,6 @@ namespace BPUtil.SimpleHttp.Client
 				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, key + ": " + value + "\r\n", snoopy);
 			}
 
-			bool wrapOutputStreamChunked = false;
-			if (responseConnectionHeader == "keep-alive")
-			{
-				// This MUST occur after all other headers are written.
-				p.keepAlive = true;
-				if (decision != ProxyResponseDecision.ContentLength && decision != ProxyResponseDecision.NoBody)
-				{
-					// No content-length was provided, and there is assumed to be a response body.  We must use "Transfer-Encoding: chunked" for our response.
-					_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Transfer-Encoding: chunked\r\n", snoopy);
-					wrapOutputStreamChunked = true;
-				}
-			}
-
 			// Write blank line to indicate the end of the response headers
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "\r\n", snoopy);
 
@@ -480,15 +488,15 @@ namespace BPUtil.SimpleHttp.Client
 			// Handle the rest of the response based on the decision made earlier.
 			if (decision == ProxyResponseDecision.ContentLength)
 			{
-				CopyNBytes(proxyContentLength, ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy);
+				await CopyNBytesAsync(proxyContentLength, ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy);
 			}
 			else if (decision == ProxyResponseDecision.ReadChunked)
 			{
-				CopyChunkedResponse(ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy);
+				await CopyChunkedResponseAsync(ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy);
 			}
 			else if (decision == ProxyResponseDecision.UntilClosed)
 			{
-				ProxyResponseToClient(proxyStream, outgoingStream, snoopy);
+				await ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy);
 			}
 			else if (decision == ProxyResponseDecision.Websocket)
 			{
@@ -496,7 +504,7 @@ namespace BPUtil.SimpleHttp.Client
 				_ = ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy);
 
 				// The current thread will handle additional incoming data from our client and proxy it to the remote server.
-				CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy);
 			}
 			else if (decision == ProxyResponseDecision.NoBody)
 			{
@@ -699,136 +707,180 @@ namespace BPUtil.SimpleHttp.Client
 		}
 		private static void CopyStreamUntilClosed(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
-			byte[] buf = new byte[65536];
-			int read = 1;
-			while (read > 0)
+			byte[] buf = bufferPool.GetObject();
+			try
 			{
-				read = source.Read(buf, 0, buf.Length);
-				if (read > 0)
-					_ProxyData(Direction, target, buf, read, snoopy);
+				int read = 1;
+				while (read > 0)
+				{
+					read = source.Read(buf, 0, buf.Length);
+					if (read > 0)
+						_ProxyData(Direction, target, buf, read, snoopy);
+				}
+			}
+			finally
+			{
+				bufferPool.PutObject(buf);
 			}
 		}
 		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
-			byte[] buf = new byte[65536];
-			int read = 1;
-			while (read > 0)
+			byte[] buf = bufferPool.GetObject();
+			try
 			{
-				read = await source.ReadAsync(buf, 0, buf.Length).ConfigureAwait(false);
-				if (read > 0)
-					await _ProxyDataAsync(Direction, target, buf, read, snoopy).ConfigureAwait(false);
+				int read = 1;
+				while (read > 0)
+				{
+					read = await source.ReadAsync(buf, 0, buf.Length).ConfigureAwait(false);
+					if (read > 0)
+						await _ProxyDataAsync(Direction, target, buf, read, snoopy).ConfigureAwait(false);
+				}
+			}
+			finally
+			{
+				bufferPool.PutObject(buf);
 			}
 		}
 		private static long CopyNBytes(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
 			long totalProxied = 0;
-			byte[] buf = new byte[65536];
-			int read = 1;
-			while (read > 0 && totalProxied < N)
+			byte[] buf = bufferPool.GetObject();
+			try
 			{
-				read = source.Read(buf, 0, (int)Math.Min(N - totalProxied, buf.Length));
-				if (read > 0)
-					_ProxyData(Direction, target, buf, read, snoopy);
-				totalProxied += read;
+				int read = 1;
+				while (read > 0 && totalProxied < N)
+				{
+					read = source.Read(buf, 0, (int)Math.Min(N - totalProxied, buf.Length));
+					if (read > 0)
+						_ProxyData(Direction, target, buf, read, snoopy);
+					totalProxied += read;
+				}
+				return totalProxied;
 			}
-			return totalProxied;
+			finally
+			{
+				bufferPool.PutObject(buf);
+			}
 		}
 		private static async Task<long> CopyNBytesAsync(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
 			long totalProxied = 0;
-			byte[] buf = new byte[65536];
-			int read = 1;
-			while (read > 0 && totalProxied < N)
+			byte[] buf = bufferPool.GetObject();
+			try
 			{
-				read = await source.ReadAsync(buf, 0, (int)Math.Min(N - totalProxied, buf.Length)).ConfigureAwait(false);
-				if (read > 0)
-					await _ProxyDataAsync(Direction, target, buf, read, snoopy);
-				totalProxied += read;
+				int read = 1;
+				while (read > 0 && totalProxied < N)
+				{
+					read = await source.ReadAsync(buf, 0, (int)Math.Min(N - totalProxied, buf.Length)).ConfigureAwait(false);
+					if (read > 0)
+						await _ProxyDataAsync(Direction, target, buf, read, snoopy);
+					totalProxied += read;
+				}
+				return totalProxied;
 			}
-			return totalProxied;
+			finally
+			{
+				bufferPool.PutObject(buf);
+			}
 		}
 		private static void CopyChunkedResponse(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
-			byte[] buf = new byte[65536];
-			int bytesRead;
-			while (true)
+			byte[] buf = bufferPool.GetObject();
+			try
 			{
-				// Read chunk size
-				string chunkSizeLine = HttpProcessor.streamReadLine(source);
-				if (chunkSizeLine == null)
-					break;
-
-				int chunkSize = int.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
-
-				// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
-				// Write chunk size
-				//byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
-				//_ProxyData(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy);
-
-				// Copy chunk data
-				int bytesRemaining = chunkSize;
-				while (bytesRemaining > 0)
+				int bytesRead;
+				while (true)
 				{
-					bytesRead = source.Read(buf, 0, Math.Min(buf.Length, bytesRemaining));
-					if (bytesRead == 0)
-						throw new EndOfStreamException();
+					// Read chunk size
+					string chunkSizeLine = HttpProcessor.streamReadLine(source);
+					if (chunkSizeLine == null)
+						break;
 
-					_ProxyData(ProxyDataDirection.ResponseFromServer, target, buf, bytesRead, snoopy);
-					bytesRemaining -= bytesRead;
+					int chunkSize = int.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
+
+					// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
+					// Write chunk size
+					//byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
+					//_ProxyData(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy);
+
+					// Copy chunk data
+					int bytesRemaining = chunkSize;
+					while (bytesRemaining > 0)
+					{
+						bytesRead = source.Read(buf, 0, Math.Min(buf.Length, bytesRemaining));
+						if (bytesRead == 0)
+							throw new EndOfStreamException();
+
+						_ProxyData(ProxyDataDirection.ResponseFromServer, target, buf, bytesRead, snoopy);
+						bytesRemaining -= bytesRead;
+					}
+
+					// Read and write chunk trailer
+					string trailerLine = HttpProcessor.streamReadLine(source);
+					if (trailerLine != "")
+						throw new InvalidDataException();
+
+					// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
+					//byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
+					//_ProxyData(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy);
+
+					if (chunkSize == 0)
+						break;
 				}
-
-				// Read and write chunk trailer
-				string trailerLine = HttpProcessor.streamReadLine(source);
-				if (trailerLine != "")
-					throw new InvalidDataException();
-
-				// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
-				//byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
-				//_ProxyData(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy);
-
-				if (chunkSize == 0)
-					break;
+			}
+			finally
+			{
+				bufferPool.PutObject(buf);
 			}
 		}
 		private static async Task CopyChunkedResponseAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
-			byte[] buf = new byte[65536];
-			int bytesRead;
-			while (true)
+			byte[] buf = bufferPool.GetObject();
+			try
 			{
-				// Read chunk size
-				string chunkSizeLine = HttpProcessor.streamReadLine(source);
-				if (chunkSizeLine == null)
-					break;
-
-				int chunkSize = int.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
-
-				// Write chunk size
-				byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
-				await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy).ConfigureAwait(false);
-
-				// Copy chunk data
-				int bytesRemaining = chunkSize;
-				while (bytesRemaining > 0)
+				int bytesRead;
+				while (true)
 				{
-					bytesRead = await source.ReadAsync(buf, 0, Math.Min(buf.Length, bytesRemaining)).ConfigureAwait(false);
-					if (bytesRead == 0)
-						throw new EndOfStreamException();
+					// Read chunk size
+					string chunkSizeLine = HttpProcessor.streamReadLine(source);
+					if (chunkSizeLine == null)
+						break;
 
-					await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, buf, bytesRead, snoopy).ConfigureAwait(false);
-					bytesRemaining -= bytesRead;
+					int chunkSize = int.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
+
+					// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
+					// Write chunk size
+					//byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
+					//await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy).ConfigureAwait(false);
+
+					// Copy chunk data
+					int bytesRemaining = chunkSize;
+					while (bytesRemaining > 0)
+					{
+						bytesRead = await source.ReadAsync(buf, 0, Math.Min(buf.Length, bytesRemaining)).ConfigureAwait(false);
+						if (bytesRead == 0)
+							throw new EndOfStreamException();
+
+						await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, buf, bytesRead, snoopy).ConfigureAwait(false);
+						bytesRemaining -= bytesRead;
+					}
+
+					// Read and write chunk trailer
+					string trailerLine = HttpProcessor.streamReadLine(source);
+					if (trailerLine != "")
+						throw new InvalidDataException();
+
+					// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
+					//byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
+					//await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy).ConfigureAwait(false);
+
+					if (chunkSize == 0)
+						break;
 				}
-
-				// Read and write chunk trailer
-				string trailerLine = HttpProcessor.streamReadLine(source);
-				if (trailerLine != "")
-					throw new InvalidDataException();
-
-				byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
-				await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy).ConfigureAwait(false);
-
-				if (chunkSize == 0)
-					break;
+			}
+			finally
+			{
+				bufferPool.PutObject(buf);
 			}
 		}
 
@@ -889,6 +941,13 @@ namespace BPUtil.SimpleHttp.Client
 			/// Original string sent into the constructor.
 			/// </summary>
 			public string OriginalStatusLine;
+			/// <summary>
+			/// Constructs an empty HttpResponseStatusLine.
+			/// </summary>
+			public HttpResponseStatusLine() { }
+			/// <summary>
+			/// Constructs an HttpResponseStatusLine from a string that was the first line of an HTTP response.
+			/// </summary>
 			public HttpResponseStatusLine(string line)
 			{
 				OriginalStatusLine = line;
@@ -900,15 +959,15 @@ namespace BPUtil.SimpleHttp.Client
 				else
 					throw new ArgumentException("Invalid HTTP response status line does begin with \"HTTP/\"", "line");
 				StatusCode = parts[1];
-				StatusText = string.Join(" ", line.Skip(2));
+				StatusText = string.Join(" ", parts.Skip(2));
 			}
 			/// <summary>
-			/// Gets <see cref="OriginalStatusLine"/>.
+			/// Builds the status line from the current <see cref="Version"/>, <see cref="StatusCode"/>, and <see cref="StatusText"/> fields.
 			/// </summary>
 			/// <returns></returns>
 			public override string ToString()
 			{
-				return OriginalStatusLine;
+				return "HTTP/" + Version + " " + StatusCode + " " + StatusText;
 			}
 		}
 		public class KeepAliveHeader
