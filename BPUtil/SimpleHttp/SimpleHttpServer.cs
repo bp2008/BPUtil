@@ -306,6 +306,16 @@ namespace BPUtil.SimpleHttp
 				return remoteIPAddressInt;
 			}
 		}
+		/// <summary>
+		/// Gets the true remote IP address of the client, directly from the TcpClient's socket, without regard for HTTP headers from proxy servers. If the address is somehow unavailable, an exception will be thrown.
+		/// </summary>
+		public IPAddress TrueRemoteIPAddress
+		{
+			get
+			{
+				return ((IPEndPoint)tcpClient.Client.RemoteEndPoint).Address;
+			}
+		}
 		#endregion
 
 		/// <summary>
@@ -520,7 +530,7 @@ namespace BPUtil.SimpleHttp
 							string headerValue = GetHeaderValue("x-real-ip");
 							if (!string.IsNullOrWhiteSpace(headerValue))
 							{
-								if (srv.IsTrustedProxyServer(originalRemoteIp))
+								if (srv.IsTrustedProxyServer(this, originalRemoteIp))
 								{
 									headerValue = headerValue.Trim();
 									if (IPAddress.TryParse(headerValue, out IPAddress addr))
@@ -533,8 +543,10 @@ namespace BPUtil.SimpleHttp
 							string headerValue = GetHeaderValue("x-forwarded-for");
 							if (!string.IsNullOrWhiteSpace(headerValue))
 							{
-								if (srv.IsTrustedProxyServer(originalRemoteIp))
+								if (srv.IsTrustedProxyServer(this, originalRemoteIp))
 								{
+									// Because we trust the source of the header, we must trust that they validated the chain of IP addresses all the way back to the root.
+									// Therefore we should get the leftmost address; this is the true client IP.
 									headerValue = headerValue.Split(',').FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
 									if (headerValue != null)
 									{
@@ -1211,88 +1223,11 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		/// <param name="newUrl">The URL to proxy the original request to.</param>
 		/// <param name="options">Optional options to control the behavior of the proxy request.</param>
-		public async Task ProxyToAsync(string newUrl, ProxyOptions options = null)
+		public async Task ProxyToAsync(string newUrl, Client.ProxyOptions options = null)
 		{
 			options?.bet?.Start("Entering ProxyToAsync");
 			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), options);
 			options?.bet?.Stop();
-		}
-		public class ProxyOptions
-		{
-			private static long counter = 0;
-
-			/// <summary>
-			/// Unique identifier for this request. Counter starts at 0 each time the program is launched.
-			/// </summary>
-			public readonly long RequestId = Interlocked.Increment(ref counter);
-			/// <summary>
-			/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds.
-			/// </summary>
-			public int networkTimeoutMs = 60000;
-			/// <summary>
-			/// [Default: false] If true, certificate validation will be disabled for outgoing https connections.
-			/// </summary>
-			public bool acceptAnyCert = false;
-			/// <summary>
-			/// [Default: null] If non-null, proxied communication will be copied into this object so you can snoop on it.
-			/// </summary>
-			public ProxyDataBuffer snoopy = null;
-			/// <summary>
-			/// [Default: null] The value of the host header, also used in SSL authentication. If null or whitespace, it is set from the [newUrl] parameter.
-			/// </summary>
-			public string host = null;
-			/// <summary>
-			/// [Default: null] Optional event timer for collecting timing data.
-			/// </summary>
-			public BasicEventTimer bet = null;
-			/// <summary>
-			/// [Default: true] If true, then this proxy utility will gracefully handle connection failure by responding with "504 Gateway Timeout".  If false, an exception will be thrown upon gateway timeout.
-			/// </summary>
-			public bool allowGatewayTimeoutResponse = true;
-			/// <summary>
-			/// [Default: true] Disable this if the server you're proxying to does not handle "Connection: keep-alive" properly.  For example, some servers may use "Connection: keep-alive" without providing any means to know when the response is completed, which can cause the proxy request to fail.  Similarly, some web servers may associate user/session data with a connection such that the proxied site could malfunction or leak data.  It is slower, but safer, to disable [allowConnectionKeepalive].
-			/// </summary>
-			public bool allowConnectionKeepalive = true;
-
-			/// <summary>
-			/// A StringBuilder suitable for logging operations for one Proxy request.
-			/// </summary>
-			public StringBuilder log = new StringBuilder();
-
-			/// <summary>
-			/// If true, a "Server-Timing" header will added to the response including proxy timing details. If a <see cref="bet"/> instance is not provided, one will be automatically created.
-			/// </summary>
-			public bool includeServerTimingHeader = false;
-			/// <summary>
-			/// An event that is raised before response headers are proxied from our client to the remote server, allowing for those headers to be viewed or modified.
-			/// </summary>
-			public event EventHandler<HttpHeaderCollection> BeforeRequestHeadersSent = delegate { };
-			/// <summary>
-			/// An event that is raised before response headers are sent to from the remote server to our client, allowing for those headers to be viewed or modified.
-			/// </summary>
-			public event EventHandler<HttpHeaderCollection> BeforeResponseHeadersSent = delegate { };
-			internal void RaiseBeforeRequestHeadersSent(object sender, HttpHeaderCollection headers)
-			{
-				try
-				{
-					BeforeRequestHeadersSent(sender, headers);
-				}
-				catch (Exception ex)
-				{
-					Logger.Debug(ex);
-				}
-			}
-			internal void RaiseBeforeResponseHeadersSent(object sender, HttpHeaderCollection headers)
-			{
-				try
-				{
-					BeforeResponseHeadersSent(sender, headers);
-				}
-				catch (Exception ex)
-				{
-					Logger.Debug(ex);
-				}
-			}
 		}
 		#endregion
 
@@ -2232,9 +2167,10 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
 		/// </summary>
-		/// <param name="remoteIpAddress"></param>
+		/// <param name="p">HttpProcessor</param>
+		/// <param name="remoteIpAddress">True remote IP address of the client.</param>
 		/// <returns></returns>
-		public virtual bool IsTrustedProxyServer(IPAddress remoteIpAddress)
+		public virtual bool IsTrustedProxyServer(HttpProcessor p, IPAddress remoteIpAddress)
 		{
 			return false;
 		}

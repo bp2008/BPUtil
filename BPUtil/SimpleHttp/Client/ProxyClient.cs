@@ -54,10 +54,10 @@ namespace BPUtil.SimpleHttp.Client
 		/// <param name="uri">URI that should be requested.</param>
 		/// <param name="options">Optional options to control the behavior of the proxy request.</param>
 		/// <returns></returns>
-		public static async Task ProxyRequest(HttpProcessor p, Uri uri, HttpProcessor.ProxyOptions options = null)
+		public static async Task ProxyRequest(HttpProcessor p, Uri uri, ProxyOptions options = null)
 		{
 			if (options == null)
-				options = new HttpProcessor.ProxyOptions();
+				options = new ProxyOptions();
 			try
 			{
 				options.bet?.Start("ProxyRequest Start");
@@ -153,13 +153,13 @@ namespace BPUtil.SimpleHttp.Client
 			}
 		}
 		/// <summary>
-		/// Serves as a reverse proxy, sending the request to the given uri.
+		/// Serves as a reverse proxy, sending the request to the given uri.  This method is meant to be used internally by a wrapper that provides connection reuse.
 		/// </summary>
 		/// <param name="p">HttpProcessor instance that is requesting the proxied connection.</param>
 		/// <param name="uri">The Uri which the request should be forwarded to.</param>
 		/// <param name="options">Optional options to control the behavior of the proxy request.</param>
 		/// <returns></returns>
-		public async Task<ProxyResult> BeginProxyRequestAsync(HttpProcessor p, Uri uri, HttpProcessor.ProxyOptions options = null)
+		internal async Task<ProxyResult> BeginProxyRequestAsync(HttpProcessor p, Uri uri, ProxyOptions options = null)
 		{
 			string origin = GetOriginLower(uri);
 			if (Origin != origin)
@@ -169,7 +169,7 @@ namespace BPUtil.SimpleHttp.Client
 				throw new ApplicationException("This ProxyClient is unable to complete the current request because a response has already been written to the client making this request.");
 
 			if (options == null)
-				options = new HttpProcessor.ProxyOptions();
+				options = new ProxyOptions();
 
 			BasicEventTimer proxyTiming = null;
 			if (options.includeServerTimingHeader)
@@ -193,7 +193,7 @@ namespace BPUtil.SimpleHttp.Client
 
 			// Collection of lower case header names that are "hop-by-hop" and should not be proxied.  Values in the "Connection" header are supposed to be added to this collection on a per-request basis, but this server does not currently recognize comma separated values in the Connection header, therefore that is not happening.
 			HashSet<string> doNotProxyHeaders = new HashSet<string>(new string[] {
-				"keep-alive", "transfer-encoding", "te", "connection", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate"
+				"keep-alive", "transfer-encoding", "te", "connection", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate", "host"
 			});
 
 			// Figure out the Connection header
@@ -266,10 +266,15 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, requestLine + "\r\n", snoopy);
 				// After the first line comes the request headers.
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
+				string outgoingHostHeader = host;
+				if (!uri.IsDefaultPort)
+					outgoingHostHeader += ":" + uri.Port;
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + outgoingHostHeader + "\r\n", snoopy);
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: " + requestHeader_Connection + "\r\n", snoopy);
 				if (requestHeader_Upgrade != null)
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Upgrade: " + requestHeader_Upgrade + "\r\n", snoopy);
+
+				ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
 
 				options.RaiseBeforeRequestHeadersSent(this, p.httpHeaders);
 
@@ -403,13 +408,14 @@ namespace BPUtil.SimpleHttp.Client
 			// Rewrite redirect location to point at this server
 			if (proxyHttpHeaders.ContainsKey("Location"))
 			{
-				string requestHeader_Host = p.GetHeaderValue("host");
-				if (!string.IsNullOrWhiteSpace(requestHeader_Host)
+				if (!string.IsNullOrWhiteSpace(p.hostName)
 					&& Uri.TryCreate(proxyHttpHeaders["Location"], UriKind.Absolute, out Uri redirectUri)
 					&& redirectUri.Host.IEquals(host))
 				{
 					UriBuilder uriBuilder = new UriBuilder(redirectUri);
-					uriBuilder.Host = requestHeader_Host;
+					uriBuilder.Scheme = p.secure_https ? "https" : "http";
+					uriBuilder.Host = p.hostName;
+					uriBuilder.Port = ((IPEndPoint)p.tcpClient.Client.LocalEndPoint).Port;
 					proxyHttpHeaders["Location"] = uriBuilder.Uri.ToString();
 				}
 			}
@@ -456,23 +462,9 @@ namespace BPUtil.SimpleHttp.Client
 
 			foreach (KeyValuePair<string, string> header in proxyHttpHeaders)
 			{
-				string key = header.Key;
-				if (doNotProxyHeaders.Contains(key, true))
+				if (doNotProxyHeaders.Contains(header.Key, true))
 					continue;
-				string value = header.Value;
-				if (key == "Location")
-				{
-					string requestHeader_Host = p.GetHeaderValue("host");
-					if (!string.IsNullOrWhiteSpace(requestHeader_Host)
-						&& Uri.TryCreate(value, UriKind.Absolute, out Uri redirectUri)
-						&& redirectUri.Host.IEquals(host))
-					{
-						UriBuilder uriBuilder = new UriBuilder(redirectUri);
-						uriBuilder.Host = requestHeader_Host;
-						value = uriBuilder.Uri.ToString();
-					}
-				}
-				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, key + ": " + value + "\r\n", snoopy);
+				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, header.Key + ": " + header.Value + "\r\n", snoopy);
 			}
 
 			// Write blank line to indicate the end of the response headers
@@ -558,7 +550,7 @@ namespace BPUtil.SimpleHttp.Client
 		/// <param name="options">Options</param>
 		/// <param name="proxyTiming">Possibly null, this BasicEventTimer is used to log timing of each step of the connection process.</param>
 		/// <returns></returns>
-		private async Task Connect(Uri uri, string host, HttpProcessor.ProxyOptions options, BasicEventTimer proxyTiming)
+		private async Task Connect(Uri uri, string host, ProxyOptions options, BasicEventTimer proxyTiming)
 		{
 			try
 			{
@@ -607,6 +599,128 @@ namespace BPUtil.SimpleHttp.Client
 				options.bet?.Stop();
 			}
 		}
+		#region ProxyHeaders
+		protected const string XFF = "X-Forwarded-For";
+		protected const string XFH = "X-Forwarded-Proto";
+		protected const string XFP = "X-Forwarded-Host";
+		protected const string XRI = "X-Real-Ip";
+		/// <summary>
+		/// According to the given options, manipulates the headers: "X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host", "X-Real-Ip".
+		/// </summary>
+		/// <param name="p">HttpProcessor</param>
+		/// <param name="options">Options which determine how the headers are manipulated.</param>
+		protected void ProcessProxyHeaders(HttpProcessor p, ProxyOptions options)
+		{
+			// Only "X-Forwarded-For" supports the concept of "Combine", so everything else will treated "Combine" as equivalent to "Create".
+
+			// X-Forwarded-For
+			switch (options.xForwardedFor)
+			{
+				case ProxyHeaderBehavior.Drop:
+					p.httpHeaders.Remove(XFF);
+					break;
+				case ProxyHeaderBehavior.Create:
+					p.httpHeaders[XFF] = p.TrueRemoteIPAddress.ToString();
+					break;
+				case ProxyHeaderBehavior.Combine:
+					p.httpHeaders.Add(XFF, p.TrueRemoteIPAddress.ToString());
+					break;
+				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
+					if (IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders.Add(XFF, p.TrueRemoteIPAddress.ToString());
+					else
+						p.httpHeaders[XFF] = p.TrueRemoteIPAddress.ToString();
+					break;
+				case ProxyHeaderBehavior.Passthrough:
+					break;
+				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
+					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders.Remove(XFF);
+					break;
+				case ProxyHeaderBehavior.PassthroughIfTrustedElseCreate:
+					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders[XFF] = p.TrueRemoteIPAddress.ToString();
+					break;
+				default:
+					throw new Exception("Unhandled options.xForwardedFor: " + options.xForwardedFor);
+			}
+
+			// X-Forwarded-Proto
+			switch (options.xForwardedProto)
+			{
+				case ProxyHeaderBehavior.Drop:
+					p.httpHeaders.Remove(XFP);
+					break;
+				case ProxyHeaderBehavior.Create:
+				case ProxyHeaderBehavior.Combine:
+				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
+					p.httpHeaders[XFP] = p.secure_https ? "https" : "http";
+					break;
+				case ProxyHeaderBehavior.Passthrough:
+					break;
+				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
+					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders.Remove(XFP);
+					break;
+				case ProxyHeaderBehavior.PassthroughIfTrustedElseCreate:
+					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders[XFP] = p.secure_https ? "https" : "http";
+					break;
+				default:
+					throw new Exception("Unhandled options.xForwardedProto: " + options.xForwardedProto);
+			}
+
+			// X-Forwarded-Host
+			switch (options.xForwardedHost)
+			{
+				case ProxyHeaderBehavior.Drop:
+					p.httpHeaders.Remove(XFH);
+					break;
+				case ProxyHeaderBehavior.Create:
+				case ProxyHeaderBehavior.Combine:
+				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
+					p.httpHeaders.Set(XFH, p.httpHeaders.Get("Host") ?? "undefined");
+					break;
+				case ProxyHeaderBehavior.Passthrough:
+					break;
+				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
+					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders.Remove(XFH);
+					break;
+				case ProxyHeaderBehavior.PassthroughIfTrustedElseCreate:
+					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders.Set(XFH, p.httpHeaders.Get("Host") ?? "undefined");
+					break;
+				default:
+					throw new Exception("Unhandled options.xForwardedHost: " + options.xForwardedHost);
+			}
+
+			// X-Real-IP
+			switch (options.xRealIp)
+			{
+				case ProxyHeaderBehavior.Drop:
+					p.httpHeaders.Remove(XRI);
+					break;
+				case ProxyHeaderBehavior.Create:
+				case ProxyHeaderBehavior.Combine:
+				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
+					p.httpHeaders[XRI] = p.TrueRemoteIPAddress.ToString();
+					break;
+				case ProxyHeaderBehavior.Passthrough:
+					break;
+				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
+					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders.Remove(XRI);
+					break;
+				case ProxyHeaderBehavior.PassthroughIfTrustedElseCreate:
+					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
+						p.httpHeaders[XRI] = p.TrueRemoteIPAddress.ToString();
+					break;
+				default:
+					throw new Exception("Unhandled options.xRealIp: " + options.xRealIp);
+			}
+		}
+		#endregion
 		#region Helpers
 		private enum ProxyResponseDecision
 		{

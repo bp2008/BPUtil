@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace BPUtil.SimpleHttp
 {
 	/// <summary>
-	/// Provides thread-safe (synchronized) read/write access to HTTP headers using case-insensitive keying.  All header names are automatically normalized to title case.
+	/// Provides thread-safe (backed by ConcurrentDictionary) read/write access to HTTP headers using case-insensitive keying.  All header names are automatically normalized to title case.
 	/// </summary>
 	public class HttpHeaderCollection : IDictionary<string, string>
 	{
@@ -98,6 +98,31 @@ namespace BPUtil.SimpleHttp
 #endif
 		{
 			return dict.TryGetValue(GetKey(key), out value);
+		}
+
+		/// <summary>
+		/// Gets the value of the header with the specified name, or null if the header does not exist.
+		/// </summary>
+		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
+		/// <returns></returns>
+		public string Get(string headerName)
+		{
+			if (TryGetValue(headerName, out string v))
+				return v;
+			return null;
+		}
+
+		/// <summary>
+		/// Sets the value of the header with the specified name.  If you set a value of null, the header is removed from the collection.
+		/// </summary>
+		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
+		/// <param name="value">Value to set.  If null, the header is removed from the collection.</param>
+		public void Set(string headerName, string value)
+		{
+			if (value == null)
+				Remove(headerName);
+			else
+				this.[headerName] = value;
 		}
 
 		/// <inheritdoc/>

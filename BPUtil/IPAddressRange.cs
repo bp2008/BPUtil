@@ -214,5 +214,24 @@ namespace BPUtil
 			else
 				return StartAddress + " - " + EndAddress;
 		}
+		/// <summary>
+		/// Returns true if the given IP address is within one of the given ranges.
+		/// </summary>
+		/// <param name="ipAddress">IP Address to test.</param>
+		/// <param name="whitelistedIpRanges">List of IP Range strings defining the whitelist.</param>
+		/// <returns></returns>
+		public static bool WhitelistCheck(IPAddress ipAddress, string[] whitelistedIpRanges)
+		{
+			if (whitelistedIpRanges != null)
+			{
+				foreach (string ipRangeStr in whitelistedIpRanges)
+				{
+					IPAddressRange range = new IPAddressRange(ipRangeStr);
+					if (range.IsInRange(ipAddress))
+						return true;
+				}
+			}
+			return false;
+		}
 	}
 }
