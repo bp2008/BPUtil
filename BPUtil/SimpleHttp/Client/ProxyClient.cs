@@ -177,8 +177,6 @@ namespace BPUtil.SimpleHttp.Client
 
 			string host = options.host;
 			ProxyDataBuffer snoopy = options.snoopy;
-			if (snoopy == null)
-				snoopy = new ProxyDataBuffer(); // TODO: Remove this; let it come only from options.
 
 			// Interally, we shall refer to the original client making the request to this application as "the client", while the destination URI points at "the server".
 
