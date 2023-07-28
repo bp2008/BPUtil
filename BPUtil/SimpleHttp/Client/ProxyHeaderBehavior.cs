@@ -16,7 +16,7 @@
 		/// <summary>
 		/// Combine our values with existing values sent by our client, according to standards.
 		/// </summary>
-		Combine = 2,
+		CombineUnsafe = 2,
 		/// <summary>
 		/// If our client has a trusted IP address, Combine, otherwise Create.
 		/// </summary>
@@ -24,7 +24,7 @@
 		/// <summary>
 		/// Pass through the values sent by our client without modifying them.
 		/// </summary>
-		Passthrough = 4,
+		PassthroughUnsafe = 4,
 		/// <summary>
 		/// If our client has a trusted IP address, Passthrough, otherwise Drop.
 		/// </summary>

@@ -622,7 +622,7 @@ namespace BPUtil.SimpleHttp.Client
 				case ProxyHeaderBehavior.Create:
 					p.httpHeaders[XFF] = p.TrueRemoteIPAddress.ToString();
 					break;
-				case ProxyHeaderBehavior.Combine:
+				case ProxyHeaderBehavior.CombineUnsafe:
 					p.httpHeaders.Add(XFF, p.TrueRemoteIPAddress.ToString());
 					break;
 				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
@@ -631,7 +631,7 @@ namespace BPUtil.SimpleHttp.Client
 					else
 						p.httpHeaders[XFF] = p.TrueRemoteIPAddress.ToString();
 					break;
-				case ProxyHeaderBehavior.Passthrough:
+				case ProxyHeaderBehavior.PassthroughUnsafe:
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
@@ -652,11 +652,11 @@ namespace BPUtil.SimpleHttp.Client
 					p.httpHeaders.Remove(XFP);
 					break;
 				case ProxyHeaderBehavior.Create:
-				case ProxyHeaderBehavior.Combine:
+				case ProxyHeaderBehavior.CombineUnsafe:
 				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
 					p.httpHeaders[XFP] = p.secure_https ? "https" : "http";
 					break;
-				case ProxyHeaderBehavior.Passthrough:
+				case ProxyHeaderBehavior.PassthroughUnsafe:
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
@@ -677,11 +677,11 @@ namespace BPUtil.SimpleHttp.Client
 					p.httpHeaders.Remove(XFH);
 					break;
 				case ProxyHeaderBehavior.Create:
-				case ProxyHeaderBehavior.Combine:
+				case ProxyHeaderBehavior.CombineUnsafe:
 				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
 					p.httpHeaders.Set(XFH, p.httpHeaders.Get("Host") ?? "undefined");
 					break;
-				case ProxyHeaderBehavior.Passthrough:
+				case ProxyHeaderBehavior.PassthroughUnsafe:
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
@@ -702,11 +702,11 @@ namespace BPUtil.SimpleHttp.Client
 					p.httpHeaders.Remove(XRI);
 					break;
 				case ProxyHeaderBehavior.Create:
-				case ProxyHeaderBehavior.Combine:
+				case ProxyHeaderBehavior.CombineUnsafe:
 				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
 					p.httpHeaders[XRI] = p.TrueRemoteIPAddress.ToString();
 					break;
-				case ProxyHeaderBehavior.Passthrough:
+				case ProxyHeaderBehavior.PassthroughUnsafe:
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
