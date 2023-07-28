@@ -32,16 +32,16 @@ namespace BPUtil.MVC
 		/// </summary>
 		public string[] ActionArgs { get; protected set; }
 
-		internal List<KeyValuePair<string, string>> additionalResponseHeaders = new List<KeyValuePair<string, string>>();
+		internal HttpHeaderCollection additionalResponseHeaders = new HttpHeaderCollection();
 		/// <summary>
 		/// Gets a list of additional headers to include in the response. Getting the list is not thread safe, and using the list is also not thread safe.
 		/// </summary>
-		public List<KeyValuePair<string, string>> ResponseHeaders
+		public HttpHeaderCollection ResponseHeaders
 		{
 			get
 			{
 				if (additionalResponseHeaders == null)
-					additionalResponseHeaders = new List<KeyValuePair<string, string>>();
+					additionalResponseHeaders = new HttpHeaderCollection();
 				return additionalResponseHeaders;
 			}
 		}

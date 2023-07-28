@@ -94,7 +94,7 @@ namespace BPUtil.MVC
 			}
 			else
 			{
-				List<KeyValuePair<string, string>> additionalHeaders = new List<KeyValuePair<string, string>>();
+				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
 				bool addedContentEncoding = false;
 				bool addedContentType = false;
 				if (actionResult.Compress && body.Length >= 32 && httpProcessor.ClientRequestsGZipCompression)
@@ -102,24 +102,24 @@ namespace BPUtil.MVC
 					byte[] compressed = Compression.GZipCompress(body);
 					if (compressed.Length < body.Length)
 					{
-						additionalHeaders.Add(new KeyValuePair<string, string>("Content-Encoding", "gzip"));
+						additionalHeaders.Add("Content-Encoding", "gzip");
 						body = compressed;
 					}
 				}
-				foreach (HttpHeader header in actionResult.headers)
+				foreach (KeyValuePair<string, string> header in actionResult.headers)
 				{
-					if (!header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+					if (!header.Key.IEquals("Content-Type"))
 					{
-						additionalHeaders.Add(new KeyValuePair<string, string>(header.Name, header.Value));
+						additionalHeaders.Add(header.Key, header.Value);
 					}
 				}
 				if (context.additionalResponseHeaders != null)
 				{
 					foreach (KeyValuePair<string, string> header in context.additionalResponseHeaders)
 					{
-						if (addedContentEncoding && header.Key == "Content-Encoding")
+						if (addedContentEncoding && header.Key.IEquals("Content-Encoding"))
 							continue;
-						else if (addedContentType && header.Key == "Content-Type")
+						else if (addedContentType && header.Key.IEquals("Content-Type"))
 							continue;
 						else
 							additionalHeaders.Add(header);

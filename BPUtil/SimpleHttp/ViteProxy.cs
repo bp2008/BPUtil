@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BPUtil.SimpleHttp.Client;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -87,7 +88,7 @@ namespace BPUtil.SimpleHttp
 				builder.Scheme = "http";
 				builder.Host = IPAddress.IPv6Loopback.ToString();
 				builder.Port = vitePort;
-				p.ProxyToAsync(builder.Uri.ToString(), new HttpProcessor.ProxyOptions()
+				p.ProxyToAsync(builder.Uri.ToString(), new ProxyOptions()
 				{
 					allowGatewayTimeoutResponse = false,
 					allowConnectionKeepalive = true

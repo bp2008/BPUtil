@@ -929,7 +929,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="contentLength">(OPTIONAL) The length of your response, in bytes, if you know it. If you don't know it, provide -1, and if keep-alive is being used, then "Transfer-Encoding: chunked" will be used automatically on the output stream and you don't need to know anything about it.</param>
 		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeSuccess(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
+		public virtual void writeSuccess(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
@@ -954,7 +954,7 @@ namespace BPUtil.SimpleHttp
 			if (additionalHeaders != null)
 				foreach (KeyValuePair<string, string> header in additionalHeaders)
 				{
-					if (reservedHeaderKeys.Contains(header.Key.ToUpper()))
+					if (reservedHeaderKeys.Contains(header.Key, true))
 						throw new ApplicationException("writeSuccess() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
 					outputStream.WriteLineRN(header.Key + ": " + header.Value);
 				}
@@ -973,7 +973,7 @@ namespace BPUtil.SimpleHttp
 		}
 		private void WriteReservedHeader(HashSet<string> reservedHeaderKeys, string key, string value)
 		{
-			reservedHeaderKeys.Add(key.ToUpper());
+			reservedHeaderKeys.Add(key);
 			outputStream.WriteLineRN(key + ": " + value);
 		}
 
@@ -983,7 +983,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="code">(OPTIONAL) The http error code (including explanation entity).  For example: "404 Not Found" where 404 is the error code and "Not Found" is the explanation.</param>
 		/// <param name="description">(OPTIONAL) A description string to send after the headers as the response.  This is typically shown to the remote user in his browser.  If null, the code string is sent here.  If "", no response body is sent by this function, and you may or may not want to write your own.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeFailure(string code = "404 Not Found", string description = null, List<KeyValuePair<string, string>> additionalHeaders = null)
+		public virtual void writeFailure(string code = "404 Not Found", string description = null, HttpHeaderCollection additionalHeaders = null)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
@@ -995,12 +995,18 @@ namespace BPUtil.SimpleHttp
 			int contentLength = ByteUtil.Utf8NoBOM.GetByteCount(description);
 
 			responseWritten = true;
+			HashSet<string> reservedHeaderKeys = new HashSet<string>();
+			reservedHeaderKeys.Add("Connection");
 			outputStream.WriteLineRN("HTTP/1.1 " + code);
-			outputStream.WriteLineRN("Content-Type: text/plain; charset=utf-8");
-			outputStream.WriteLineRN("Content-Length: " + contentLength);
+			WriteReservedHeader(reservedHeaderKeys, "Content-Type", "text/plain; charset=utf-8");
+			WriteReservedHeader(reservedHeaderKeys, "Content-Length", contentLength.ToString());
 			if (additionalHeaders != null)
 				foreach (KeyValuePair<string, string> header in additionalHeaders)
+				{
+					if (reservedHeaderKeys.Contains(header.Key, true))
+						throw new ApplicationException("writeFailure() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
 					outputStream.WriteLineRN(header.Key + ": " + header.Value);
+				}
 			if (this.keepAliveRequested)
 				outputStream.WriteLineRN("Connection: keep-alive");
 			else
@@ -1047,7 +1053,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="contentType">Content-Type header value. e.g. "text/html; charset=utf-8"</param>
 		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeFullResponseUTF8(string body, string contentType, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
+		public virtual void writeFullResponseUTF8(string body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
 		{
 			writeFullResponseBytes(ByteUtil.Utf8NoBOM.GetBytes(body), contentType, responseCode, additionalHeaders);
 		}
@@ -1059,7 +1065,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="contentType">Content-Type header value. e.g. "application/octet-stream"</param>
 		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeFullResponseBytes(byte[] body, string contentType, string responseCode = "200 OK", List<KeyValuePair<string, string>> additionalHeaders = null)
+		public virtual void writeFullResponseBytes(byte[] body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
 		{
 			writeSuccess(contentType, body.Length, responseCode, additionalHeaders);
 			this.outputStream.Flush();
@@ -2143,8 +2149,8 @@ namespace BPUtil.SimpleHttp
 		{
 			if (method == HttpMethods.HEAD)
 			{
-				List<KeyValuePair<string, string>> additionalHeaders = new List<KeyValuePair<string, string>>();
-				additionalHeaders.Add(new KeyValuePair<string, string>("Allow", "GET"));
+				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
+				additionalHeaders.Add("Allow", "GET");
 				p.writeFailure("405 Method Not Allowed", additionalHeaders: additionalHeaders);
 			}
 			else

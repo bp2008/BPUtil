@@ -69,6 +69,7 @@
     <Compile Include="CertificateValidation.cs" />
     <Compile Include="Compass.cs" />
     <Compile Include="CountdownStopwatch.cs" />
+    <Compile Include="DescriptionAttribute.cs" />
     <Compile Include="DnsHelper.cs" />
     <Compile Include="EConsole.cs" />
     <Compile Include="Encryption.cs" />

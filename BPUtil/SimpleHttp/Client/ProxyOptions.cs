@@ -9,7 +9,7 @@ namespace BPUtil.SimpleHttp.Client
 {
 
 	/// <summary>
-	/// Provides options to ProxyClient.  Not usable with the legacy <see cref="ProxyTo(string, int, bool, ProxyDataBuffer, string, bool)"/> method.
+	/// Provides options to ProxyClient and the advanced  <see cref="HttpProcessor.ProxyToAsync(string, ProxyOptions)"/> method.
 	/// </summary>
 	public class ProxyOptions
 	{

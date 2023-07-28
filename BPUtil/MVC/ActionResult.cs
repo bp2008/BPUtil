@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BPUtil.SimpleHttp;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -15,20 +16,20 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// A collection of HTTP headers for an HTTP response.
 		/// </summary>
-		public List<HttpHeader> headers = new List<HttpHeader>();
+		public HttpHeaderCollection headers = new HttpHeaderCollection();
 
 		/// <summary>
-		/// Gets or sets the Content-Type header.
+		/// Gets or sets the Content-Type header. Null indicates no header exists (getter), or deletes the header (setter).
 		/// </summary>
 		public string ContentType
 		{
 			get
 			{
-				return GetHeaderValue("Content-Type");
+				return headers.Get("Content-Type");
 			}
 			set
 			{
-				AddOrUpdateHeader("Content-Type", value);
+				headers.Set("Content-Type", value);
 			}
 		}
 
@@ -47,49 +48,6 @@ namespace BPUtil.MVC
 		public ActionResult(string contentType)
 		{
 			this.ContentType = contentType;
-		}
-
-		/// <summary>
-		/// Returns the value of the specified header, or null if it is not found (the header may also exist with the value null).
-		/// </summary>
-		/// <param name="name">The header name, case-sensitive.</param>
-		/// <returns></returns>
-		public string GetHeaderValue(string name)
-		{
-			lock (headers)
-			{
-				return headers.Find(h => h.Name == name).Value;
-			}
-		}
-
-		/// <summary>
-		/// Adds or updates the value of the specified header.
-		/// </summary>
-		/// <param name="name">The header name, case-sensitive.</param>
-		/// <param name="value">The header value.</param>
-		public void AddOrUpdateHeader(string name, string value)
-		{
-			lock (headers)
-			{
-				HttpHeader header = headers.Find(h => h.Name == name);
-				if (header == null)
-					headers.Add(new HttpHeader(name, value));
-				else
-					header.Value = value;
-			}
-		}
-	}
-	public class HttpHeader
-	{
-		public string Name;
-		public string Value;
-		public HttpHeader()
-		{
-		}
-		public HttpHeader(string name, string value)
-		{
-			Name = name;
-			Value = value;
 		}
 	}
 	#region Binary Results

@@ -14,7 +14,30 @@ namespace BPUtil.SimpleHttp
 	/// </summary>
 	public class HttpHeaderCollection : IDictionary<string, string>
 	{
-		ConcurrentDictionary<string, string> dict = new ConcurrentDictionary<string, string>();
+		/// <summary>
+		/// The internal collection of HTTP headers using lower-case keys.
+		/// </summary>
+		protected ConcurrentDictionary<string, string> dict = new ConcurrentDictionary<string, string>();
+
+		/// <summary>
+		/// Constructs a new empty HttpHeaderCollection.
+		/// </summary>
+		public HttpHeaderCollection() { }
+
+		/// <summary>
+		/// Constructs a new HttpHeaderCollection from the given list of Key/Value pairs.
+		/// </summary>
+		public static HttpHeaderCollection FromPairs(IEnumerable<KeyValuePair<string, string>> headers)
+		{
+			if (headers != null)
+			{
+				HttpHeaderCollection c = new HttpHeaderCollection();
+				foreach (KeyValuePair<string, string> kvp in headers)
+					c.Add(kvp);
+				return c;
+			}
+			return null;
+		}
 		/// <inheritdoc/>
 		public string this[string key]
 		{
@@ -122,7 +145,7 @@ namespace BPUtil.SimpleHttp
 			if (value == null)
 				Remove(headerName);
 			else
-				this.[headerName] = value;
+				this[headerName] = value;
 		}
 
 		/// <inheritdoc/>
