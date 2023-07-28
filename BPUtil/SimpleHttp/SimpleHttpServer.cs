@@ -671,7 +671,7 @@ namespace BPUtil.SimpleHttp
 			//		return true; // Connection aborted.  This happens often enough that reporting it can be excessive.
 			//	}
 			//}
-			if (ex is SocketException)
+			if (ex is SocketException && (ex as SocketException).SocketErrorCode != SocketError.InvalidArgument)
 				return true;
 			if (ex is HttpProcessor.EndOfStreamException)
 				return true;

@@ -601,8 +601,8 @@ namespace BPUtil.SimpleHttp.Client
 		}
 		#region ProxyHeaders
 		protected const string XFF = "X-Forwarded-For";
-		protected const string XFH = "X-Forwarded-Proto";
-		protected const string XFP = "X-Forwarded-Host";
+		protected const string XFH = "X-Forwarded-Host";
+		protected const string XFP = "X-Forwarded-Proto";
 		protected const string XRI = "X-Real-Ip";
 		/// <summary>
 		/// According to the given options, manipulates the headers: "X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host", "X-Real-Ip".

@@ -49,7 +49,7 @@ namespace BPUtil
 			}
 			else
 			{
-				StartAddress = IPAddress.Parse(range);
+				StartAddress = IPAddress.Parse(range.Trim());
 				EndAddress = StartAddress;
 			}
 		}
