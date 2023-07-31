@@ -134,13 +134,15 @@ namespace BPUtil.SimpleHttp
 		public SortedList<string, string> RawQueryString { get; private set; } = new SortedList<string, string>();
 
 		/// <summary>
-		/// The mimetype of the posted content.
+		/// The mimetype of the request body content.
 		/// </summary>
+		[Obsolete("This will go away in a future build.")]
 		public string postContentType { get; private set; } = "";
 
 		/// <summary>
 		/// The raw posted content as a string, populated only if the mimetype was "application/x-www-form-urlencoded"
 		/// </summary>
+		[Obsolete("This will go away in a future build.")]
 		public string postFormDataRaw { get; private set; } = "";
 
 		/// <summary>
@@ -332,9 +334,23 @@ namespace BPUtil.SimpleHttp
 		public CompressionType compressionType { get; private set; } = CompressionType.None;
 
 		/// <summary>
-		/// Gets the MemoryStream containing the POST content. It will be seeked to the beginning before this HttpProcessor is sent to the HttpServer for handling. For non-POST requests, this will be null.
+		/// Gets the Stream containing the request body. It will be seeked to the beginning before this HttpProcessor is sent to the HttpServer for handling. For requests that did not provide a body, this will be null.
 		/// </summary>
-		public MemoryStream PostBodyStream { get; private set; }
+		public Stream RequestBodyStream { get; private set; }
+
+		/// <summary>
+		/// Gets the MemoryStream containing the request body. It will be seeked to the beginning before this HttpProcessor is sent to the HttpServer for handling. For requests that did not provide a body, this will be null.
+		/// </summary>
+		[Obsolete("Use RequestBodyStream instead")]
+		public MemoryStream PostBodyStream
+		{
+			get
+			{
+				if (RequestBodyStream != null && RequestBodyStream is MemoryStream)
+					return (MemoryStream)RequestBodyStream;
+				return null;
+			}
+		}
 
 		/// <summary>
 		/// The number of requests that have been read by the current TCP connection.
@@ -490,7 +506,9 @@ namespace BPUtil.SimpleHttp
 						QueryString.Clear();
 						RawQueryString.Clear();
 						http_method = "";
+#pragma warning disable CS0618
 						postContentType = postFormDataRaw = "";
+#pragma warning restore
 						responseWritten = false;
 						keepAliveRequested = false;
 						compressionType = CompressionType.None;
@@ -561,17 +579,15 @@ namespace BPUtil.SimpleHttp
 						QueryString = ParseQueryStringArguments(this.request_url.Query);
 						requestCookies = Cookies.FromString(GetHeaderValue("Cookie", ""));
 
-						if (http_method.Equals("GET"))
+						if (HttpMethods.IsValid(http_method))
 						{
 							if (shouldLogRequestsToFile())
-								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "GET", request_url.OriginalString);
-							handleGETRequest();
+								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, http_method, request_url.OriginalString);
+							handleRequest();
 						}
-						else if (http_method.Equals("POST"))
+						else
 						{
-							if (shouldLogRequestsToFile())
-								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "POST", request_url.OriginalString);
-							handlePOSTRequest();
+							this.writeFailure("501 Not Implemented");
 						}
 					}
 					catch (ThreadAbortException) { throw; }
@@ -764,38 +780,30 @@ namespace BPUtil.SimpleHttp
 		}
 
 		/// <summary>
-		/// Asks the HttpServer to handle this request as a GET request.  If the HttpServer does not write a response code header, this will write a generic failure header.
+		/// <para>Handles all request methods.</para>
+		/// <para>This method data processing just reads the entire request body into a memory stream.</para>
+		/// <para>This is fine for smallish things, but for large stuff we should really hand an input stream to the request processor.  However, the input stream we hand to the user's code needs to see the "end of the stream" at the appropriate time!</para>
+		/// <para>// TODO: Make this handle Transfer-Encoding: chunked if Content-Length is not provided.</para>
 		/// </summary>
-		private void handleGETRequest()
+		private void handleRequest(bool requestBodyRequired = false)
 		{
-			srv.handleGETRequest(this);
-		}
-		/// <summary>
-		/// This post data processing just reads everything into a memory stream.
-		/// This is fine for smallish things, but for large stuff we should really
-		/// hand an input stream to the request processor. However, the input stream 
-		/// we hand to the user's code needs to see the "end of the stream" at this 
-		/// content length, because otherwise it won't know where the end is!
-		/// 
-		/// If the HttpServer does not write a response code header, this will write a generic failure header.
-		/// </summary>
-		private void handlePOSTRequest()
-		{
-			int content_len = 0;
 			using (MemoryStream ms = new MemoryStream())
 			{
-				PostBodyStream = ms;
+#pragma warning disable CS0618
+				string contentType = postContentType = GetHeaderValue("Content-Type");
+#pragma warning restore
 				string content_length_str = GetHeaderValue("Content-Length");
 				if (!string.IsNullOrWhiteSpace(content_length_str))
 				{
-					if (int.TryParse(content_length_str, out content_len))
+					if (int.TryParse(content_length_str, out int content_len))
 					{
 						if (content_len > MAX_POST_SIZE)
 						{
-							SimpleHttpLogger.LogVerbose("POST Content-Length(" + content_len + ") too big for this simple server.  Server can handle up to " + MAX_POST_SIZE);
+							SimpleHttpLogger.LogVerbose(this.http_method + " Content-Length(" + content_len + ") too big for this simple server.  Server can handle up to " + MAX_POST_SIZE);
 							this.writeFailure("413 Request Entity Too Large", "Request Too Large");
 							return;
 						}
+						RequestBodyStream = ms;
 						byte[] buf = new byte[BUF_SIZE];
 						int to_read = content_len;
 						while (to_read > 0)
@@ -817,26 +825,32 @@ namespace BPUtil.SimpleHttp
 						ms.Seek(0, SeekOrigin.Begin);
 					}
 				}
-				else
+				else if (this.http_method == "POST" || this.http_method == "PUT" || this.http_method == "PATCH")
 				{
 					this.writeFailure("411 Length Required", "The request did not specify the length of its content.");
 					SimpleHttpLogger.LogVerbose("The request did not specify the length of its content.  This server requires that all POST requests include a Content-Length header.");
 					return;
 				}
 
-				postContentType = GetHeaderValue("Content-Type");
-				if (postContentType != null && postContentType.Contains("application/x-www-form-urlencoded"))
+				if (contentType != null && contentType.Contains("application/x-www-form-urlencoded"))
 				{
 					StreamReader sr = new StreamReader(ms, Utf8NoBOM);
-					postFormDataRaw = sr.ReadToEnd();
+#pragma warning disable CS0618
+					string formDataRaw = postFormDataRaw = sr.ReadToEnd();
+#pragma warning restore
 					ms.Seek(0, SeekOrigin.Begin);
 
-					RawPostParams = ParseQueryStringArguments(postFormDataRaw, false, true, convertPlusToSpace: true);
-					PostParams = ParseQueryStringArguments(postFormDataRaw, false, convertPlusToSpace: true);
+					RawPostParams = ParseQueryStringArguments(formDataRaw, false, true, convertPlusToSpace: true);
+					PostParams = ParseQueryStringArguments(formDataRaw, false, convertPlusToSpace: true);
 
 					try
 					{
-						srv.handlePOSTRequest(this, null);
+						if (this.http_method == "GET")
+							srv.handleGETRequest(this);
+						else if (this.http_method == "POST")
+							srv.handlePOSTRequest(this, null);
+						else
+							srv.handleOtherRequest(this, http_method);
 					}
 					finally
 					{
@@ -845,14 +859,15 @@ namespace BPUtil.SimpleHttp
 				}
 				else
 				{
-					srv.handlePOSTRequest(this, new StreamReader(ms, Utf8NoBOM));
+					if (this.http_method == "GET")
+						srv.handleGETRequest(this);
+					else if (this.http_method == "POST")
+						srv.handlePOSTRequest(this, new StreamReader(ms, Utf8NoBOM));
+					else
+						srv.handleOtherRequest(this, http_method);
 				}
-				PostBodyStream = null;
+				RequestBodyStream = null;
 			}
-		}
-		private void handleOtherRequest()
-		{
-			srv.handleOtherRequest(this, http_method);
 		}
 		#region Response Compression
 		/// <summary>
@@ -1152,14 +1167,20 @@ namespace BPUtil.SimpleHttp
 				}
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
 
-				// Write the original POST body if there was one.
-				if (PostBodyStream != null)
+				// Write the original request body if there was one.
+				if (RequestBodyStream != null)
 				{
-					long remember_position = PostBodyStream.Position;
-					PostBodyStream.Seek(0, SeekOrigin.Begin);
-					byte[] buf = PostBodyStream.ToArray();
-					_ProxyData(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
-					PostBodyStream.Seek(remember_position, SeekOrigin.Begin);
+					if (RequestBodyStream is MemoryStream)
+					{
+						MemoryStream ms = (MemoryStream)RequestBodyStream;
+						long remember_position = ms.Position;
+						ms.Seek(0, SeekOrigin.Begin);
+						byte[] buf = ms.ToArray();
+						_ProxyData(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
+						ms.Seek(remember_position, SeekOrigin.Begin);
+					}
+					else
+						CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, RequestBodyStream, proxyStream, snoopy);
 				}
 
 				// Start a thread to proxy the response to our client.
@@ -1849,7 +1870,7 @@ namespace BPUtil.SimpleHttp
 		{
 			this.certificateSelector = certificateSelector;
 			if (this.certificateSelector == null)
-				this.certificateSelector = SimpleCertificateSelector.FromCertificate(HttpServer.GetSelfSignedCertificate());
+				this.certificateSelector = new SelfSignedCertificateSelector();
 
 			NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAvailabilityChanged;
 			NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;

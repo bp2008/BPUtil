@@ -295,14 +295,19 @@ namespace BPUtil.SimpleHttp.Client
 				}
 				ex.Rethrow();
 			}
-			// Write the original POST body if there was one.
-			if (p.PostBodyStream != null)
+			// Write the original request body if there was one.
+			if (p.RequestBodyStream != null)
 			{
-				long remember_position = p.PostBodyStream.Position;
-				p.PostBodyStream.Seek(0, SeekOrigin.Begin);
-				byte[] buf = p.PostBodyStream.ToArray();
-				_ProxyData(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
-				p.PostBodyStream.Seek(remember_position, SeekOrigin.Begin);
+				if (p.RequestBodyStream is MemoryStream)
+				{
+					long remember_position = p.RequestBodyStream.Position;
+					p.RequestBodyStream.Seek(0, SeekOrigin.Begin);
+					byte[] buf = ((MemoryStream)p.RequestBodyStream).ToArray();
+					await _ProxyDataAsync(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
+					((MemoryStream)p.RequestBodyStream).Seek(remember_position, SeekOrigin.Begin);
+				}
+				else
+					await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.RequestBodyStream, proxyStream, snoopy);
 			}
 
 			proxyStream.Flush();

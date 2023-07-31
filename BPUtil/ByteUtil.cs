@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace BPUtil
 {
@@ -233,6 +234,37 @@ namespace BPUtil
 
 			return result;
 		}
+		/// <summary>
+		/// Reads all bytes until the end of the stream, then returns the read data as a byte array.
+		/// </summary>
+		/// <param name="stream"></param>
+		/// <returns></returns>
+		public static byte[] ReadToEnd(Stream stream)
+		{
+			if (stream is MemoryStream)
+				return ((MemoryStream)stream).ToArray();
+			using (MemoryStream memoryStream = new MemoryStream())
+			{
+				stream.CopyTo(memoryStream);
+				return memoryStream.ToArray();
+			}
+		}
+		/// <summary>
+		/// Reads all bytes until the end of the stream, then returns the read data as a byte array.
+		/// </summary>
+		/// <param name="stream"></param>
+		/// <returns></returns>
+		public static async Task<byte[]> ReadToEndAsync(Stream stream)
+		{
+			if (stream is MemoryStream)
+				return ((MemoryStream)stream).ToArray();
+			using (MemoryStream memoryStream = new MemoryStream())
+			{
+				await stream.CopyToAsync(memoryStream);
+				return memoryStream.ToArray();
+			}
+		}
+
 		#region ReadNBytes
 		/// <summary>
 		/// Reads a specific number of bytes from the stream, returning a byte array.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.

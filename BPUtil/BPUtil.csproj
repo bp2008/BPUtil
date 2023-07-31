@@ -113,6 +113,7 @@
     <Compile Include="NativeWin\Audio.cs" />
     <Compile Include="NativeWin\AudioManager.cs" />
     <Compile Include="NativeWin\Impersonator.cs" />
+    <Compile Include="NativeWin\KeyboardHook.cs" />
     <Compile Include="NativeWin\Mouse.cs" />
     <Compile Include="ObjectCache.cs" />
     <Compile Include="ObjectSize.cs" />
@@ -132,6 +133,7 @@
     <Compile Include="SimpleHttp\HttpHeaderCollection.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ICertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\ServerNameCertificateSelector.cs" />
+    <Compile Include="SimpleHttp\TLS\CertificateSelectors\SelfSignedCertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\CertificateSelectors\SimpleCertificateSelector.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\Enums\ContentType.cs" />
     <Compile Include="SimpleHttp\TLS\Implementation\FragmentStream.cs" />
