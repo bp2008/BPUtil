@@ -1127,11 +1127,13 @@ namespace BPUtil.SimpleHttp
 			Uri newUri = new Uri(newUrl);
 			if (string.IsNullOrWhiteSpace(host))
 				host = newUri.DnsSafeHost;
-			using (TcpClient proxyClient = new TcpClient(AddressFamily.InterNetworkV6))
+			IPAddress ip = DnsHelper.GetHostAddressAsync(newUri.DnsSafeHost).Result;
+
+			using (TcpClient proxyClient = new TcpClient(ip.AddressFamily))
 			{
 				proxyClient.ReceiveTimeout = this.tcpClient.ReceiveTimeout = networkTimeoutMs;
 				proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
-				proxyClient.Connect(newUri.DnsSafeHost, newUri.Port);
+				proxyClient.Connect(ip, newUri.Port);
 				Stream proxyStream = proxyClient.GetStream();
 				responseWritten = true;
 				if (newUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))

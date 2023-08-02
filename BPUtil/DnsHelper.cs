@@ -30,7 +30,7 @@ namespace BPUtil
 			if (cache.TryGetValue(hostNameOrAddress, out DnsCacheEntry cacheEntry) && !cacheEntry.Expired)
 				return cacheEntry.Address;
 
-			IPAddress[] addresses = await Dns.GetHostAddressesAsync(hostNameOrAddress);
+			IPAddress[] addresses = await Dns.GetHostAddressesAsync(hostNameOrAddress).ConfigureAwait(false);
 
 			ip = addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
 			if (ip == null)
