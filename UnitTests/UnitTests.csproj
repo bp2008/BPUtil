@@ -55,7 +55,9 @@
     <Compile Include="TestBase64UrlMod.cs" />
     <Compile Include="TestByteUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TestThrottle.cs" />
     <Compile Include="TestFileInfoExtensions.cs" />
+    <Compile Include="TestDebounce.cs" />
     <Compile Include="TestHttpProcessor.cs" />
     <Compile Include="TestIPUtil.cs" />
     <Compile Include="TestSimpleThreadPool.cs" />
