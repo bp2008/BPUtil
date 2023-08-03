@@ -364,19 +364,11 @@ namespace BPUtil.SimpleHttp.Client
 				}
 				proxyConnectionHeader = "keep-alive";
 			}
-			if (ourClientWantsWebsocket)
+
+			if (proxyConnectionHeader.IEquals("upgrade") && proxyHttpHeaders.TryGetValue("Upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
 			{
-				if (proxyConnectionHeader.IEquals("upgrade") && proxyHttpHeaders.TryGetValue("Upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
-				{
-					options.log.AppendLine("This is a websocket connection.");
-					decision = ProxyResponseDecision.Websocket;
-				}
-				else
-				{
-					options.log.AppendLine("We requested a websocket connection but did not get it.");
-					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
-					return new ProxyResult(ProxyResultErrorCode.BadGateway, "We requested a websocket connection but did not get it.", false, false);
-				}
+				options.log.AppendLine("This is a websocket connection.");
+				decision = ProxyResponseDecision.Websocket;
 			}
 			else
 			{
@@ -437,7 +429,7 @@ namespace BPUtil.SimpleHttp.Client
 			// Write response headers
 			bool wrapOutputStreamChunked = false;
 			string responseConnectionHeader;
-			if (ourClientWantsWebsocket)
+			if (decision == ProxyResponseDecision.Websocket)
 				responseConnectionHeader = "upgrade";
 			else if (ourClientWantsConnectionClose)
 				responseConnectionHeader = "close";
@@ -448,7 +440,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Connection: " + responseConnectionHeader + "\r\n", snoopy);
 
-			if (ourClientWantsWebsocket)
+			if (decision == ProxyResponseDecision.Websocket)
 				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Upgrade: websocket\r\n", snoopy);
 			else
 			{
