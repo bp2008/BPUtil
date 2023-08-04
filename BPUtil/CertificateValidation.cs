@@ -12,7 +12,7 @@ namespace BPUtil
 	/// <summary>
 	/// <para>A class which manages<seealso cref="ServicePointManager.ServerCertificateValidationCallback"/>, providing support for multiple callbacks. If any of the registered callbacks return true, the certificate will be considered valid.</para>
 	/// <para>By default, only valid certificates are considered valid.</para>
-	/// <para>This should be the only class which sets <seealso cref="ServicePointManager.ServerCertificateValidationCallback"/></para>
+	/// <para>This should be the only class which sets <seealso cref="ServicePointManager.ServerCertificateValidationCallback"/>.  If other code has already set a <seealso cref="ServicePointManager.ServerCertificateValidationCallback"/>, the existing callback will be registered with this class.  If other code sets a <seealso cref="ServicePointManager.ServerCertificateValidationCallback"/> later, then any callbacks registered with this class will become non-functional unless the other code also takes care to call previous callbacks.</para>
 	/// </summary>
 	public static class CertificateValidation
 	{
@@ -24,6 +24,7 @@ namespace BPUtil
 		public static bool AlwaysCallAllCallbacks = false;
 		static CertificateValidation()
 		{
+			RegisterCallback(ServicePointManager.ServerCertificateValidationCallback);
 			RegisterCallback(DefaultValidationCallback);
 			ServicePointManager.ServerCertificateValidationCallback = new RemoteCertificateValidationCallback(CallAllCallbacks);
 		}
@@ -33,17 +34,45 @@ namespace BPUtil
 		/// <para>DO NOT ASSIGN <see cref="ServicePointManager.ServerCertificateValidationCallback"/> yourself.  This class assigns a special callback method which calls all callbacks registered via <see cref="CertificateValidation.RegisterCallback"/>. If any of the registered callbacks returns true, the certificate will be accepted.</para>
 		/// <para>If you want a template for the callback which you can copy, see the <see cref="DefaultValidationCallback"/> private method in this class.</para>
 		/// </summary>
-		/// <param name="callback"></param>
+		/// <param name="callback">A RemoteCertificateValidationCallback to register.</param>
 		public static void RegisterCallback(RemoteCertificateValidationCallback callback)
 		{
+			if (callback == null)
+				return;
 			lock (myLock)
 			{
 				RemoteCertificateValidationCallback[] local = new RemoteCertificateValidationCallback[callbacks.Length + 1];
 				for (int i = 0; i < callbacks.Length; i++)
+				{
+					if (callbacks[i] == callback)
+						return; // This callback is already registered!
 					local[i] = callbacks[i];
+				}
 				local[local.Length - 1] = callback;
 				callbacks = local;
 			}
+		}
+
+		/// <summary>
+		/// <para>Unregisters a callback that was previously registered, and returns true if the callback was found and removed.</para>
+		/// <para>DO NOT ASSIGN <see cref="ServicePointManager.ServerCertificateValidationCallback"/> yourself.  This class assigns a special callback method which calls all callbacks registered via <see cref="CertificateValidation.RegisterCallback"/>. If any of the registered callbacks returns true, the certificate will be accepted.</para>
+		/// <para>If you want a template for the callback which you can copy, see the <see cref="DefaultValidationCallback"/> private method in this class.</para>
+		/// </summary>
+		/// <param name="callback">A RemoteCertificateValidationCallback that was previously registered.</param>
+		public static bool UnregisterCallback(RemoteCertificateValidationCallback callback)
+		{
+			if (callback == null)
+				return false;
+			lock (myLock)
+			{
+				RemoteCertificateValidationCallback[] local = callbacks.Where(cb => cb != callback).ToArray();
+				if (local.Length < callbacks.Length)
+				{
+					callbacks = local;
+					return true;
+				}
+			}
+			return false;
 		}
 
 		/// <summary>
