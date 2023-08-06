@@ -295,6 +295,36 @@ namespace BPUtil
 				return fi.FullName;
 			return fi.FullName.Remove(fi.FullName.Length - fi.Extension.Length);
 		}
+		/// <summary>
+		/// Gets the last write time (UTC) of the file robustly.  Files where the last write time is missing or corrupted will have the last write time metadata replaced with the first valid value from [CreationTimeUtc, LastAccessTimeUtc, DateTime.UtcNow].
+		/// </summary>
+		/// <param name="fi">This FileInfo</param>
+		/// <returns>The last write time of the file in UTC.</returns>
+		public static DateTime GetLastWriteTimeUtcAndRepairIfBroken(this System.IO.FileInfo fi)
+		{
+			try
+			{
+				return fi.LastWriteTimeUtc;
+			}
+			catch (ArgumentOutOfRangeException)
+			{
+				try
+				{
+					return fi.LastWriteTimeUtc = fi.CreationTimeUtc;
+				}
+				catch (ArgumentOutOfRangeException)
+				{
+					try
+					{
+						return fi.LastWriteTimeUtc = fi.CreationTimeUtc = fi.LastAccessTimeUtc;
+					}
+					catch (ArgumentOutOfRangeException)
+					{
+						return fi.LastWriteTimeUtc = fi.CreationTimeUtc = fi.LastAccessTimeUtc = DateTime.UtcNow;
+					}
+				}
+			}
+		}
 		#endregion
 #if NETFRAMEWORK || NET6_0_WIN
 		#region System.Windows.Forms.Form
