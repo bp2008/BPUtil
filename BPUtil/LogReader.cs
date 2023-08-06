@@ -34,6 +34,7 @@ namespace BPUtil
 		public void Start()
 		{
 			Stop();
+			abort = false;
 			// Do initial file reading
 			OpenFile();
 			// Start continuous reading thread
@@ -54,7 +55,11 @@ namespace BPUtil
 		}
 		public void Stop()
 		{
-			abort = true;
+			if (!abort)
+			{
+				abort = true;
+				thrFileRead?.Join();
+			}
 		}
 		private void AddLogLine(string line)
 		{
