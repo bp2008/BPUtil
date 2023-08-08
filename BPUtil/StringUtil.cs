@@ -93,6 +93,16 @@ namespace BPUtil
 			return sb.ToString();
 		}
 		/// <summary>
+		/// Returns "" if <paramref name="count"/> is 1, otherwise returns "s".
+		/// </summary>
+		/// <param name="count">Number of items being labeled.</param>
+		/// <returns>"" or "s" as appropriate for <paramref name="count"/></returns>
+		public static string PluralSuffix(int count)
+		{
+			return count == 1 ? "" : "s";
+		}
+
+		/// <summary>
 		/// <para>Encodes the characters '"' and apostrophe as html entities so that the resulting string may be inserted into an html attribute. '&lt;', '&gt;', and '&amp;' characters are left alone.</para>
 		/// </summary>
 		/// <param name="str">The string to encode.</param>
