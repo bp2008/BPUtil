@@ -615,6 +615,29 @@ namespace BPUtil.SimpleHttp
 								this.writeFailure("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
 							return;
 						}
+						else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
+						{
+							// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
+							/*
+System.IO.IOException: The decryption operation failed, see inner exception.
+Inner Exception:
+{
+	Interop+OpenSsl+SslException: Decrypt failed with OpenSSL error - SSL_ERROR_SSL.
+	Inner Exception:
+	{
+		Interop+Crypto+OpenSslCryptographicException: error:0A000119:SSL routines::decryption failed or bad record mac
+	}
+	   at Interop.OpenSsl.Decrypt(SafeSslHandle context, Span`1 buffer, SslErrorCode& errorCode)
+	   at System.Net.Security.SslStreamPal.DecryptMessage(SafeDeleteSslContext securityContext, Span`1 buffer, Int32& offset, Int32& count)
+}
+   at System.Net.Security.SslStream.ReadAsyncInternal[TIOAdapter](TIOAdapter adapter, Memory`1 buffer)
+   at System.Net.Security.SslStream.Read(Byte[] buffer, Int32 offset, Int32 count)
+   at System.Net.Security.SslStream.ReadByte()
+							 */
+							SimpleHttpLogger.LogVerbose(e);
+							this.responseWritten = true;
+							return;
+						}
 						else
 						{
 							SimpleHttpLogger.Log(e);
@@ -1887,7 +1910,10 @@ namespace BPUtil.SimpleHttp
 		/// List of ListenerData instances responsible for asynchronously accepting TCP clients.
 		/// </summary>
 		private List<ListenerData> listeners = new List<ListenerData>();
+
+#if NET6_0
 		private static bool? _cipherSuitesPolicySupported = null;
+#endif
 		/// <summary>
 		/// <para>Returns true if the SslServerAuthenticationOptions.CipherSuitesPolicy property can be used on this platform.</para>
 		/// <para>Expected to be false on Windows, true on Linux.</para>
@@ -2271,6 +2297,7 @@ namespace BPUtil.SimpleHttp
 			return false;
 		}
 
+#if NET6_0
 		/// <summary>
 		/// Gets a collection of allowed TLS cipher suites for the given connection.  Returns null if the default set of cipher suites should be allowed (which varies by platform).
 		/// </summary>
@@ -2280,6 +2307,7 @@ namespace BPUtil.SimpleHttp
 		{
 			return null;
 		}
+#endif
 	}
 	#region Helper Classes
 	/// <summary>
