@@ -427,6 +427,7 @@ namespace BPUtil.SimpleHttp
 						//   request will be processed as plain HTTP.
 						if (TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, out string serverName, out bool isTlsAlpn01Validation))
 						{
+							this.secure_https = true;
 							hostName = serverName;
 							if (isTlsAlpn01Validation)
 							{
@@ -456,10 +457,8 @@ namespace BPUtil.SimpleHttp
 								SimpleHttpLogger.LogVerbose("TLS negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (serverName == null ? "null" : ("\"" + serverName + "\"")) + ".");
 								return;
 							}
-							tcpStream = new SslStream(tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
-							((SslStream)tcpStream).AuthenticateAsServer(cert, false, Tls13 | SslProtocols.Tls12, false);
+							TlsNegotiate(cert);
 							SimpleHttpLogger.LogVerbose("Client connected using SslProtocol." + (tcpStream as SslStream).SslProtocol);
-							this.secure_https = true;
 						}
 						else
 						{
@@ -667,6 +666,30 @@ namespace BPUtil.SimpleHttp
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 			}
 		}
+
+		private void TlsNegotiate(X509Certificate cert)
+		{
+#if NET6_0
+			SslServerAuthenticationOptions sslServerOptions = new SslServerAuthenticationOptions();
+			sslServerOptions.ServerCertificate = cert;
+			sslServerOptions.EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
+
+			if (HttpServer.IsTlsCipherSuitesPolicySupported())
+			{
+				IEnumerable<TlsCipherSuite> suites = srv.GetAllowedCipherSuites(this);
+				if (suites != null)
+					sslServerOptions.CipherSuitesPolicy = new CipherSuitesPolicy(suites);
+			}
+
+			tcpStream = new SslStream(tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
+			((SslStream)tcpStream).AuthenticateAsServer(sslServerOptions);
+#else
+			tcpStream = new SslStream(tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
+			((SslStream)tcpStream).AuthenticateAsServer(cert, false, Tls13 | SslProtocols.Tls12, false);
+#endif
+
+		}
+
 		/// <summary>
 		/// Returns true if the specified Exception is a SocketException or EndOfStreamException or if one of these exception types is contained within the InnerException tree.
 		/// </summary>
@@ -1864,6 +1887,42 @@ namespace BPUtil.SimpleHttp
 		/// List of ListenerData instances responsible for asynchronously accepting TCP clients.
 		/// </summary>
 		private List<ListenerData> listeners = new List<ListenerData>();
+		private static bool? _cipherSuitesPolicySupported = null;
+		/// <summary>
+		/// <para>Returns true if the SslServerAuthenticationOptions.CipherSuitesPolicy property can be used on this platform.</para>
+		/// <para>Expected to be false on Windows, true on Linux.</para>
+		/// </summary>
+		/// <returns>Returns true if the SslServerAuthenticationOptions.CipherSuitesPolicy property can be used on this platform.</returns>
+		public static bool IsTlsCipherSuitesPolicySupported()
+		{
+#if NET6_0
+			bool? v = _cipherSuitesPolicySupported;
+			if (v == null)
+			{
+				SslServerAuthenticationOptions sslServerOptions = new SslServerAuthenticationOptions();
+				try
+				{
+					sslServerOptions.CipherSuitesPolicy = new CipherSuitesPolicy(new TlsCipherSuite[]
+						{
+						TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+						});
+					_cipherSuitesPolicySupported = v = true;
+				}
+				catch (PlatformNotSupportedException)
+				{
+					_cipherSuitesPolicySupported = v = false;
+				}
+				catch (Exception ex)
+				{
+					_cipherSuitesPolicySupported = v = false;
+					SimpleHttpLogger.Log(ex);
+				}
+			}
+			return v.Value;
+#else
+			return false;
+#endif
+		}
 		/// <summary>
 		/// 
 		/// </summary>
@@ -2210,6 +2269,16 @@ namespace BPUtil.SimpleHttp
 		public virtual bool shouldLogSocketBind()
 		{
 			return false;
+		}
+
+		/// <summary>
+		/// Gets a collection of allowed TLS cipher suites for the given connection.  Returns null if the default set of cipher suites should be allowed (which varies by platform).
+		/// </summary>
+		/// <param name="p">HttpProcessor providing connection information so that the derived class can decide which cipher suites to allow.</param>
+		/// <returns>A collection of allowed TLS cipher suites, or null.</returns>
+		public virtual IEnumerable<TlsCipherSuite> GetAllowedCipherSuites(HttpProcessor p)
+		{
+			return null;
 		}
 	}
 	#region Helper Classes

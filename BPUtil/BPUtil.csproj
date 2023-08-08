@@ -70,6 +70,7 @@
     <Compile Include="Compass.cs" />
     <Compile Include="CountdownStopwatch.cs" />
     <Compile Include="Debounce.cs" />
+    <Compile Include="SimpleHttp\TLS\ITlsCipherSuiteSet.cs" />
     <Compile Include="Throttle.cs" />
     <Compile Include="DescriptionAttribute.cs" />
     <Compile Include="DnsHelper.cs" />
