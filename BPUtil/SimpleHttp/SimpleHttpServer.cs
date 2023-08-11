@@ -995,6 +995,17 @@ Inner Exception:
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
 
+			int? responseStatusInt = NumberUtil.FirstInt(responseCode);
+			if (responseStatusInt == null)
+				throw new ArgumentException("Response code was not provided correctly.", "responseCode");
+
+			bool allowResponseBody = HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusInt.Value);
+			if (!allowResponseBody)
+			{
+				if (contentLength > 0)
+					throw new ArgumentException("The response code " + responseCode + " does not allow a response body, but contentLength " + contentLength + " was argued.", "contentLength");
+			}
+
 			responseWritten = true;
 			HashSet<string> reservedHeaderKeys = new HashSet<string>();
 			reservedHeaderKeys.Add("Connection");
@@ -1004,7 +1015,7 @@ Inner Exception:
 				WriteReservedHeader(reservedHeaderKeys, "Content-Type", contentType);
 			if (contentLength > -1)
 				WriteReservedHeader(reservedHeaderKeys, "Content-Length", contentLength.ToString());
-			bool chunkedTransferEncoding = this.keepAliveRequested && contentLength < 0;
+			bool chunkedTransferEncoding = allowResponseBody && this.keepAliveRequested && contentLength < 0;
 			if (chunkedTransferEncoding)
 				WriteReservedHeader(reservedHeaderKeys, "Transfer-Encoding", "chunked");
 			if (compressionType == CompressionType.GZip)
@@ -1031,6 +1042,46 @@ Inner Exception:
 			EnableCompressionIfSet();
 			if (chunkedTransferEncoding)
 				EnableTransferEncodingChunked();
+		}
+		/// <summary>
+		/// <para>Assists in writing a valid "304 Not Modified" response.</para>
+		/// <para>WORK-IN-PROGRESS. Likely I'll later add a method for responding with a FileInfo, and the method will handle caching automatically.  At that point, this method will become deprecated.</para>
+		/// <para>The response MUST include the following header fields:</para>
+		/// <para>
+		/// - <c>Date</c>, unless its omission is required by section 14.18.1
+		/// </para>
+		/// <para>
+		/// If a clockless origin server obeys these rules, and proxies and clients add their own Date to any response received without one(as already specified by[RFC 2068], section 14.19), caches will operate correctly.
+		/// </para>
+		/// <para>
+		/// - <c>ETag</c> and/or <c>Content-Location</c>, if the header would have been sent in a 200 response to the same request
+		/// </para>
+		/// <para>
+		/// - <c>Expires</c>, <c>Cache-Control</c>, and/or <c>Vary</c>, if the field-value might differ from that sent in any previous response for the same variant
+		/// </para>
+		/// </summary>
+		/// <param name="Date">Date header value</param>
+		/// <param name="ETag">ETag header value</param>
+		/// <param name="ContentLocation">Content-Location header value</param>
+		/// <param name="Expires">Expires header value</param>
+		/// <param name="CacheControl">Cache-Control header value</param>
+		/// <param name="Vary">Vary header value</param>
+		public virtual void write304NotModified(string Date, string ETag, string ContentLocation, string Expires, string CacheControl, string Vary)
+		{
+			HttpHeaderCollection headers = new HttpHeaderCollection();
+			if (Date != null)
+				headers["Date"] = Date;
+			if (ETag != null)
+				headers["ETag"] = ETag;
+			if (ContentLocation != null)
+				headers["Content-Location"] = ContentLocation;
+			if (Expires != null)
+				headers["Expires"] = Expires;
+			if (CacheControl != null)
+				headers["Cache-Control"] = CacheControl;
+			if (Vary != null)
+				headers["Vary"] = Vary;
+			writeSuccess(null, -1, "304 Not Modified", headers);
 		}
 		private void WriteReservedHeader(HashSet<string> reservedHeaderKeys, string key, string value)
 		{
@@ -1948,6 +1999,21 @@ Inner Exception:
 #else
 			return false;
 #endif
+		}
+		/// <summary>
+		/// Returns true if the HTTP status code is allowed to have a response body.
+		/// </summary>
+		/// <param name="statusCode">HTTP status code (e.g. 404)</param>
+		/// <returns>True if the HTTP status code is allowed to have a response body.</returns>
+		public static bool HttpStatusCodeCanHaveResponseBody(int statusCode)
+		{
+			if (statusCode.ToString().StartsWith("1"))
+				return false;
+			if (statusCode == 201 || statusCode == 204 || statusCode == 205)
+				return false;
+			if (statusCode == 304)
+				return false;
+			return true;
 		}
 		/// <summary>
 		/// 

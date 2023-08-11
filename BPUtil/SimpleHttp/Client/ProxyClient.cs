@@ -320,12 +320,21 @@ namespace BPUtil.SimpleHttp.Client
 			options.bet?.Start("Read Response Headers");
 			HttpResponseStatusLine responseStatusLine = null;
 			HttpHeaderCollection proxyHttpHeaders = new HttpHeaderCollection();
+			int responseStatusCodeInt = 0;
 			try
 			{
 				string statusLineStr = HttpProcessor.streamReadLine(proxyStream);
 				if (statusLineStr == null)
 					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
 				responseStatusLine = new HttpResponseStatusLine(statusLineStr);
+
+				int? responseStatusCodeIntNullable = NumberUtil.FirstInt(responseStatusLine.StatusCode);
+				if (responseStatusCodeIntNullable == null)
+				{
+					options.log.AppendLine("ProxyClient encountered invalid response status line: " + responseStatusLine.OriginalStatusLine);
+					return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyClient encountered invalid response status line: " + responseStatusLine.OriginalStatusLine, false, false);
+				}
+				responseStatusCodeInt = responseStatusCodeIntNullable.Value;
 
 				// Read response headers from remote server
 				HttpProcessor.readHeaders(proxyStream, proxyHttpHeaders);
@@ -374,7 +383,7 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				remoteServerWantsKeepalive = proxyConnectionHeader.IEquals("keep-alive");
 
-				if (responseStatusLine.StatusCode.StartsWith("1") || responseStatusLine.StatusCode == "204" || responseStatusLine.StatusCode == "304")
+				if (HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusCodeInt))
 					decision = ProxyResponseDecision.NoBody;
 				else if (proxyHttpHeaders.TryGetValue("Content-Length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
 				{
