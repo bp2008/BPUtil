@@ -148,15 +148,14 @@ namespace BPUtil
 			return Convert.ToBase64String(GetSHA1Bytes(s));
 		}
 		/// <summary>
-		/// Computes the MD5 hash of the specified string, optionally appending a binary salt value.
+		/// Computes the MD5 hash of the specified data, optionally appending a binary salt value.
 		/// An MD5 hash is 16 bytes (128 bits) long.
 		/// </summary>
-		/// <param name="s">The string to hash.</param>
+		/// <param name="data">The data to hash.</param>
 		/// <param name="salt">The salt value to append to the string before hashing.</param>
 		/// <returns></returns>
-		public static byte[] GetMD5Bytes(string s, byte[] salt = null)
+		public static byte[] GetMD5Bytes(byte[] data, byte[] salt = null)
 		{
-			byte[] data = utf8NoBOM.GetBytes(s);
 			if (salt != null && salt.Length > 0)
 			{
 				byte[] salted = new byte[data.Length + salt.Length];
@@ -169,6 +168,18 @@ namespace BPUtil
 				byte[] result = md5.ComputeHash(data);
 				return result;
 			}
+		}
+		/// <summary>
+		/// Computes the MD5 hash of the specified string, optionally appending a binary salt value.
+		/// An MD5 hash is 16 bytes (128 bits) long.
+		/// </summary>
+		/// <param name="s">The string to hash.</param>
+		/// <param name="salt">The salt value to append to the string before hashing.</param>
+		/// <returns></returns>
+		public static byte[] GetMD5Bytes(string s, byte[] salt = null)
+		{
+			byte[] data = utf8NoBOM.GetBytes(s);
+			return GetMD5Bytes(data, salt);
 		}
 		/// <summary>
 		/// Decodes the specified string as UTF8 and calculates the MD5 hash of the data.
