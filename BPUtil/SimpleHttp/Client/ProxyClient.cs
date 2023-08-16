@@ -479,7 +479,7 @@ namespace BPUtil.SimpleHttp.Client
 			// RESPONSE HEADERS ARE WRITTEN
 
 			if (wrapOutputStreamChunked)
-				outgoingStream = new ChunkedTransferEncodingStream(outgoingStream);
+				outgoingStream = new WritableChunkedTransferEncodingStream(outgoingStream);
 
 			// Handle the rest of the response based on the decision made earlier.
 			if (decision == ProxyResponseDecision.ContentLength)
@@ -507,8 +507,8 @@ namespace BPUtil.SimpleHttp.Client
 				// All done!
 			}
 
-			if (outgoingStream is ChunkedTransferEncodingStream)
-				(outgoingStream as ChunkedTransferEncodingStream).WriteFinalChunk();
+			if (outgoingStream is WritableChunkedTransferEncodingStream)
+				(outgoingStream as WritableChunkedTransferEncodingStream).WriteFinalChunk();
 
 			//////////////////////
 			// PHASE 6: CLEANUP //

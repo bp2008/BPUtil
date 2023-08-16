@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BPUtil.IO;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -61,7 +62,7 @@ namespace BPUtil.SimpleHttp
 		/// 
 		/// Be careful to flush [tcpStream] or [outputStream] before switching between them!!
 		/// 
-		/// This stream is typically either a NetworkStream or a GzipStream.
+		/// This stream is typically one of: NetworkStream, GzipStream, WritableChunkedTransferEncodingStream.
 		/// </summary>
 		public Stream tcpStream { get; private set; }
 
@@ -380,7 +381,13 @@ namespace BPUtil.SimpleHttp
 			this.srv = srv;
 			this.allowedConnectionTypes = allowedConnectionTypes;
 		}
-
+		/// <summary>
+		/// Reads a line of text from a binary input stream.  The text ends when '\n' is encountered. '\r' characters are ignored, not included in the returned string.
+		/// </summary>
+		/// <param name="inputStream">Input stream to read a line of text from.</param>
+		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
+		/// <returns>A line of text read from a binary input stream</returns>
+		/// <exception cref="HttpProcessorException">Throws if the line length reaches the limit before the line ends.</exception>
 		public static string streamReadLine(Stream inputStream, int maxLength = 32768)
 		{
 			int next_char;
@@ -651,8 +658,8 @@ Inner Exception:
 							this.writeFailure();
 					}
 					outputStream.Flush();
-					if (tcpStream is ChunkedTransferEncodingStream)
-						(tcpStream as ChunkedTransferEncodingStream).WriteFinalChunk();
+					if (tcpStream is WritableChunkedTransferEncodingStream)
+						(tcpStream as WritableChunkedTransferEncodingStream).Close();
 					tcpStream.Flush();
 					// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
 					try
@@ -948,7 +955,7 @@ Inner Exception:
 				outputStream.Flush();
 				tcpStream.Flush();
 				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, true);
-				outputStream = new StreamWriter(tcpStream, ByteUtil.Utf8NoBOM, tcpClient.SendBufferSize, true);
+				outputStream = new StreamWriter(tcpStream, Utf8NoBOM, tcpClient.SendBufferSize, true);
 			}
 		}
 		/// <summary>
@@ -958,11 +965,11 @@ Inner Exception:
 		{
 			if (!responseWritten)
 				return;
-			if (tcpStream is ChunkedTransferEncodingStream)
+			if (tcpStream is WritableChunkedTransferEncodingStream)
 				return;
 			outputStream.Flush();
 			tcpStream.Flush();
-			tcpStream = new ChunkedTransferEncodingStream(tcpStream);
+			tcpStream = new WritableChunkedTransferEncodingStream(tcpStream);
 			outputStream = new StreamWriter(tcpStream, Utf8NoBOM, tcpClient.SendBufferSize, true);
 		}
 		/// <summary>
@@ -986,8 +993,12 @@ Inner Exception:
 		/// <summary>
 		/// Writes the response headers for a successful response.  Call this one time before writing your response, after you have determined that the request is valid.
 		/// </summary>
-		/// <param name="contentType">The MIME type of your response.</param>
-		/// <param name="contentLength">(OPTIONAL) The length of your response, in bytes, if you know it. If you don't know it, provide -1, and if keep-alive is being used, then "Transfer-Encoding: chunked" will be used automatically on the output stream and you don't need to know anything about it.</param>
+		/// <param name="contentType">The MIME type of your response. If null or empty, it will not be written (unless provided in <paramref name="additionalHeaders"/>).</param>
+		/// <param name="contentLength"><para>
+		/// (OPTIONAL) The length of your response, in bytes, if you know it. If you don't know it, provide -1, and if keep-alive is being used, then "Transfer-Encoding: chunked" will be used automatically on the output stream and you don't need to know anything about it.
+		/// </para>
+		/// <para>Some response codes do not allow a response body.  If a positive Content-Length is given with a response code that does not allow a response body, an exception will be thrown.  In such a case, it is optimal to use a negative value for Content-Length so the header will be omitted and no exception will be thrown.
+		/// </para></param>
 		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		public virtual void writeSuccess(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
@@ -1022,7 +1033,10 @@ Inner Exception:
 				WriteReservedHeader(reservedHeaderKeys, "Content-Encoding", "gzip");
 			string cookieStr = responseCookies.ToString();
 			if (!string.IsNullOrEmpty(cookieStr))
+			{
+				reservedHeaderKeys.Add("Set-Cookie");
 				outputStream.WriteLineRN(cookieStr);
+			}
 			if (additionalHeaders != null)
 				foreach (KeyValuePair<string, string> header in additionalHeaders)
 				{
@@ -1042,46 +1056,6 @@ Inner Exception:
 			EnableCompressionIfSet();
 			if (chunkedTransferEncoding)
 				EnableTransferEncodingChunked();
-		}
-		/// <summary>
-		/// <para>Assists in writing a valid "304 Not Modified" response.</para>
-		/// <para>WORK-IN-PROGRESS. Likely I'll later add a method for responding with a FileInfo, and the method will handle caching automatically.  At that point, this method will become deprecated.</para>
-		/// <para>The response MUST include the following header fields:</para>
-		/// <para>
-		/// - <c>Date</c>, unless its omission is required by section 14.18.1
-		/// </para>
-		/// <para>
-		/// If a clockless origin server obeys these rules, and proxies and clients add their own Date to any response received without one(as already specified by[RFC 2068], section 14.19), caches will operate correctly.
-		/// </para>
-		/// <para>
-		/// - <c>ETag</c> and/or <c>Content-Location</c>, if the header would have been sent in a 200 response to the same request
-		/// </para>
-		/// <para>
-		/// - <c>Expires</c>, <c>Cache-Control</c>, and/or <c>Vary</c>, if the field-value might differ from that sent in any previous response for the same variant
-		/// </para>
-		/// </summary>
-		/// <param name="Date">Date header value</param>
-		/// <param name="ETag">ETag header value</param>
-		/// <param name="ContentLocation">Content-Location header value</param>
-		/// <param name="Expires">Expires header value</param>
-		/// <param name="CacheControl">Cache-Control header value</param>
-		/// <param name="Vary">Vary header value</param>
-		public virtual void write304NotModified(string Date, string ETag, string ContentLocation, string Expires, string CacheControl, string Vary)
-		{
-			HttpHeaderCollection headers = new HttpHeaderCollection();
-			if (Date != null)
-				headers["Date"] = Date;
-			if (ETag != null)
-				headers["ETag"] = ETag;
-			if (ContentLocation != null)
-				headers["Content-Location"] = ContentLocation;
-			if (Expires != null)
-				headers["Expires"] = Expires;
-			if (CacheControl != null)
-				headers["Cache-Control"] = CacheControl;
-			if (Vary != null)
-				headers["Vary"] = Vary;
-			writeSuccess(null, -1, "304 Not Modified", headers);
 		}
 		private void WriteReservedHeader(HashSet<string> reservedHeaderKeys, string key, string value)
 		{
@@ -1104,7 +1078,7 @@ Inner Exception:
 
 			if (description == null)
 				description = code;
-			int contentLength = ByteUtil.Utf8NoBOM.GetByteCount(description);
+			int contentLength = Utf8NoBOM.GetByteCount(description);
 
 			responseWritten = true;
 			HashSet<string> reservedHeaderKeys = new HashSet<string>();
@@ -1144,6 +1118,114 @@ Inner Exception:
 		}
 
 		/// <summary>
+		/// Writes a static file response with built-in caching support.
+		/// </summary>
+		/// <param name="filePath">Path to the file on disk.</param>
+		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
+		public virtual void writeStaticFile(string filePath, string contentTypeOverride = null)
+		{
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
+
+			FileInfo fi = new FileInfo(filePath);
+			if (!fi.Exists)
+			{
+				writeFailure("404 Not Found");
+				return;
+			}
+
+			string Date = DateTime.UtcNow.ToString("R");
+			string LastModified = fi.GetLastWriteTimeUtcAndRepairIfBroken().ToString("R");
+			string ETag = MakeETag(fi);
+			bool cacheHit = false;
+
+			HttpHeaderCollection headers = new HttpHeaderCollection();
+			headers["Date"] = Date;
+			headers["ETag"] = ETag;
+			headers["Last-Modified"] = LastModified;
+			headers["Cache-Control"] = "max-age=604800, public";
+			headers["Age"] = "0";
+			headers["Content-Type"] = contentTypeOverride != null ? contentTypeOverride : Mime.GetMimeType(fi.Extension);
+
+			// If-None-Match
+			// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
+			string IfNoneMatch = GetHeaderValue("If-None-Match");
+			if (IfNoneMatch != null)
+			{
+				if (ETag == IfNoneMatch)
+					cacheHit = true;
+			}
+			else
+			{
+				string IfModifiedSince = GetHeaderValue("If-Modified-Since");
+				if (IfModifiedSince != null && IfModifiedSince.IEquals(LastModified))
+					cacheHit = true;
+			}
+			if (cacheHit)
+			{
+				writeSuccess(null, -1, "304 Not Modified", headers);
+			}
+			else
+			{
+				writeSuccess(null, fi.Length, additionalHeaders: headers);
+				outputStream.Flush();
+				using (FileStream fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+					fs.CopyTo(tcpStream);
+				tcpStream.Flush();
+			}
+		}
+
+		/// <summary>
+		/// Creates an ETag for the given file, which is a string that is expected to be the same when the file content is the same, and different when the file content is different.  If an error occurs, this method will throw an exception, not return null.
+		/// </summary>
+		/// <param name="fi">FileInfo representing the file for which an ETag should be generated.  It is required that this file exists and is readable.</param>
+		/// <returns></returns>
+		private string MakeETag(FileInfo fi)
+		{
+			const long oneMillion = 1000000;
+			// Use SHA1 hash. It is faster than MD5 or xxHash.
+			using (System.Security.Cryptography.SHA1 sha = System.Security.Cryptography.SHA1.Create())
+			{
+				using (FileStream fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+				{
+					Stream stream;
+					if (fi.Length > 3 * oneMillion) // > 3MB
+					{
+						// ETag structure: Hash of [first 1MB, last 1MB, file size, file last modified date]
+						stream = new ConcatenatedStream(idx =>
+						{
+							if (idx == 0)
+							{
+								return fs.Substream(oneMillion);
+							}
+							else if (idx == 1)
+							{
+								fs.Seek(-oneMillion, SeekOrigin.End);
+								return fs.Substream(oneMillion);
+							}
+							else if (idx == 2)
+							{
+								byte[] buf = new byte[16];
+								ByteUtil.WriteInt64(fi.Length, buf, 0);
+								ByteUtil.WriteInt64(TimeUtil.GetTimeInMsSinceEpoch(fi.GetLastWriteTimeUtcAndRepairIfBroken()), buf, 8);
+								return new MemoryStream(buf);
+							}
+							else
+								return null;
+						});
+					}
+					else
+					{
+						// ETag structure: Hash of [file content]
+						stream = fs;
+					}
+					byte[] hash = sha.ComputeHash(stream);
+					return Base64UrlMod.ToBase64UrlMod(hash);
+				}
+			}
+		}
+
+		/// <summary>
 		/// Writes response headers to finish the WebSocket handshake with the client. No extensions are supported (such as compression) at this time.
 		/// </summary>
 		public virtual void writeWebSocketUpgrade()
@@ -1167,7 +1249,7 @@ Inner Exception:
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		public virtual void writeFullResponseUTF8(string body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
 		{
-			writeFullResponseBytes(ByteUtil.Utf8NoBOM.GetBytes(body), contentType, responseCode, additionalHeaders);
+			writeFullResponseBytes(Utf8NoBOM.GetBytes(body), contentType, responseCode, additionalHeaders);
 		}
 
 		/// <summary>
@@ -1185,6 +1267,54 @@ Inner Exception:
 		}
 
 		/// <summary>
+		/// <para>Assists in writing a valid "304 Not Modified" response (which has no body). If using this for a static file, it is recommended to instead use <see cref="writeStaticFile"/>.</para>
+		/// <para>The response MUST include the following header fields:</para>
+		/// <para>
+		/// - <c>Date</c>, unless its omission is required by section 14.18.1
+		/// </para>
+		/// <para>
+		/// If a clockless origin server obeys these rules, and proxies and clients add their own Date to any response received without one (as already specified by[RFC 2068], section 14.19), caches will operate correctly.
+		/// </para>
+		/// <para>
+		/// - <c>ETag</c> and/or <c>Content-Location</c>, if the header would have been sent in a 200 response to the same request
+		/// </para>
+		/// <para>
+		/// - <c>Expires</c>, <c>Cache-Control</c>, and/or <c>Vary</c>, if the field-value might differ from that sent in any previous response for the same variant
+		/// </para>
+		/// </summary>
+		/// <param name="Date">Date header value. If null, it will be generated.</param>
+		/// <param name="ETag">ETag header value</param>
+		/// <param name="ContentLocation">Content-Location header value</param>
+		/// <param name="Expires">Expires header value</param>
+		/// <param name="CacheControl">Cache-Control header value</param>
+		/// <param name="Vary">Vary header value</param>
+		/// <param name="Age">Age header value (age of the resource in seconds, typically 0 if this is the origin server)</param>
+		/// <param name="LastModified">Last-Modified header value</param>
+		public virtual void write304NotModified(string Date, string ETag, string ContentLocation, string Expires, string CacheControl, string Vary, string Age, string LastModified)
+		{
+			HttpHeaderCollection headers = new HttpHeaderCollection();
+			if (Date == null)
+				Date = DateTime.UtcNow.ToString("R");
+			if (Date != null)
+				headers["Date"] = Date;
+			if (ETag != null)
+				headers["ETag"] = ETag;
+			if (ContentLocation != null)
+				headers["Content-Location"] = ContentLocation;
+			if (Expires != null)
+				headers["Expires"] = Expires;
+			if (CacheControl != null)
+				headers["Cache-Control"] = CacheControl;
+			if (Vary != null)
+				headers["Vary"] = Vary;
+			if (Age != null)
+				headers["Age"] = Age;
+			if (LastModified != null)
+				headers["Last-Modified"] = LastModified;
+			writeSuccess(null, -1, "304 Not Modified", headers);
+		}
+
+		/// <summary>
 		/// Gets the value of the header, or null if the header does not exist.  The name is case insensitive.
 		/// </summary>
 		/// <param name="name">The case insensitive name of the header to get the value of.</param>
@@ -1192,7 +1322,6 @@ Inner Exception:
 		/// <returns>The value of the header, or null if the header did not exist.</returns>
 		public string GetHeaderValue(string name, string defaultValue = null)
 		{
-			name = name.ToLower();
 			string value;
 			if (!httpHeaders.TryGetValue(name, out value))
 				value = defaultValue;

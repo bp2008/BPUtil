@@ -10,20 +10,27 @@ namespace BPUtil.SimpleHttp
 	/// <summary>
 	/// <para>A Stream that writes data using HTTP transfer-encoding: chunked.</para>
 	/// <para>Only the Write and WriteAsync methods are intended to be used; all other methods and properties are either not implemented or are simply proxied to the underlying stream.</para>
-	/// <para>The ChunkedTransferEncodingStream does not automatically close the underlying stream.  As such, it is unnecessary to use the ChunkedTransferEncodingStream within a "using" block or to call Close or Dispose.</para>
+	/// <para>The WritableChunkedTransferEncodingStream does not automatically close the underlying stream.  However it does write the final chunk if that hasn't been done already.</para>
 	/// </summary>
-	public class ChunkedTransferEncodingStream : Stream
+	public class WritableChunkedTransferEncodingStream : Stream
 	{
 		private readonly Stream _stream;
 		private bool streamEnded = false;
-
 		/// <summary>
-		/// Initializes a new instance of the ChunkedTransferEncodingStream class.
+		/// Initializes a new instance of the WritableChunkedTransferEncodingStream class.
 		/// </summary>
 		/// <param name="stream">The underlying stream to write to.</param>
-		public ChunkedTransferEncodingStream(Stream stream)
+		public WritableChunkedTransferEncodingStream(Stream stream)
 		{
 			_stream = stream;
+		}
+		/// <summary>
+		/// Writes the final chunk if that hasn't been done already.  The underlying stream is not closed.  You should discontinue use of the WritableChunkedTransferEncodingStream after calling this.
+		/// </summary>
+		public override void Close()
+		{
+			if (!streamEnded)
+				WriteFinalChunk();
 		}
 
 		/// <inheritdoc />
@@ -75,7 +82,7 @@ namespace BPUtil.SimpleHttp
 		public override void Write(byte[] buffer, int offset, int count)
 		{
 			if (streamEnded)
-				throw new ApplicationException("ChunkedTransferEncodingStream.Write() is not allowed to be called after WriteFinalChunk() or WriteFinalChunkAsync() is called.");
+				throw new ApplicationException("WritableChunkedTransferEncodingStream.Write() is not allowed to be called after WriteFinalChunk() or WriteFinalChunkAsync() is called.");
 			if (count <= 0)
 				return;
 			WriteChunkHeader(count);
@@ -93,7 +100,7 @@ namespace BPUtil.SimpleHttp
 		public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
 		{
 			if (streamEnded)
-				throw new ApplicationException("ChunkedTransferEncodingStream.WriteAsync() is not allowed to be called after WriteFinalChunk() or WriteFinalChunkAsync() is called.");
+				throw new ApplicationException("WritableChunkedTransferEncodingStream.WriteAsync() is not allowed to be called after WriteFinalChunk() or WriteFinalChunkAsync() is called.");
 			if (count <= 0)
 				return;
 			await WriteChunkHeaderAsync(count, cancellationToken);
@@ -101,25 +108,25 @@ namespace BPUtil.SimpleHttp
 			await WriteChunkTrailerAsync(cancellationToken);
 		}
 		/// <summary>
-		/// Writes an empty chunk to the stream, indicating that the HTTP response is completed.  You should discontinue use of the ChunkedTransferEncodingStream after calling this.
+		/// Writes an empty chunk to the stream, indicating that the HTTP response is completed.  You should discontinue use of the WritableChunkedTransferEncodingStream after calling this.
 		/// </summary>
 		internal void WriteFinalChunk()
 		{
 			if (streamEnded)
-				throw new ApplicationException("ChunkedTransferEncodingStream.WriteFinalChunk() is not allowed to be called after WriteTrailingChunk() or WriteFinalChunkAsync() is called.");
+				throw new ApplicationException("WritableChunkedTransferEncodingStream.WriteFinalChunk() is not allowed to be called after WriteTrailingChunk() or WriteFinalChunkAsync() is called.");
 			streamEnded = true;
 			WriteChunkHeader(0);
 			WriteChunkTrailer();
 		}
 
 		/// <summary>
-		/// Asynchronously writes an empty chunk to the stream, indicating that the HTTP response is completed.  You should discontinue use of the ChunkedTransferEncodingStream after calling this.
+		/// Asynchronously writes an empty chunk to the stream, indicating that the HTTP response is completed.  You should discontinue use of the WritableChunkedTransferEncodingStream after calling this.
 		/// </summary>
 		/// <param name="cancellationToken">A CancellationToken which can be used to cancel the operation.</param>
 		internal async Task WriteFinalChunkAsync(CancellationToken cancellationToken)
 		{
 			if (streamEnded)
-				throw new ApplicationException("ChunkedTransferEncodingStream.WriteFinalChunkAsync() is not allowed to be called after WriteTrailingChunk() or WriteTrailingChunkAsync() is called.");
+				throw new ApplicationException("WritableChunkedTransferEncodingStream.WriteFinalChunkAsync() is not allowed to be called after WriteTrailingChunk() or WriteTrailingChunkAsync() is called.");
 			streamEnded = true;
 			await WriteChunkHeaderAsync(0, cancellationToken);
 			await WriteChunkTrailerAsync(cancellationToken);

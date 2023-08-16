@@ -70,7 +70,10 @@
     <Compile Include="Compass.cs" />
     <Compile Include="CountdownStopwatch.cs" />
     <Compile Include="Debounce.cs" />
+    <Compile Include="IO\ConcatenatedStream.cs" />
+    <Compile Include="IO\Substream.cs" />
     <Compile Include="SimpleHttp\TLS\ITlsCipherSuiteSet.cs" />
+    <Compile Include="SimpleHttp\ReadableChunkedTransferEncodingStream.cs" />
     <Compile Include="Throttle.cs" />
     <Compile Include="DescriptionAttribute.cs" />
     <Compile Include="DnsHelper.cs" />
@@ -128,7 +131,7 @@
     <Compile Include="Robust.cs" />
     <Compile Include="SevenZip.cs" />
     <Compile Include="SignatureFactory.cs" />
-    <Compile Include="SimpleHttp\ChunkedTransferEncodingStream.cs" />
+    <Compile Include="SimpleHttp\WritableChunkedTransferEncodingStream.cs" />
     <Compile Include="SimpleHttp\Client\ProxyClient.cs" />
     <Compile Include="SimpleHttp\Client\ProxyHeaderBehavior.cs" />
     <Compile Include="SimpleHttp\Client\ProxyOptions.cs" />

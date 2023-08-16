@@ -1,7 +1,9 @@
-﻿using System;
+﻿using BPUtil.IO;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Net.Http.Headers;
@@ -324,6 +326,18 @@ namespace BPUtil
 					}
 				}
 			}
+		}
+		#endregion
+		#region System.IO.Stream
+		/// <summary>
+		/// Returns a Substream that represents the next <paramref name="length"/> bytes of this stream from its current position.
+		/// </summary>
+		/// <param name="stream">The underlying stream.</param>
+		/// <param name="length">The number of bytes of the underlying stream which can be read via this Substream.</param>
+		/// <returns></returns>
+		public static Substream Substream(this Stream stream, long length)
+		{
+			return new Substream(stream, length);
 		}
 		#endregion
 #if NETFRAMEWORK || NET6_0_WIN

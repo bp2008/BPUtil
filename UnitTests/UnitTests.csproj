@@ -55,6 +55,9 @@
     <Compile Include="TestBase64UrlMod.cs" />
     <Compile Include="TestByteUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TestChunkedTransferEncodingStreams.cs" />
+    <Compile Include="TestConcatenatedStream.cs" />
+    <Compile Include="TestSubstream.cs" />
     <Compile Include="TestThrottle.cs" />
     <Compile Include="TestFileInfoExtensions.cs" />
     <Compile Include="TestDebounce.cs" />
@@ -74,6 +77,7 @@
     <Compile Include="TestStringExtensions.cs" />
     <Compile Include="TestStringUtil.cs" />
     <Compile Include="TestTokenBucket.cs" />
+    <Compile Include="TestXXHash.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
