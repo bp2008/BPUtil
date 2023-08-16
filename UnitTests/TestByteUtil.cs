@@ -1,6 +1,7 @@
 ﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using BPUtil;
+using System.IO;
 
 namespace UnitTests
 {
@@ -91,6 +92,126 @@ namespace UnitTests
 			Assert.IsTrue(ByteUtil.ByteArraysMatch(expected, array1));
 			// Passing null does not throw exception.
 			ByteUtil.InvertBits(null);
+		}
+		[TestMethod]
+		public void TestReadToEnd()
+		{
+			int len = 2 * 1024 * 1024;
+			byte[] input = new byte[len];
+			MemoryStream ms = new MemoryStream(len);
+			for (int i = 0; i < len; i++)
+			{
+				input[i] = (byte)len;
+				ms.WriteByte(input[i]);
+			}
+
+			Assert.AreEqual(len, ms.Position, "Position was not " + len);
+			Assert.AreEqual(0, ByteUtil.ReadToEndAsync(ms).Result.Length, "MemoryStream length was not " + 0);
+			Assert.AreEqual(0, ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)).Result.Length, "Substream length was not " + 0);
+
+			ms.Position = 0;
+			byte[] output1 = ByteUtil.ReadToEnd(ms);
+			CollectionAssert.AreEqual(input, output1);
+
+			ms.Position = 0;
+			byte[] output2 = ByteUtil.ReadToEnd(ms.Substream(ms.Length));
+			CollectionAssert.AreEqual(input, output2);
+		}
+		[TestMethod]
+		public void TestReadToEndAsync()
+		{
+			int len = 2 * 1024 * 1024;
+			byte[] input = new byte[len];
+			MemoryStream ms = new MemoryStream(len);
+			for (int i = 0; i < len; i++)
+			{
+				input[i] = (byte)len;
+				ms.WriteByte(input[i]);
+			}
+
+			Assert.AreEqual(len, ms.Position);
+			Assert.AreEqual(0, ByteUtil.ReadToEnd(ms).Length);
+			Assert.AreEqual(0, ByteUtil.ReadToEnd(ms.Substream(ms.Length)).Length);
+
+			ms.Position = 0;
+			byte[] output1 = ByteUtil.ReadToEndAsync(ms).Result;
+			CollectionAssert.AreEqual(input, output1);
+
+			ms.Position = 0;
+			byte[] output2 = ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)).Result;
+			CollectionAssert.AreEqual(input, output2);
+		}
+		[TestMethod]
+		public void TestReadToEndWithMaxLength()
+		{
+			int len = 2 * 1024 * 1024;
+			byte[] input = new byte[len];
+			MemoryStream ms = new MemoryStream(len);
+			for (int i = 0; i < len; i++)
+			{
+				input[i] = (byte)len;
+				ms.WriteByte(input[i]);
+			}
+
+			byte[] output;
+			ms.Position = 0;
+			Assert.IsTrue(ByteUtil.ReadToEndWithMaxLength(ms, len * 2, out output));
+			CollectionAssert.AreEqual(input, output);
+
+			ms.Position = 0;
+			Assert.IsTrue(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len * 2, out output));
+			CollectionAssert.AreEqual(input, output);
+
+			ms.Position = 0;
+			Assert.IsTrue(ByteUtil.ReadToEndWithMaxLength(ms, len, out output));
+			CollectionAssert.AreEqual(input, output);
+
+			ms.Position = 0;
+			Assert.IsTrue(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len, out output));
+			CollectionAssert.AreEqual(input, output);
+
+			ms.Position = 0;
+			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms, len - 1, out output));
+			Assert.IsNull(output);
+
+			ms.Position = 0;
+			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len - 1, out output));
+			Assert.IsNull(output);
+
+			ms.Position = 0;
+			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms, 1, out output));
+			Assert.IsNull(output);
+
+			ms.Position = 0;
+			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), 1, out output));
+			Assert.IsNull(output);
+
+			ms.Position = 0;
+			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms, 0, out output));
+			Assert.IsNull(output);
+
+			ms.Position = 0;
+			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), 0, out output));
+			Assert.IsNull(output);
+		}
+		[TestMethod]
+		public void TestDiscardUntilEndOfStream()
+		{
+			int len = 2 * 1024 * 1024;
+			byte[] input = new byte[len];
+			MemoryStream ms = new MemoryStream(len);
+			for (int i = 0; i < len; i++)
+			{
+				input[i] = (byte)len;
+				ms.WriteByte(input[i]);
+			}
+			ms.Position = 0;
+			ByteUtil.DiscardUntilEndOfStream(ms);
+			Assert.AreEqual(len, ms.Position);
+
+			ms.Position = 0;
+			ByteUtil.DiscardUntilEndOfStream(ms.Substream(ms.Length));
+			Assert.AreEqual(len, ms.Position);
 		}
 	}
 }

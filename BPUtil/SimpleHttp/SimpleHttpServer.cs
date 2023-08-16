@@ -42,8 +42,6 @@ namespace BPUtil.SimpleHttp
 		/// SslProtocols typed Tls13 that is available in earlier versions of .NET Framework.
 		/// </summary>
 		public const SslProtocols Tls13 = (SslProtocols)12288;
-		private const int BUF_SIZE = 4096;
-		private static int MAX_POST_SIZE = 10 * 1024 * 1024; // 10MB
 		private readonly AllowedConnectionTypes allowedConnectionTypes;
 
 		#region Fields and Properties
@@ -135,16 +133,9 @@ namespace BPUtil.SimpleHttp
 		public SortedList<string, string> RawQueryString { get; private set; } = new SortedList<string, string>();
 
 		/// <summary>
-		/// The mimetype of the request body content.
+		/// If not null, the specified number is the value of the Content-Length header.
 		/// </summary>
-		[Obsolete("This will go away in a future build.")]
-		public string postContentType { get; private set; } = "";
-
-		/// <summary>
-		/// The raw posted content as a string, populated only if the mimetype was "application/x-www-form-urlencoded"
-		/// </summary>
-		[Obsolete("This will go away in a future build.")]
-		public string postFormDataRaw { get; private set; } = "";
+		public long? ContentLength { get; private set; } = null;
 
 		/// <summary>
 		/// A flag that is set when writeSuccess(), writeFailure(), or writeRedirect() is called.
@@ -335,23 +326,9 @@ namespace BPUtil.SimpleHttp
 		public CompressionType compressionType { get; private set; } = CompressionType.None;
 
 		/// <summary>
-		/// Gets the Stream containing the request body. It will be seeked to the beginning before this HttpProcessor is sent to the HttpServer for handling. For requests that did not provide a body, this will be null.
+		/// Gets the Stream containing the request body. It will begin positioned at the beginning of the request body. For requests that did not provide a body, this will be null.
 		/// </summary>
 		public Stream RequestBodyStream { get; private set; }
-
-		/// <summary>
-		/// Gets the MemoryStream containing the request body. It will be seeked to the beginning before this HttpProcessor is sent to the HttpServer for handling. For requests that did not provide a body, this will be null.
-		/// </summary>
-		[Obsolete("Use RequestBodyStream instead")]
-		public MemoryStream PostBodyStream
-		{
-			get
-			{
-				if (RequestBodyStream != null && RequestBodyStream is MemoryStream)
-					return (MemoryStream)RequestBodyStream;
-				return null;
-			}
-		}
 
 		/// <summary>
 		/// The number of requests that have been read by the current TCP connection.
@@ -505,6 +482,7 @@ namespace BPUtil.SimpleHttp
 				{
 					if (keepAlive)
 					{
+						keepAlive = false;
 						responseCookies = new Cookies();
 						httpHeaders.Clear();
 						PostParams.Clear();
@@ -512,14 +490,12 @@ namespace BPUtil.SimpleHttp
 						QueryString.Clear();
 						RawQueryString.Clear();
 						http_method = "";
-#pragma warning disable CS0618
-						postContentType = postFormDataRaw = "";
-#pragma warning restore
 						responseWritten = false;
 						keepAliveRequested = false;
 						compressionType = CompressionType.None;
+						ContentLength = null;
+						RequestBodyStream = null;
 					}
-					keepAlive = false;
 					keepAliveRequestCount++;
 					tcpStream = originalTcpStream;
 					//int inputStreamThrottlingRuleset = 1;
@@ -840,84 +816,89 @@ Inner Exception:
 		/// </summary>
 		private void handleRequest(bool requestBodyRequired = false)
 		{
-			using (MemoryStream ms = new MemoryStream())
+			RequestBodyStream = null;
+			try
 			{
 #pragma warning disable CS0618
-				string contentType = postContentType = GetHeaderValue("Content-Type");
+				string contentType = GetHeaderValue("Content-Type");
 #pragma warning restore
 				string content_length_str = GetHeaderValue("Content-Length");
 				if (!string.IsNullOrWhiteSpace(content_length_str))
 				{
-					if (int.TryParse(content_length_str, out int content_len))
+					if (long.TryParse(content_length_str, out long content_len))
 					{
-						if (content_len > MAX_POST_SIZE)
+						if (content_len < 0)
 						{
-							SimpleHttpLogger.LogVerbose(this.http_method + " Content-Length(" + content_len + ") too big for this simple server.  Server can handle up to " + MAX_POST_SIZE);
-							this.writeFailure("413 Request Entity Too Large", "Request Too Large");
+							SimpleHttpLogger.LogVerbose(this.http_method + " Content-Length (" + content_len + ") is not valid.");
+							this.writeFailure("400 Bad Request", "Content-Length was not valid.");
 							return;
 						}
-						RequestBodyStream = ms;
-						byte[] buf = new byte[BUF_SIZE];
-						int to_read = content_len;
-						while (to_read > 0)
-						{
-							int numread = this.tcpStream.Read(buf, 0, Math.Min(BUF_SIZE, to_read));
-							if (numread == 0)
-							{
-								if (to_read == 0)
-									break;
-								else
-								{
-									SimpleHttpLogger.LogVerbose("client disconnected during post");
-									return;
-								}
-							}
-							to_read -= numread;
-							ms.Write(buf, 0, numread);
-						}
-						ms.Seek(0, SeekOrigin.Begin);
-					}
-				}
-				else if (this.http_method == "POST" || this.http_method == "PUT" || this.http_method == "PATCH")
-				{
-					this.writeFailure("411 Length Required", "The request did not specify the length of its content.");
-					SimpleHttpLogger.LogVerbose("The request did not specify the length of its content.  This server requires that all POST requests include a Content-Length header.");
-					return;
-				}
-
-				if (contentType != null && contentType.Contains("application/x-www-form-urlencoded"))
-				{
-					StreamReader sr = new StreamReader(ms, Utf8NoBOM);
-#pragma warning disable CS0618
-					string formDataRaw = postFormDataRaw = sr.ReadToEnd();
-#pragma warning restore
-					ms.Seek(0, SeekOrigin.Begin);
-
-					RawPostParams = ParseQueryStringArguments(formDataRaw, false, true, convertPlusToSpace: true);
-					PostParams = ParseQueryStringArguments(formDataRaw, false, convertPlusToSpace: true);
-
-					try
-					{
-						if (this.http_method == "GET")
-							srv.handleGETRequest(this);
-						else if (this.http_method == "POST")
-							srv.handlePOSTRequest(this, null);
-						else
-							srv.handleOtherRequest(this, http_method);
-					}
-					finally
-					{
-						sr.Dispose(); // Disposes underlying MemoryStream because we did not construct the StreamReader with leaveOpen flag.
+						ContentLength = content_len;
+						if (content_len > 0)
+							RequestBodyStream = this.tcpStream.Substream(content_len);
 					}
 				}
 				else
 				{
-					if (this.http_method == "GET")
-						srv.handleGETRequest(this);
-					else if (this.http_method == "POST")
-						srv.handlePOSTRequest(this, new StreamReader(ms, Utf8NoBOM));
-					else
-						srv.handleOtherRequest(this, http_method);
+					string transferEncoding = GetHeaderValue("Transfer-Encoding");
+					if (transferEncoding != null)
+					{
+						if (transferEncoding.IEquals("chunked")) // No support for multiple transfer encodings currently.
+							RequestBodyStream = new ReadableChunkedTransferEncodingStream(this.tcpStream);
+					}
+				}
+				if (ContentLength == null && RequestBodyStream == null)
+				{
+					if (this.http_method == "POST" || this.http_method == "PUT" || this.http_method == "PATCH")
+					{
+						this.writeFailure("411 Length Required", "This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
+						SimpleHttpLogger.LogVerbose("The request did not specify the length of its content via a method understood by this server.  This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
+						return;
+					}
+				}
+
+				if (contentType != null && contentType.Contains("application/x-www-form-urlencoded"))
+				{
+					const int MAX_FORM_SIZE = 5 * 1024 * 1024;
+					bool lengthLimitExceeded = false;
+					if (ContentLength != null)
+						lengthLimitExceeded = ContentLength > MAX_FORM_SIZE;
+					if (!lengthLimitExceeded)
+					{
+						if (ByteUtil.ReadToEndWithMaxLength(RequestBodyStream, MAX_FORM_SIZE, out byte[] data))
+						{
+							string formDataRaw = ByteUtil.Utf8NoBOM.GetString(data);
+
+							RawPostParams = ParseQueryStringArguments(formDataRaw, false, true, convertPlusToSpace: true);
+							PostParams = ParseQueryStringArguments(formDataRaw, false, convertPlusToSpace: true);
+
+							MemoryStream ms = new MemoryStream(data);
+							RequestBodyStream = ms;
+						}
+						else
+							lengthLimitExceeded = true;
+					}
+					if (lengthLimitExceeded)
+					{
+						SimpleHttpLogger.LogVerbose(this.http_method + " Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE);
+						this.writeFailure("413 Request Entity Too Large", "Request Too Large");
+						return;
+					}
+				}
+
+				if (this.http_method == "GET")
+					srv.handleGETRequest(this);
+				else if (this.http_method == "POST")
+					srv.handlePOSTRequest(this);
+				else
+					srv.handleOtherRequest(this, http_method);
+			}
+			finally
+			{
+				if (RequestBodyStream != null)
+				{
+					ByteUtil.DiscardUntilEndOfStream(RequestBodyStream);
+					RequestBodyStream.Dispose();
 				}
 				RequestBodyStream = null;
 			}
@@ -2441,8 +2422,7 @@ Inner Exception:
 		/// Handles an Http POST request.
 		/// </summary>
 		/// <param name="p">The HttpProcessor handling the request.</param>
-		/// <param name="inputData">The input stream.  If the request's MIME type was "application/x-www-form-urlencoded", the StreamReader will be null and you can obtain the parameter values using p.PostParams, p.GetPostParam(), p.GetPostIntParam(), etc.</param>
-		public abstract void handlePOSTRequest(HttpProcessor p, StreamReader inputData);
+		public abstract void handlePOSTRequest(HttpProcessor p);
 		/// <summary>
 		/// Handles requests using less common Http verbs such as "HEAD" or "PUT". See <see cref="HttpMethods"/>.
 		/// </summary>

@@ -234,14 +234,45 @@ namespace BPUtil
 
 			return result;
 		}
+		#region byte[] Buffer Pooling
+		private const int BufferSize = 81920;
+		/// <summary>
+		/// A pool which provides byte arrays with length of <see cref="BufferSize"/>.
+		/// </summary>
+		private static ObjectPool<byte[]> bufferPool = new ObjectPool<byte[]>(() => new byte[BufferSize], 256);
+		/// <summary>
+		/// Returns a byte[] with length of 81920 from an object pool.  The buffer may have been used previously and contain non-zero values.
+		/// </summary>
+		/// <returns>A byte[] with length 81920.  The buffer may have been used previously and contain non-zero values.</returns>
+		public static byte[] BufferGet()
+		{
+			return bufferPool.GetObject();
+		}
+		/// <summary>
+		/// Recycles a byte[] with length of 81920 back into the object pool.  The buffer will be given to another caller later without being zeroed-out.
+		/// </summary>
+		/// <exception cref="ArgumentNullException">If the buffer is null.</exception>
+		/// <exception cref="ArgumentException">If the buffer is an improper length.</exception>
+		public static void BufferRecycle(byte[] buffer)
+		{
+			if (buffer == null)
+				throw new ArgumentNullException(nameof(buffer));
+			if (buffer.Length != BufferSize)
+				throw new ArgumentException("Refusing to recycle buffer of length " + buffer.Length + " because the pool requires buffers of length " + BufferSize + ".", nameof(buffer));
+			bufferPool.PutObject(buffer);
+		}
+		#endregion
+		#region Stream Helpers
 		/// <summary>
 		/// Reads all bytes until the end of the stream, then returns the read data as a byte array.
 		/// </summary>
-		/// <param name="stream"></param>
-		/// <returns></returns>
+		/// <param name="stream">The stream to read data from.</param>
+		/// <returns>All bytes from the current position to the end of the stream.</returns>
 		public static byte[] ReadToEnd(Stream stream)
 		{
-			if (stream is MemoryStream)
+			if (stream == null)
+				throw new ArgumentNullException(nameof(stream));
+			if (stream is MemoryStream && (stream as MemoryStream).Position == 0)
 				return ((MemoryStream)stream).ToArray();
 			using (MemoryStream memoryStream = new MemoryStream())
 			{
@@ -252,11 +283,13 @@ namespace BPUtil
 		/// <summary>
 		/// Reads all bytes until the end of the stream, then returns the read data as a byte array.
 		/// </summary>
-		/// <param name="stream"></param>
-		/// <returns></returns>
+		/// <param name="stream">The stream to read data from.</param>
+		/// <returns>All bytes from the current position to the end of the stream.</returns>
 		public static async Task<byte[]> ReadToEndAsync(Stream stream)
 		{
-			if (stream is MemoryStream)
+			if (stream == null)
+				throw new ArgumentNullException(nameof(stream));
+			if (stream is MemoryStream && (stream as MemoryStream).Position == 0)
 				return ((MemoryStream)stream).ToArray();
 			using (MemoryStream memoryStream = new MemoryStream())
 			{
@@ -264,7 +297,83 @@ namespace BPUtil
 				return memoryStream.ToArray();
 			}
 		}
+		/// <summary>
+		/// Reads all bytes until the end of the stream, then returns true.  The read data is placed in an output argument byte array.  If maxLength is exceeded while reading, the read data is unavailable and the method returns false.
+		/// </summary>
+		/// <param name="stream">The stream to read data from.</param>
+		/// <param name="maxLength">Maximium number of bytes to read before aborting.</param>
+		/// <param name="data">(Output) Byte array containing the read data, only if its length is maxLength or less.</param>
+		/// <returns>True if data was read successfully within the <paramref name="maxLength"/> limit.</returns>
+		public static bool ReadToEndWithMaxLength(Stream stream, int maxLength, out byte[] data)
+		{
+			if (stream == null)
+				throw new ArgumentNullException(nameof(stream));
+			if (maxLength < 0)
+				throw new ArgumentOutOfRangeException(nameof(maxLength));
 
+			data = null;
+			if (stream is MemoryStream && (stream as MemoryStream).Position == 0)
+			{
+				if (stream.Length > maxLength)
+					return false;
+				else
+				{
+					data = ((MemoryStream)stream).ToArray();
+					return true;
+				}
+			}
+			using (MemoryStream memoryStream = new MemoryStream())
+			{
+				byte[] buf = BufferGet();
+				try
+				{
+					int totalRead = 0;
+					int read = 1;
+					while (read > 0 && totalRead <= maxLength)
+					{
+						read = stream.Read(buf, 0, buf.Length);
+						if (read > 0)
+							memoryStream.Write(buf, 0, read);
+						totalRead += read;
+					}
+					if (totalRead > maxLength)
+						return false;
+					data = memoryStream.ToArray();
+					return true;
+				}
+				finally
+				{
+					BufferRecycle(buf);
+				}
+			}
+		}
+		/// <summary>
+		/// Reads data from the stream in 81920-byte chunks until the end of stream is reached.  The data is discarded as soon as it is read. If the stream supports seeking, it is simply seeked to the end.
+		/// </summary>
+		/// <param name="stream">The stream to read data from.</param>
+		public static void DiscardUntilEndOfStream(Stream stream)
+		{
+			if (stream == null)
+				throw new ArgumentNullException(nameof(stream));
+			if (stream.CanSeek)
+			{
+				stream.Seek(0, SeekOrigin.End);
+				return;
+			}
+			byte[] buf = BufferGet();
+			try
+			{
+				int read = 1;
+				while (read > 0)
+					read = stream.Read(buf, 0, buf.Length);
+			}
+			catch { }
+			finally
+			{
+				BufferRecycle(buf);
+			}
+		}
+		#endregion
 		#region ReadNBytes
 		/// <summary>
 		/// Reads a specific number of bytes from the stream, returning a byte array.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.

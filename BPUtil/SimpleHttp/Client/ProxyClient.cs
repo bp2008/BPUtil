@@ -19,10 +19,6 @@ namespace BPUtil.SimpleHttp.Client
 	public class ProxyClient
 	{
 		/// <summary>
-		/// A pool which provides byte arrays with length of 65536.
-		/// </summary>
-		private static ObjectPool<byte[]> bufferPool = new ObjectPool<byte[]>(() => new byte[65536], 256);
-		/// <summary>
 		/// Web origin which this client is bound to, all lower case. e.g. "https://example.com"
 		/// </summary>
 		public readonly string Origin;
@@ -297,18 +293,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			// Write the original request body if there was one.
 			if (p.RequestBodyStream != null)
-			{
-				if (p.RequestBodyStream is MemoryStream)
-				{
-					long remember_position = p.RequestBodyStream.Position;
-					p.RequestBodyStream.Seek(0, SeekOrigin.Begin);
-					byte[] buf = ((MemoryStream)p.RequestBodyStream).ToArray();
-					await _ProxyDataAsync(ProxyDataDirection.RequestToServer, proxyStream, buf, buf.Length, snoopy);
-					((MemoryStream)p.RequestBodyStream).Seek(remember_position, SeekOrigin.Begin);
-				}
-				else
-					await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.RequestBodyStream, proxyStream, snoopy);
-			}
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.RequestBodyStream, proxyStream, snoopy);
 
 			proxyStream.Flush();
 
@@ -825,7 +810,7 @@ namespace BPUtil.SimpleHttp.Client
 		}
 		private static void CopyStreamUntilClosed(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
-			byte[] buf = bufferPool.GetObject();
+			byte[] buf = ByteUtil.BufferGet();
 			try
 			{
 				int read = 1;
@@ -838,12 +823,12 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			finally
 			{
-				bufferPool.PutObject(buf);
+				ByteUtil.BufferRecycle(buf);
 			}
 		}
 		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
-			byte[] buf = bufferPool.GetObject();
+			byte[] buf = ByteUtil.BufferGet();
 			try
 			{
 				int read = 1;
@@ -856,13 +841,13 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			finally
 			{
-				bufferPool.PutObject(buf);
+				ByteUtil.BufferRecycle(buf);
 			}
 		}
 		private static long CopyNBytes(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
 			long totalProxied = 0;
-			byte[] buf = bufferPool.GetObject();
+			byte[] buf = ByteUtil.BufferGet();
 			try
 			{
 				int read = 1;
@@ -877,13 +862,13 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			finally
 			{
-				bufferPool.PutObject(buf);
+				ByteUtil.BufferRecycle(buf);
 			}
 		}
 		private static async Task<long> CopyNBytesAsync(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
 			long totalProxied = 0;
-			byte[] buf = bufferPool.GetObject();
+			byte[] buf = ByteUtil.BufferGet();
 			try
 			{
 				int read = 1;
@@ -898,12 +883,12 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			finally
 			{
-				bufferPool.PutObject(buf);
+				ByteUtil.BufferRecycle(buf);
 			}
 		}
 		private static void CopyChunkedResponse(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
-			byte[] buf = bufferPool.GetObject();
+			byte[] buf = ByteUtil.BufferGet();
 			try
 			{
 				int bytesRead;
@@ -948,12 +933,12 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			finally
 			{
-				bufferPool.PutObject(buf);
+				ByteUtil.BufferRecycle(buf);
 			}
 		}
 		private static async Task CopyChunkedResponseAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
-			byte[] buf = bufferPool.GetObject();
+			byte[] buf = ByteUtil.BufferGet();
 			try
 			{
 				int bytesRead;
@@ -998,7 +983,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			finally
 			{
-				bufferPool.PutObject(buf);
+				ByteUtil.BufferRecycle(buf);
 			}
 		}
 

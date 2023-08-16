@@ -29,7 +29,7 @@ namespace BPUtil.SimpleHttp
 		/// <inheritdoc />
 		public override bool CanRead => _stream.CanRead;
 		/// <inheritdoc />
-		public override bool CanSeek => _stream.CanSeek;
+		public override bool CanSeek => false;
 		/// <inheritdoc />
 		public override bool CanWrite => false;
 		/// <inheritdoc />
