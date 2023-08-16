@@ -368,7 +368,7 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				remoteServerWantsKeepalive = proxyConnectionHeader.IEquals("keep-alive");
 
-				if (HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusCodeInt))
+				if (!HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusCodeInt))
 					decision = ProxyResponseDecision.NoBody;
 				else if (proxyHttpHeaders.TryGetValue("Content-Length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
 				{
