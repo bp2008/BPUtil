@@ -1103,43 +1103,57 @@ Inner Exception:
 		/// </summary>
 		/// <param name="filePath">Path to the file on disk.</param>
 		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		public virtual void writeStaticFile(string filePath, string contentTypeOverride = null)
+		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
+		public virtual void writeStaticFile(string filePath, string contentTypeOverride = null, bool canCache = true)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
 
-			FileInfo fi = new FileInfo(filePath);
+			writeStaticFile(new FileInfo(filePath), contentTypeOverride, canCache);
+		}
+		/// <summary>
+		/// Writes a static file response with built-in caching support.
+		/// </summary>
+		/// <param name="fi">File on disk.</param>
+		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
+		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
+		public virtual void writeStaticFile(FileInfo fi, string contentTypeOverride = null, bool canCache = true)
+		{
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
+
 			if (!fi.Exists)
 			{
 				writeFailure("404 Not Found");
 				return;
 			}
 
-			string Date = DateTime.UtcNow.ToString("R");
-			string LastModified = fi.GetLastWriteTimeUtcAndRepairIfBroken().ToString("R");
-			string ETag = MakeETag(fi);
 			bool cacheHit = false;
 
 			HttpHeaderCollection headers = new HttpHeaderCollection();
-			headers["Date"] = Date;
-			headers["ETag"] = ETag;
-			headers["Last-Modified"] = LastModified;
-			headers["Cache-Control"] = "max-age=604800, public";
-			headers["Age"] = "0";
 			headers["Content-Type"] = contentTypeOverride != null ? contentTypeOverride : Mime.GetMimeType(fi.Extension);
+			headers["Date"] = DateTime.UtcNow.ToString("R");
+			headers["ETag"] = MakeETag(fi);
+			headers["Last-Modified"] = fi.GetLastWriteTimeUtcAndRepairIfBroken().ToString("R");
+			headers["Age"] = "0";
+			if (canCache && srv.CanCacheFileExtension(fi.Extension))
+				headers["Cache-Control"] = "max-age=604800, public";
+			else
+				headers["Cache-Control"] = "no-cache"; // Caching is technically allowed, but the user agent should always revalidate to ensure the cached value is not stale.
+
 
 			// If-None-Match
 			// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
 			string IfNoneMatch = GetHeaderValue("If-None-Match");
 			if (IfNoneMatch != null)
 			{
-				if (ETag == IfNoneMatch)
+				if (headers["ETag"] == IfNoneMatch)
 					cacheHit = true;
 			}
 			else
 			{
 				string IfModifiedSince = GetHeaderValue("If-Modified-Since");
-				if (IfModifiedSince != null && IfModifiedSince.IEquals(LastModified))
+				if (IfModifiedSince != null && IfModifiedSince.IEquals(headers["Last-Modified"]))
 					cacheHit = true;
 			}
 			if (cacheHit)
@@ -1248,7 +1262,7 @@ Inner Exception:
 		}
 
 		/// <summary>
-		/// <para>Assists in writing a valid "304 Not Modified" response (which has no body). If using this for a static file, it is recommended to instead use <see cref="writeStaticFile"/>.</para>
+		/// <para>Assists in writing a valid "304 Not Modified" response (which has no body). If using this for a static file, it is recommended to instead use <see cref="writeStaticFile(FileInfo, string, bool)"/>.</para>
 		/// <para>The response MUST include the following header fields:</para>
 		/// <para>
 		/// - <c>Date</c>, unless its omission is required by section 14.18.1
@@ -2470,6 +2484,19 @@ Inner Exception:
 		public virtual bool shouldLogSocketBind()
 		{
 			return false;
+		}
+		/// <summary>
+		/// HashSet of file extensions (not case-sensitive) that are not allowed to be cached by the <see cref="HttpProcessor.writeStaticFile(string, string, bool)"/> method.
+		/// </summary>
+		protected HashSet<string> NoCacheStaticFileExtensions = new HashSet<string>(new string[] { ".htm", ".html" });
+		/// <summary>
+		/// Returns true if the given file extension is allowed to be cached by the <see cref="HttpProcessor.writeStaticFile(string, string, bool)"/> method.
+		/// </summary>
+		/// <param name="extension">File extension (e.g. ".txt")</param>
+		/// <returns></returns>
+		public virtual bool CanCacheFileExtension(string extension)
+		{
+			return !NoCacheStaticFileExtensions.Contains(extension, true);
 		}
 
 #if NET6_0
