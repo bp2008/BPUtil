@@ -25,6 +25,7 @@ namespace BPUtil.SimpleHttp.Client
 		private TcpClient proxyClient;
 		private Stream proxyStream;
 		private CountdownStopwatch expireTimer = CountdownStopwatch.StartNew(TimeSpan.FromMinutes(60));
+		private string lastRequestDetails;
 
 		/// <summary>
 		/// Constructs a ProxyClient and binds it to the specified origin.
@@ -94,7 +95,7 @@ namespace BPUtil.SimpleHttp.Client
 						if (HttpProcessor.IsOrdinaryDisconnectException(ex))
 							options.log.AppendLine("Unexpected disconnection!");
 						else
-							options.log.AppendLine("Exception occurred: " + ex.FlattenMessages());
+							options.log.AppendLine("ERROR: Exception occurred: " + ex.FlattenMessages());
 						ex.Rethrow();
 					}
 					options.bet?.Start("ProxyRequest analyze result #" + numTries + ": " + result.ErrorCode);
@@ -110,7 +111,7 @@ namespace BPUtil.SimpleHttp.Client
 					{
 						if (!result.ShouldTryAgainWithAnotherConnection)
 						{
-							options.log.AppendLine("ProxyRequest to uri \"" + uri.ToString() + "\" failed with error: " + result.ErrorMessage);
+							options.log.AppendLine("ERROR: ProxyRequest to uri \"" + uri.ToString() + "\" failed with error: " + result.ErrorMessage);
 							break;
 						}
 					}
@@ -193,10 +194,29 @@ namespace BPUtil.SimpleHttp.Client
 			});
 
 			// Figure out the Connection header
+			bool ourClientWantsConnectionClose = p.http_protocol_versionstring == "HTTP/1.0";
+			bool ourClientWantsConnectionKeepAlive = !ourClientWantsConnectionClose;
+			bool ourClientWantsConnectionUpgrade = false;
 			string incomingConnectionHeader = p.GetHeaderValue("connection");
-			bool ourClientWantsConnectionClose = "close".IEquals(incomingConnectionHeader);
-			bool ourClientWantsConnectionKeepAlive = "keep-alive".IEquals(incomingConnectionHeader) || string.IsNullOrEmpty(incomingConnectionHeader);
-			bool ourClientWantsConnectionUpgrade = "upgrade".IEquals(incomingConnectionHeader);
+			string[] incomingConnectionHeaderValues = incomingConnectionHeader?
+				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(s => s.Trim())
+				.ToArray();
+			if (incomingConnectionHeaderValues != null)
+			{
+				if (incomingConnectionHeaderValues.Contains("close", true))
+				{
+					ourClientWantsConnectionClose = true;
+					ourClientWantsConnectionKeepAlive = false;
+				}
+				else if (incomingConnectionHeaderValues.Contains("keep-alive", true))
+				{
+					ourClientWantsConnectionClose = false;
+					ourClientWantsConnectionKeepAlive = true;
+				}
+				if (incomingConnectionHeaderValues.Contains("upgrade", true))
+					ourClientWantsConnectionUpgrade = true;
+			}
 			if (!ourClientWantsConnectionClose && !ourClientWantsConnectionKeepAlive && !ourClientWantsConnectionUpgrade)
 			{
 				p.writeFullResponseUTF8("Connection header had unrecognized value.", "text/plain; charset=UTF-8", "400 Bad Request");
@@ -269,6 +289,8 @@ namespace BPUtil.SimpleHttp.Client
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: " + requestHeader_Connection + "\r\n", snoopy);
 				if (requestHeader_Upgrade != null)
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Upgrade: " + requestHeader_Upgrade + "\r\n", snoopy);
+				if (p.RequestBodyStream is ReadableChunkedTransferEncodingStream)
+					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Transfer-Encoding: chunked\r\n", snoopy);
 
 				ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
 
@@ -311,12 +333,24 @@ namespace BPUtil.SimpleHttp.Client
 				string statusLineStr = HttpProcessor.streamReadLine(proxyStream);
 				if (statusLineStr == null)
 					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
-				responseStatusLine = new HttpResponseStatusLine(statusLineStr);
+				try
+				{
+					responseStatusLine = new HttpResponseStatusLine(statusLineStr);
+				}
+				catch (Exception ex)
+				{
+					string message = "Response status line was invalid.";
+					if (lastRequestDetails == null)
+						message += Environment.NewLine + "This ProxyClient has not been used for any previous requests.";
+					else
+						message += Environment.NewLine + "This probably happened because of the PREVIOUS REQUEST handled by this ProxyClient, which was: " + lastRequestDetails;
+					throw new ApplicationException(message, ex);
+				}
 
 				int? responseStatusCodeIntNullable = NumberUtil.FirstInt(responseStatusLine.StatusCode);
 				if (responseStatusCodeIntNullable == null)
 				{
-					options.log.AppendLine("ProxyClient encountered invalid response status line: " + responseStatusLine.OriginalStatusLine);
+					options.log.AppendLine("ERROR: ProxyClient encountered invalid response status line: " + responseStatusLine.OriginalStatusLine);
 					return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyClient encountered invalid response status line: " + responseStatusLine.OriginalStatusLine, false, false);
 				}
 				responseStatusCodeInt = responseStatusCodeIntNullable.Value;
@@ -344,29 +378,32 @@ namespace BPUtil.SimpleHttp.Client
 
 			// Decide how to respond
 			options.bet?.Start("Proxy Process Response Headers");
-			ProxyResponseDecision decision;
+			ProxyResponseDecision decision = ProxyResponseDecision.Undefined;
 			long proxyContentLength = 0;
 			bool remoteServerWantsKeepalive = false;
 			string proxyConnectionHeader;
 			if (!proxyHttpHeaders.TryGetValue("Connection", out proxyConnectionHeader))
 			{
 				if (responseStatusLine.Version.StartsWith("1.0"))
-				{
-					options.log.AppendLine("No \"Connection\" header in response from remote server.");
-					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
-					return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyClient can't process this request because the remote server did not specify a \"Connection\" header. The request was: " + requestLine, false, false);
-				}
-				proxyConnectionHeader = "keep-alive";
+					proxyConnectionHeader = "close";
+				else
+					proxyConnectionHeader = "keep-alive";
 			}
+			string[] proxyConnectionHeaderValues = proxyConnectionHeader
+				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(s => s.Trim())
+				.ToArray();
 
-			if (proxyConnectionHeader.IEquals("upgrade") && proxyHttpHeaders.TryGetValue("Upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
+			if (p.http_method == "HEAD")
+				decision = ProxyResponseDecision.NoBody;
+			else if (proxyConnectionHeaderValues.Contains("upgrade", true) && proxyHttpHeaders.TryGetValue("Upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
 			{
 				options.log.AppendLine("This is a websocket connection.");
 				decision = ProxyResponseDecision.Websocket;
 			}
 			else
 			{
-				remoteServerWantsKeepalive = proxyConnectionHeader.IEquals("keep-alive");
+				remoteServerWantsKeepalive = proxyConnectionHeaderValues.Contains("keep-alive");
 
 				if (!HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusCodeInt))
 					decision = ProxyResponseDecision.NoBody;
@@ -375,17 +412,32 @@ namespace BPUtil.SimpleHttp.Client
 					// Content-Length
 					decision = ProxyResponseDecision.ContentLength;
 				}
-				else if (proxyHttpHeaders.TryGetValue("Transfer-Encoding", out string proxyTransferEncoding) && proxyTransferEncoding.IEquals("chunked"))
-				{
-					// Transfer-Encoding: chunked
-					decision = ProxyResponseDecision.ReadChunked;
-				}
 				else
 				{
-					if (remoteServerWantsKeepalive)
-						decision = ProxyResponseDecision.NoBody;
-					else
-						decision = ProxyResponseDecision.UntilClosed;
+					if (proxyHttpHeaders.TryGetValue("Transfer-Encoding", out string proxyTransferEncoding))
+					{
+						options.log.AppendLine("Remote server specified Transfer-Encoding: " + proxyTransferEncoding);
+						string[] proxyTransferEncodingValues = proxyTransferEncoding
+							.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+							.Select(s => s.Trim())
+							.ToArray();
+						if (proxyTransferEncodingValues.Contains("chunked", true))
+						{
+							// Transfer-Encoding: chunked
+							decision = ProxyResponseDecision.ReadChunked;
+							if (proxyTransferEncodingValues.Length > 1)
+								options.log.AppendLine("WARNING: Transfer-Encoding is not recognized fully: " + proxyTransferEncoding);
+						}
+						else
+							options.log.AppendLine("WARNING: Transfer-Encoding is not recognized: " + proxyTransferEncoding);
+					}
+					if (decision == ProxyResponseDecision.Undefined)
+					{
+						if (remoteServerWantsKeepalive)
+							decision = ProxyResponseDecision.NoBody;
+						else
+							decision = ProxyResponseDecision.UntilClosed;
+					}
 				}
 
 				//// keep-alive responses must either specify a "Content-Length" or use "Transfer-Encoding: chunked".
@@ -395,6 +447,8 @@ namespace BPUtil.SimpleHttp.Client
 				//	return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyTo can't process this request because the remote server specified \"Connection: keepalive\" without specifying a \"Content-Length\" or using \"Transfer-Encoding: chunked\". The request was: " + requestLine + ". All headers:\r\n" + string.Join("\r\n", proxyHttpHeadersRaw.Select(i => i.Key + ": " + i.Value)), false, false);
 				//}
 			}
+
+			options.log.AppendLine("Response will be read as: " + decision + (decision == ProxyResponseDecision.ContentLength ? (" (" + proxyContentLength + ")") : ""));
 
 			// Rewrite redirect location to point at this server
 			if (proxyHttpHeaders.ContainsKey("Location"))
@@ -464,7 +518,10 @@ namespace BPUtil.SimpleHttp.Client
 			// RESPONSE HEADERS ARE WRITTEN
 
 			if (wrapOutputStreamChunked)
+			{
 				outgoingStream = new WritableChunkedTransferEncodingStream(outgoingStream);
+				options.log.AppendLine("Response will be written with \"Transfer-Encoding: chunked\".");
+			}
 
 			// Handle the rest of the response based on the decision made earlier.
 			if (decision == ProxyResponseDecision.ContentLength)
@@ -493,7 +550,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 
 			if (outgoingStream is WritableChunkedTransferEncodingStream)
-				(outgoingStream as WritableChunkedTransferEncodingStream).WriteFinalChunk();
+				await (outgoingStream as WritableChunkedTransferEncodingStream).WriteFinalChunkAsync(new CancellationToken());
 
 			//////////////////////
 			// PHASE 6: CLEANUP //
@@ -531,6 +588,7 @@ namespace BPUtil.SimpleHttp.Client
 				}
 				expireTimer = CountdownStopwatch.StartNew(TimeSpan.FromSeconds(seconds));
 			}
+			lastRequestDetails = p.TrueRemoteIPAddress + " -> " + p.hostName + " " + requestLine;
 			return new ProxyResult(ProxyResultErrorCode.Success, null, remoteServerWantsKeepalive && options.allowConnectionKeepalive, false);
 		}
 		/// <summary>
@@ -1026,6 +1084,9 @@ namespace BPUtil.SimpleHttp.Client
 			{
 			}
 		}
+		/// <summary>
+		/// Represents the status line from an HTTP response.
+		/// </summary>
 		private class HttpResponseStatusLine
 		{
 			/// <summary>
@@ -1051,16 +1112,20 @@ namespace BPUtil.SimpleHttp.Client
 			/// <summary>
 			/// Constructs an HttpResponseStatusLine from a string that was the first line of an HTTP response.
 			/// </summary>
+			/// <exception cref="ArgumentNullException">Throws if the given HTTP status line is null.</exception>
+			/// <exception cref="ArgumentException">Throws if the given HTTP status line is invalid.</exception>
 			public HttpResponseStatusLine(string line)
 			{
+				if (line == null)
+					throw new ArgumentNullException(nameof(line));
 				OriginalStatusLine = line;
 				string[] parts = line.Split(' ');
 				if (parts.Length < 3)
-					throw new ArgumentException("Invalid HTTP response status line does not contain at least 2 spaces.", "line");
+					throw new ArgumentException("Invalid HTTP response status line does not contain at least 2 spaces: " + line);
 				if (parts[0].StartsWith("HTTP/"))
 					Version = parts[0].Substring("HTTP/".Length);
 				else
-					throw new ArgumentException("Invalid HTTP response status line does begin with \"HTTP/\"", "line");
+					throw new ArgumentException("Invalid HTTP response status line does begin with \"HTTP/\": " + line);
 				StatusCode = parts[1];
 				StatusText = string.Join(" ", parts.Skip(2));
 			}

@@ -35,6 +35,10 @@ namespace BPUtil.IO
 		/// This Substream's current position between 0 and <see cref="_length"/>.
 		/// </summary>
 		private long _position = 0;
+		/// <summary>
+		/// Gets a value indicating if this Substream is currently positioned at the end of the stream.
+		/// </summary>
+		public bool EndOfStream => _position >= _length;
 
 		/// <summary>
 		/// Creates a Substream that represents the next <paramref name="length"/> bytes of the underlying stream from its current position.

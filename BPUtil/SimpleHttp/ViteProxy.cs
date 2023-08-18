@@ -83,7 +83,6 @@ namespace BPUtil.SimpleHttp
 		{
 			try
 			{
-				// Vite's web server misuses "Connection: keep-alive" by sometimes not offering a way to know when the response is finished.
 				UriBuilder builder = new UriBuilder(p.request_url);
 				builder.Scheme = "http";
 				builder.Host = IPAddress.IPv6Loopback.ToString();

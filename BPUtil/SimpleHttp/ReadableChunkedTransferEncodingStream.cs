@@ -15,7 +15,10 @@ namespace BPUtil.SimpleHttp
 	public class ReadableChunkedTransferEncodingStream : Stream
 	{
 		private readonly Stream _stream;
-		private bool streamEnded = false;
+		/// <summary>
+		/// Gets a value indicating if this ReadableChunkedTransferEncodingStream is currently positioned at the end of the stream.
+		/// </summary>
+		public bool EndOfStream { get; private set; } = false;
 
 		/// <summary>
 		/// Initializes a new instance of the ReadableChunkedTransferEncodingStream class.
@@ -57,7 +60,7 @@ namespace BPUtil.SimpleHttp
 		{
 			if (count > buffer.Length - offset)
 				throw new ArgumentOutOfRangeException("count", "Reading " + count + " bytes at offset " + offset + " would require a " + (offset + count) + "-byte buffer.  The given buffer has length " + buffer.Length);
-			if (streamEnded)
+			if (EndOfStream)
 				return 0;
 
 			int totalRead = 0;
@@ -67,7 +70,7 @@ namespace BPUtil.SimpleHttp
 					remainingThisChunk = ReadChunkSizeLine();
 				if (remainingThisChunk == 0)
 				{
-					streamEnded = true;
+					EndOfStream = true;
 					ReadChunkTrailer();
 					return totalRead;
 				}
@@ -107,7 +110,7 @@ namespace BPUtil.SimpleHttp
 		{
 			if (count > buffer.Length - offset)
 				throw new ArgumentOutOfRangeException("count", "Reading " + count + " bytes at offset " + offset + " would require a " + (offset + count) + "-byte buffer.  The given buffer has length " + buffer.Length);
-			if (streamEnded)
+			if (EndOfStream)
 				return 0;
 
 			int totalRead = 0;
@@ -119,7 +122,7 @@ namespace BPUtil.SimpleHttp
 					remainingThisChunk = await ReadChunkSizeLineAsync();
 				if (remainingThisChunk == 0)
 				{
-					streamEnded = true;
+					EndOfStream = true;
 					ReadChunkTrailer();
 					return totalRead;
 				}

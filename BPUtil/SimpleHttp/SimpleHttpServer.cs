@@ -326,7 +326,7 @@ namespace BPUtil.SimpleHttp
 		public CompressionType compressionType { get; private set; } = CompressionType.None;
 
 		/// <summary>
-		/// Gets the Stream containing the request body. It will begin positioned at the beginning of the request body. For requests that did not provide a body, this will be null.
+		/// Gets the Stream containing the request body. It will begin positioned at the beginning of the request body and end at the end of the request body. For requests that did not provide a body, this will be null.
 		/// </summary>
 		public Stream RequestBodyStream { get; private set; }
 
@@ -523,7 +523,16 @@ namespace BPUtil.SimpleHttp
 						}
 						if (string.IsNullOrWhiteSpace(hostName))
 							hostName = null;
-						keepAliveRequested = "keep-alive".IEquals(GetHeaderValue("connection"));
+
+						string[] connectionHeaderValues = GetHeaderValue("connection")?
+							.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+							.Select(s => s.Trim())
+							.ToArray();
+						if (connectionHeaderValues != null)
+							keepAliveRequested = connectionHeaderValues.Contains("keep-alive", true);
+						else
+							keepAliveRequested = http_protocol_versionstring == "HTTP/1.1";
+
 						IPAddress originalRemoteIp = RemoteIPAddress;
 						if (srv.XRealIPHeader)
 						{
@@ -564,7 +573,7 @@ namespace BPUtil.SimpleHttp
 						if (HttpMethods.IsValid(http_method))
 						{
 							if (shouldLogRequestsToFile())
-								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, http_method, request_url.OriginalString);
+								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, http_method, request_url.OriginalString, hostName);
 							handleRequest();
 						}
 						else
@@ -575,17 +584,17 @@ namespace BPUtil.SimpleHttp
 					catch (ThreadAbortException) { throw; }
 					catch (Exception e)
 					{
-						if (shouldLogRequestsToFile())
-							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, "FAIL", request_url?.OriginalString);
 						if (IsOrdinaryDisconnectException(e))
 						{
 							//if (keepAliveRequestCount <= 1) // Do not log if this is a kept-alive connection.
 							//	SimpleHttpLogger.LogVerbose(e);
-							if (!responseWritten)
-								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request."); // This response should probably fail because the client has disconnected.
+							//if (!responseWritten)
+							//	this.writeFailure("500 Internal Server Error", "An error occurred while processing this request."); // This response should probably fail because the client has disconnected.
 							return;
 						}
-						else if (e.GetExceptionOfType<HttpProcessorException>() != null)
+						if (shouldLogRequestsToFile())
+							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, http_method + ":FAIL", request_url?.OriginalString, hostName);
+						if (e.GetExceptionOfType<HttpProcessorException>() != null)
 						{
 							SimpleHttpLogger.LogVerbose(e);
 							if (!responseWritten)
@@ -764,7 +773,7 @@ Inner Exception:
 				throw new HttpProtocolException("invalid http request line: " + request);
 			http_method = tokens[0].ToUpper();
 
-			if (tokens[1].StartsWith("http://") || tokens[1].StartsWith("https://"))
+			if (tokens[1].StartsWith("http://") || tokens[1].StartsWith("https://") || tokens[1].StartsWith("ws://") || tokens[1].StartsWith("wss://"))
 				request_url = new Uri(tokens[1]);
 			else
 				request_url = new Uri(base_uri_this_server, tokens[1]);
@@ -819,70 +828,89 @@ Inner Exception:
 			RequestBodyStream = null;
 			try
 			{
-#pragma warning disable CS0618
-				string contentType = GetHeaderValue("Content-Type");
-#pragma warning restore
-				string content_length_str = GetHeaderValue("Content-Length");
-				if (!string.IsNullOrWhiteSpace(content_length_str))
+				if (this.http_method != "TRACE")
 				{
-					if (long.TryParse(content_length_str, out long content_len))
+#pragma warning disable CS0618
+					string contentType = GetHeaderValue("Content-Type");
+#pragma warning restore
+					string content_length_str = GetHeaderValue("Content-Length");
+					if (!string.IsNullOrWhiteSpace(content_length_str))
 					{
-						if (content_len < 0)
+						if (long.TryParse(content_length_str, out long content_len))
 						{
-							SimpleHttpLogger.LogVerbose(this.http_method + " Content-Length (" + content_len + ") is not valid.");
-							this.writeFailure("400 Bad Request", "Content-Length was not valid.");
+							if (content_len < 0)
+							{
+								SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " - Content-Length (" + content_len + ") is not valid.");
+								this.writeFailure("400 Bad Request", "Content-Length was not valid.");
+								return;
+							}
+							ContentLength = content_len;
+							if (content_len > 0)
+							{
+								SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Request body will be read as Substream(" + content_len + ").");
+								RequestBodyStream = this.tcpStream.Substream(content_len);
+							}
+						}
+					}
+					else
+					{
+						string transferEncoding = GetHeaderValue("Transfer-Encoding");
+						if (transferEncoding != null)
+						{
+							string[] transferEncodingHeaderValues = transferEncoding
+								.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+								.Select(s => s.Trim())
+								.ToArray();
+							if (transferEncodingHeaderValues.Contains("chunked") && transferEncodingHeaderValues.Length == 1) // No support for multiple transfer encodings currently.
+							{
+								RequestBodyStream = new ReadableChunkedTransferEncodingStream(this.tcpStream);
+								SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Request body will be read as ReadableChunkedTransferEncodingStream.");
+							}
+						}
+					}
+					if (RequestBodyStream == null)
+					{
+						if (this.http_method == "POST" || this.http_method == "PUT" || this.http_method == "PATCH")
+						{
+							this.writeFailure("411 Length Required", "This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
+							SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - The request did not specify the length of its content via a method understood by this server.  This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
 							return;
 						}
-						ContentLength = content_len;
-						if (content_len > 0)
-							RequestBodyStream = this.tcpStream.Substream(content_len);
 					}
-				}
-				else
-				{
-					string transferEncoding = GetHeaderValue("Transfer-Encoding");
-					if (transferEncoding != null)
-					{
-						if (transferEncoding.IEquals("chunked")) // No support for multiple transfer encodings currently.
-							RequestBodyStream = new ReadableChunkedTransferEncodingStream(this.tcpStream);
-					}
-				}
-				if (ContentLength == null && RequestBodyStream == null)
-				{
-					if (this.http_method == "POST" || this.http_method == "PUT" || this.http_method == "PATCH")
-					{
-						this.writeFailure("411 Length Required", "This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
-						SimpleHttpLogger.LogVerbose("The request did not specify the length of its content via a method understood by this server.  This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
-						return;
-					}
-				}
 
-				if (contentType != null && contentType.Contains("application/x-www-form-urlencoded"))
-				{
-					const int MAX_FORM_SIZE = 5 * 1024 * 1024;
-					bool lengthLimitExceeded = false;
-					if (ContentLength != null)
-						lengthLimitExceeded = ContentLength > MAX_FORM_SIZE;
-					if (!lengthLimitExceeded)
+					if (contentType != null && contentType.Contains("application/x-www-form-urlencoded"))
 					{
-						if (ByteUtil.ReadToEndWithMaxLength(RequestBodyStream, MAX_FORM_SIZE, out byte[] data))
+						if (RequestBodyStream == null)
 						{
-							string formDataRaw = ByteUtil.Utf8NoBOM.GetString(data);
-
-							RawPostParams = ParseQueryStringArguments(formDataRaw, false, true, convertPlusToSpace: true);
-							PostParams = ParseQueryStringArguments(formDataRaw, false, convertPlusToSpace: true);
-
-							MemoryStream ms = new MemoryStream(data);
-							RequestBodyStream = ms;
+							this.writeFailure("411 Length Required", "This server requires requests with \"Content-Type: application/x-www-form-urlencoded\" to include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
+							SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - The request specified \"Content-Type: application/x-www-form-urlencoded\" but this server was unable to read the request body.");
+							return;
 						}
-						else
-							lengthLimitExceeded = true;
-					}
-					if (lengthLimitExceeded)
-					{
-						SimpleHttpLogger.LogVerbose(this.http_method + " Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE);
-						this.writeFailure("413 Request Entity Too Large", "Request Too Large");
-						return;
+						const int MAX_FORM_SIZE = 5 * 1024 * 1024;
+						bool lengthLimitExceeded = false;
+						if (ContentLength != null)
+							lengthLimitExceeded = ContentLength > MAX_FORM_SIZE;
+						if (!lengthLimitExceeded)
+						{
+							if (ByteUtil.ReadToEndWithMaxLength(RequestBodyStream, MAX_FORM_SIZE, out byte[] data))
+							{
+								string formDataRaw = ByteUtil.Utf8NoBOM.GetString(data);
+
+								RawPostParams = ParseQueryStringArguments(formDataRaw, false, true, convertPlusToSpace: true);
+								PostParams = ParseQueryStringArguments(formDataRaw, false, convertPlusToSpace: true);
+
+								MemoryStream ms = new MemoryStream(data);
+								RequestBodyStream = ms;
+							}
+							else
+								lengthLimitExceeded = true;
+						}
+						if (lengthLimitExceeded)
+						{
+							SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE);
+							this.writeFailure("413 Request Entity Too Large", "Request Too Large");
+							return;
+						}
 					}
 				}
 
@@ -897,6 +925,11 @@ Inner Exception:
 			{
 				if (RequestBodyStream != null)
 				{
+					if ((RequestBodyStream is Substream && !(RequestBodyStream as Substream).EndOfStream)
+						|| (RequestBodyStream is ReadableChunkedTransferEncodingStream && !(RequestBodyStream as ReadableChunkedTransferEncodingStream).EndOfStream))
+					{
+						SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Request body was not fully read by the server.  Discarding remaining bytes.");
+					}
 					ByteUtil.DiscardUntilEndOfStream(RequestBodyStream);
 					RequestBodyStream.Dispose();
 				}
@@ -929,6 +962,8 @@ Inner Exception:
 		{
 			if (!responseWritten)
 				return;
+			if (this.http_method == "HEAD")
+				return; // No response should be written for "HEAD", therefore we should not wrap the output streams.
 			if (compressionType == CompressionType.GZip)
 			{
 				if (tcpStream is GZipStream)
@@ -948,6 +983,8 @@ Inner Exception:
 				return;
 			if (tcpStream is WritableChunkedTransferEncodingStream)
 				return;
+			if (this.http_method == "HEAD")
+				return; // No response should be written for "HEAD", therefore we should not wrap the output streams.
 			outputStream.Flush();
 			tcpStream.Flush();
 			tcpStream = new WritableChunkedTransferEncodingStream(tcpStream);
@@ -2133,7 +2170,7 @@ Inner Exception:
 		{
 			if (statusCode.ToString().StartsWith("1"))
 				return false;
-			if (statusCode == 201 || statusCode == 204 || statusCode == 205)
+			if (statusCode == 204 || statusCode == 205)
 				return false;
 			if (statusCode == 304)
 				return false;
@@ -2806,9 +2843,9 @@ Inner Exception:
 			if (logVerbose)
 				Log(str);
 		}
-		internal static void LogRequest(DateTime time, string remoteHost, string requestMethod, string requestedUrl)
+		internal static void LogRequest(DateTime time, string remoteHost, string requestMethod, string requestedUrl, string hostName)
 		{
-			LogVerbose(remoteHost + "\t" + requestMethod + "\t" + requestedUrl);
+			LogVerbose(remoteHost + "\t-> " + hostName + "\t" + requestMethod + "\t" + requestedUrl);
 			if (logger != null)
 				try
 				{
