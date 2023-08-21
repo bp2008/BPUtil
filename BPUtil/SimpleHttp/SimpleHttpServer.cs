@@ -763,6 +763,7 @@ Inner Exception:
 		/// <summary>
 		/// Parses the first line of the http request to get the request method, url, and protocol version. Returns true if successful or false if we encountered the end of the stream.  May throw various exceptions.
 		/// </summary>
+		/// <exception cref="HttpProtocolException">Thrown if an HTTP protocol violation occurs.</exception>
 		private bool parseRequest()
 		{
 			string request = streamReadLine(tcpStream);
@@ -773,10 +774,17 @@ Inner Exception:
 				throw new HttpProtocolException("invalid http request line: " + request);
 			http_method = tokens[0].ToUpper();
 
-			if (tokens[1].StartsWith("http://") || tokens[1].StartsWith("https://") || tokens[1].StartsWith("ws://") || tokens[1].StartsWith("wss://"))
-				request_url = new Uri(tokens[1]);
-			else
-				request_url = new Uri(base_uri_this_server, tokens[1]);
+			try
+			{
+				if (tokens[1].IStartsWith("http://") || tokens[1].IStartsWith("https://") || tokens[1].IStartsWith("ws://") || tokens[1].IStartsWith("wss://"))
+					request_url = new Uri(tokens[1]);
+				else
+					request_url = new Uri(base_uri_this_server, tokens[1]);
+			}
+			catch (Exception ex)
+			{
+				throw new Exception("Invalid URL given in http request: " + request, ex); // TODO: Make this HttpProtocolException so that it will only be logged when verbose logging is enabled.
+			}
 
 			requestedPage = request_url.AbsolutePath.StartsWith("/") ? request_url.AbsolutePath.Substring(1) : request_url.AbsolutePath;
 
@@ -820,7 +828,7 @@ Inner Exception:
 		/// <summary>
 		/// <para>Handles all request methods.</para>
 		/// <para>If the request has a body, this method provides it as <see cref="RequestBodyStream"/> which can be read only one time with no seeking.</para>
-		/// <para>Requests with a body must either specify a `Content-Length` or use `Transfer-Encoding: chunked`.</para>b
+		/// <para>Requests with a body must either specify a `Content-Length` or use `Transfer-Encoding: chunked`.</para>
 		/// </summary>
 		private void handleRequest(bool requestBodyRequired = false)
 		{
@@ -1892,6 +1900,7 @@ Inner Exception:
 		internal class HttpProtocolException : Exception
 		{
 			public HttpProtocolException(string message) : base(message) { }
+			public HttpProtocolException(string message, Exception innerException) : base(message, innerException) { }
 		}
 
 		/// <summary>
