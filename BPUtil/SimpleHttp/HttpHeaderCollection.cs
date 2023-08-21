@@ -216,25 +216,33 @@ namespace BPUtil.SimpleHttp
 			return string.Join("-", words);
 		}
 		/// <summary>
-		/// Given a complete HTTP header ("Name: value"), attempts to assign the header to this collection.  Throw an exception upon failure.
+		/// <para>Given a complete HTTP header ("Name: value"), attempts to assign the header to this collection.</para>
+		/// <para>If there is no colon in the header string, the header is removed from the header collection.</para>
+		/// <para>Throw an exception upon failure.</para>
 		/// </summary>
 		/// <param name="header">A complete HTTP header ("Name: value")</param>
+		/// <exception cref="ArgumentNullException">If the [header] argument is null.</exception
+		/// <exception cref="ArgumentException">If the [header] argument is empty or whitespace.</exception>
 		public void AssignHeaderFromString(string header)
 		{
+			if (header == null)
+				throw new ArgumentNullException(nameof(header));
 			if (string.IsNullOrWhiteSpace(header))
-				throw new ApplicationException("Header string was null or whitespace.");
+				throw new ArgumentException("Header string contains no visible characters.", nameof(header));
 
 			int separator = header.IndexOf(':');
 			if (separator == -1)
-				throw new ApplicationException("Invalid http header string: " + header);
+				this.Remove(header);
+			else
+			{
+				string name = header.Substring(0, separator);
+				int pos = separator + 1;
+				while (pos < header.Length && header[pos] == ' ')
+					pos++; // strip any spaces
 
-			string name = header.Substring(0, separator);
-			int pos = separator + 1;
-			while (pos < header.Length && header[pos] == ' ')
-				pos++; // strip any spaces
-
-			string value = header.Substring(pos);
-			this[name] = value;
+				string value = header.Substring(pos);
+				this[name] = value;
+			}
 		}
 	}
 }

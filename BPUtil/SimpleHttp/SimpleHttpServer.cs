@@ -326,7 +326,10 @@ namespace BPUtil.SimpleHttp
 		public CompressionType compressionType { get; private set; } = CompressionType.None;
 
 		/// <summary>
-		/// Gets the Stream containing the request body. It will begin positioned at the beginning of the request body and end at the end of the request body. For requests that did not provide a body, this will be null.
+		/// <para>Gets the Stream containing the request body.</para>
+		/// <para>IMPORTANT: By default, this stream does not support seeking or length querying (it can only be read to the end one time!).  If you require the ability to seek or read multiple times, you must call <see cref="GetRequestBodyMemoryStream"/> at least one time BEFORE reading from RequestBodyStream.</para>
+		/// <para>It will begin positioned at the beginning of the request body and end at the end of the request body.</para>
+		/// <para>For requests that did not provide a body, this will be null.</para>
 		/// </summary>
 		public Stream RequestBodyStream { get; private set; }
 
@@ -611,20 +614,20 @@ namespace BPUtil.SimpleHttp
 						{
 							// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
 							/*
-System.IO.IOException: The decryption operation failed, see inner exception.
-Inner Exception:
-{
-	Interop+OpenSsl+SslException: Decrypt failed with OpenSSL error - SSL_ERROR_SSL.
-	Inner Exception:
-	{
+		System.IO.IOException: The decryption operation failed, see inner exception.
+		Inner Exception:
+		{
+		Interop+OpenSsl+SslException: Decrypt failed with OpenSSL error - SSL_ERROR_SSL.
+		Inner Exception:
+		{
 		Interop+Crypto+OpenSslCryptographicException: error:0A000119:SSL routines::decryption failed or bad record mac
-	}
-	   at Interop.OpenSsl.Decrypt(SafeSslHandle context, Span`1 buffer, SslErrorCode& errorCode)
-	   at System.Net.Security.SslStreamPal.DecryptMessage(SafeDeleteSslContext securityContext, Span`1 buffer, Int32& offset, Int32& count)
-}
-   at System.Net.Security.SslStream.ReadAsyncInternal[TIOAdapter](TIOAdapter adapter, Memory`1 buffer)
-   at System.Net.Security.SslStream.Read(Byte[] buffer, Int32 offset, Int32 count)
-   at System.Net.Security.SslStream.ReadByte()
+		}
+		at Interop.OpenSsl.Decrypt(SafeSslHandle context, Span`1 buffer, SslErrorCode& errorCode)
+		at System.Net.Security.SslStreamPal.DecryptMessage(SafeDeleteSslContext securityContext, Span`1 buffer, Int32& offset, Int32& count)
+		}
+		at System.Net.Security.SslStream.ReadAsyncInternal[TIOAdapter](TIOAdapter adapter, Memory`1 buffer)
+		at System.Net.Security.SslStream.Read(Byte[] buffer, Int32 offset, Int32 count)
+		at System.Net.Security.SslStream.ReadByte()
 							 */
 							SimpleHttpLogger.LogVerbose(e);
 							this.responseWritten = true;
@@ -1365,6 +1368,30 @@ Inner Exception:
 			if (!httpHeaders.TryGetValue(name, out value))
 				value = defaultValue;
 			return value;
+		}
+
+		/// <summary>
+		/// <para>IMPORTANT: If you call this method, you must do it before reading from <see cref="RequestBodyStream"/>, otherwise you will not get the entire request body.</para>
+		/// <para>The first call to this method reads the remainder of the request body into a <see cref="MemoryStream"/>, seeks it to Position 0, and assigns it to the <see cref="RequestBodyStream"/> property.</para>
+		/// <para>Further calls to this method only return a reference to the existing MemoryStream without changing its seek position.</para>
+		/// <para>If there is no request body, this method returns null.</para>
+		/// </summary>
+		/// <param name="maxLength">[Default: 10 million] Maximium number of bytes to read before aborting. If the request body is larger, an Exception will be thrown.</param>
+		/// <exception cref="Exception">Throws if the requesty body is larger than the provided limit.</exception>
+		public MemoryStream GetRequestBodyMemoryStream(int maxLength = 10 * 1000 * 1000)
+		{
+			if (RequestBodyStream == null)
+				return null;
+			if (RequestBodyStream is MemoryStream)
+				return (MemoryStream)RequestBodyStream;
+			if (ByteUtil.ReadToEndWithMaxLength(RequestBodyStream, maxLength, out byte[] data))
+			{
+				MemoryStream ms = new MemoryStream(data);
+				RequestBodyStream = ms;
+				return ms;
+			}
+			else
+				throw new Exception("Request body was too large (max " + StringUtil.FormatNetworkBytes(maxLength) + ").");
 		}
 
 		#region Request Proxy Http(s)
