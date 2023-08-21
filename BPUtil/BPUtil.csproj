@@ -263,6 +263,7 @@
     <Compile Include="WaitProgressivelyLonger.cs" />
     <Compile Include="WebRequestUtility.cs" />
     <Compile Include="xxHash.cs" />
+    <Compile Include="Zip.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Forms\MultiSelect\EditMultiSelect.resx">

@@ -819,9 +819,8 @@ Inner Exception:
 
 		/// <summary>
 		/// <para>Handles all request methods.</para>
-		/// <para>This method data processing just reads the entire request body into a memory stream.</para>
-		/// <para>This is fine for smallish things, but for large stuff we should really hand an input stream to the request processor.  However, the input stream we hand to the user's code needs to see the "end of the stream" at the appropriate time!</para>
-		/// <para>// TODO: Make this handle Transfer-Encoding: chunked if Content-Length is not provided.</para>
+		/// <para>If the request has a body, this method provides it as <see cref="RequestBodyStream"/> which can be read only one time with no seeking.</para>
+		/// <para>Requests with a body must either specify a `Content-Length` or use `Transfer-Encoding: chunked`.</para>b
 		/// </summary>
 		private void handleRequest(bool requestBodyRequired = false)
 		{
