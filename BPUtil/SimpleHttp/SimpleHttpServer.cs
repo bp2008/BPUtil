@@ -855,11 +855,8 @@ namespace BPUtil.SimpleHttp
 								return;
 							}
 							ContentLength = content_len;
-							if (content_len > 0)
-							{
-								SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Request body will be read as Substream(" + content_len + ").");
-								RequestBodyStream = this.tcpStream.Substream(content_len);
-							}
+							SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Request body will be read as Substream(" + content_len + ").");
+							RequestBodyStream = this.tcpStream.Substream(content_len);
 						}
 					}
 					else
