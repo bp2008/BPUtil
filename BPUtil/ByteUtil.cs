@@ -367,7 +367,47 @@ namespace BPUtil
 				while (read > 0)
 					read = stream.Read(buf, 0, buf.Length);
 			}
-			catch { }
+			finally
+			{
+				BufferRecycle(buf);
+			}
+		}
+		/// <summary>
+		/// Reads data from the stream in 81920-byte chunks until the end of stream is reached.  The data is discarded as soon as it is read. If the stream supports seeking, it is simply seeked to the end.  Returns true if the end of the stream is reached.
+		/// </summary>
+		/// <param name="stream">The stream to read data from.</param>
+		/// <param name="maxLength">If more than this many bytes are read, the method will return false without continuing to the end of the stream.</param>
+		/// <param name="bytesDiscarded">(Output) The number of bytes that were read.</param>
+		public static bool DiscardUntilEndOfStreamWithMaxLength(Stream stream, long maxLength, out long bytesDiscarded)
+		{
+			if (stream == null)
+				throw new ArgumentNullException(nameof(stream));
+			if (maxLength < 0)
+				throw new ArgumentOutOfRangeException(nameof(maxLength));
+
+			if (stream.CanSeek)
+			{
+				bytesDiscarded = 0;
+				stream.Seek(0, SeekOrigin.End);
+				return true;
+			}
+			byte[] buf = BufferGet();
+			try
+			{
+				bytesDiscarded = 0;
+				int read = 1;
+				while (read > 0 && bytesDiscarded < maxLength)
+				{
+					int toRead = (int)Math.Min(buf.Length, maxLength - bytesDiscarded);
+					read = stream.Read(buf, 0, toRead);
+					bytesDiscarded += read;
+				}
+				if (read == 0)
+					return true;
+				read = stream.Read(buf, 0, 1);
+				bytesDiscarded += read;
+				return read == 0;
+			}
 			finally
 			{
 				BufferRecycle(buf);

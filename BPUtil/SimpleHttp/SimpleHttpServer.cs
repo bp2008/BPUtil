@@ -590,7 +590,7 @@ namespace BPUtil.SimpleHttp
 						if (IsOrdinaryDisconnectException(e))
 						{
 							//if (keepAliveRequestCount <= 1) // Do not log if this is a kept-alive connection.
-							//	SimpleHttpLogger.LogVerbose(e);
+							//	SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
 							//if (!responseWritten)
 							//	this.writeFailure("500 Internal Server Error", "An error occurred while processing this request."); // This response should probably fail because the client has disconnected.
 							return;
@@ -599,13 +599,13 @@ namespace BPUtil.SimpleHttp
 							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, http_method + ":FAIL", request_url?.OriginalString, hostName);
 						if (e.GetExceptionOfType<HttpProcessorException>() != null)
 						{
-							SimpleHttpLogger.LogVerbose(e);
+							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
 							if (!responseWritten)
 								this.writeFailure(e.Message);
 						}
 						else if (e.GetExceptionOfType<HttpProtocolException>() != null)
 						{
-							SimpleHttpLogger.LogVerbose(e);
+							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
 							if (!responseWritten)
 								this.writeFailure("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
 							return;
@@ -629,13 +629,20 @@ namespace BPUtil.SimpleHttp
 		at System.Net.Security.SslStream.Read(Byte[] buffer, Int32 offset, Int32 count)
 		at System.Net.Security.SslStream.ReadByte()
 							 */
-							SimpleHttpLogger.LogVerbose(e);
+							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
 							this.responseWritten = true;
 							return;
 						}
+						else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)
+						{
+							SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
+							if (!responseWritten)
+								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request.");
+							return; // Close the connection.  The tcpStream still has an unknown amount of unread data before the next request.
+						}
 						else
 						{
-							SimpleHttpLogger.Log(e);
+							SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
 							if (!responseWritten)
 								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request.");
 						}
@@ -855,7 +862,7 @@ namespace BPUtil.SimpleHttp
 								return;
 							}
 							ContentLength = content_len;
-							SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Request body will be read as Substream(" + content_len + ").");
+							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Request body will be read as Substream(" + content_len + ").");
 							RequestBodyStream = this.tcpStream.Substream(content_len);
 						}
 					}
@@ -871,7 +878,7 @@ namespace BPUtil.SimpleHttp
 							if (transferEncodingHeaderValues.Contains("chunked") && transferEncodingHeaderValues.Length == 1) // No support for multiple transfer encodings currently.
 							{
 								RequestBodyStream = new ReadableChunkedTransferEncodingStream(this.tcpStream);
-								SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Request body will be read as ReadableChunkedTransferEncodingStream.");
+								SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Request body will be read as ReadableChunkedTransferEncodingStream.");
 							}
 						}
 					}
@@ -880,7 +887,7 @@ namespace BPUtil.SimpleHttp
 						if (this.http_method == "POST" || this.http_method == "PUT" || this.http_method == "PATCH")
 						{
 							this.writeFailure("411 Length Required", "This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
-							SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - The request did not specify the length of its content via a method understood by this server.  This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
+							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "The request did not specify the length of its content via a method understood by this server.  This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
 							return;
 						}
 					}
@@ -890,7 +897,7 @@ namespace BPUtil.SimpleHttp
 						if (RequestBodyStream == null)
 						{
 							this.writeFailure("411 Length Required", "This server requires requests with \"Content-Type: application/x-www-form-urlencoded\" to include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
-							SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - The request specified \"Content-Type: application/x-www-form-urlencoded\" but this server was unable to read the request body.");
+							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "The request specified \"Content-Type: application/x-www-form-urlencoded\" but this server was unable to read the request body.");
 							return;
 						}
 						const int MAX_FORM_SIZE = 5 * 1024 * 1024;
@@ -914,7 +921,7 @@ namespace BPUtil.SimpleHttp
 						}
 						if (lengthLimitExceeded)
 						{
-							SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE);
+							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE);
 							this.writeFailure("413 Request Entity Too Large", "Request Too Large");
 							return;
 						}
@@ -932,16 +939,37 @@ namespace BPUtil.SimpleHttp
 			{
 				if (RequestBodyStream != null)
 				{
-					if ((RequestBodyStream is Substream && !(RequestBodyStream as Substream).EndOfStream)
-						|| (RequestBodyStream is ReadableChunkedTransferEncodingStream && !(RequestBodyStream as ReadableChunkedTransferEncodingStream).EndOfStream))
+					if (RequestBodyStream is MemoryStream
+						|| (RequestBodyStream is Substream && (RequestBodyStream as Substream).EndOfStream)
+						|| (RequestBodyStream is ReadableChunkedTransferEncodingStream && (RequestBodyStream as ReadableChunkedTransferEncodingStream).EndOfStream))
 					{
-						SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - Request body was not fully read by the server.  Discarding remaining bytes.");
+						RequestBodyStream.Dispose();
+						RequestBodyStream = null;
 					}
-					ByteUtil.DiscardUntilEndOfStream(RequestBodyStream);
-					RequestBodyStream.Dispose();
+					else
+					{
+						int bytesToRead = 125000;
+						bool endOfStream = ByteUtil.DiscardUntilEndOfStreamWithMaxLength(RequestBodyStream, bytesToRead, out long bytesDiscarded);
+						RequestBodyStream.Dispose();
+						RequestBodyStream = null;
+						if (endOfStream)
+						{
+							if (bytesDiscarded > 0)
+								SimpleHttpLogger.Log(GetDebugLogPrefix() + "Request body was not fully read by the server.  The remainder of the stream was discarded.");
+							// else Nothing was discarded, meaning the server did read the entire request body.
+						}
+						else
+						{
+							throw new HttpRequestBodyNotReadException("Request body was not fully read by the server, and there was more than " + StringUtil.FormatNetworkBytes(bytesToRead) + " remaining.  Closing this connection.");
+						}
+					}
 				}
-				RequestBodyStream = null;
 			}
+		}
+
+		private string GetDebugLogPrefix()
+		{
+			return this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - ";
 		}
 		#region Response Compression
 		/// <summary>
@@ -1063,7 +1091,7 @@ namespace BPUtil.SimpleHttp
 				outputStream.WriteLineRN(cookieStr);
 			}
 			if (additionalHeaders != null)
-				foreach (KeyValuePair<string, string> header in additionalHeaders)
+				foreach (HttpHeader header in additionalHeaders)
 				{
 					if (reservedHeaderKeys.Contains(header.Key, true))
 						throw new ApplicationException("writeSuccess() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
@@ -1112,7 +1140,7 @@ namespace BPUtil.SimpleHttp
 			WriteReservedHeader(reservedHeaderKeys, "Content-Type", "text/plain; charset=utf-8");
 			WriteReservedHeader(reservedHeaderKeys, "Content-Length", contentLength.ToString());
 			if (additionalHeaders != null)
-				foreach (KeyValuePair<string, string> header in additionalHeaders)
+				foreach (HttpHeader header in additionalHeaders)
 				{
 					if (reservedHeaderKeys.Contains(header.Key, true))
 						throw new ApplicationException("writeFailure() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
@@ -1354,7 +1382,7 @@ namespace BPUtil.SimpleHttp
 		}
 
 		/// <summary>
-		/// Gets the value of the header, or null if the header does not exist.  The name is case insensitive.
+		/// Gets the value of the header, or null if the header does not exist.  The name is case insensitive.  Multiple "Set-Cookie" headers can exist; if queried here, only the first header value will be returned.
 		/// </summary>
 		/// <param name="name">The case insensitive name of the header to get the value of.</param>
 		/// <param name="defaultValue">The default value to return, in case the value did not exist.</param>
@@ -1451,9 +1479,9 @@ namespace BPUtil.SimpleHttp
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
 				if (!allowKeepalive)
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
-				foreach (KeyValuePair<string, string> header in httpHeaders)
+				foreach (HttpHeader header in httpHeaders)
 				{
-					if (header.Key != "Host" && (allowKeepalive || header.Key != "Connection"))
+					if (!header.Key.IEquals("Host") && (allowKeepalive || !header.Key.IEquals("Connection")))
 						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
 				}
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
@@ -1933,6 +1961,14 @@ namespace BPUtil.SimpleHttp
 		internal class EndOfStreamException : HttpProtocolException
 		{
 			public EndOfStreamException() : base("End of stream") { }
+		}
+		/// <summary>
+		/// Occurs when the HTTP request body was not read by the server and the HttpProcessor is refusing to read it fully; the connection should be closed.
+		/// </summary>
+		internal class HttpRequestBodyNotReadException : Exception
+		{
+			public HttpRequestBodyNotReadException(string message) : base(message) { }
+			public HttpRequestBodyNotReadException(string message, Exception innerException) : base(message, innerException) { }
 		}
 	}
 

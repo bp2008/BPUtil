@@ -296,7 +296,7 @@ namespace BPUtil.SimpleHttp.Client
 
 				options.RaiseBeforeRequestHeadersSent(this, p.httpHeaders);
 
-				foreach (KeyValuePair<string, string> header in p.httpHeaders)
+				foreach (HttpHeader header in p.httpHeaders)
 				{
 					if (!doNotProxyHeaders.Contains(header.Key, true))
 						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
@@ -505,7 +505,7 @@ namespace BPUtil.SimpleHttp.Client
 
 			options.RaiseBeforeResponseHeadersSent(this, proxyHttpHeaders);
 
-			foreach (KeyValuePair<string, string> header in proxyHttpHeaders)
+			foreach (HttpHeader header in proxyHttpHeaders)
 			{
 				if (doNotProxyHeaders.Contains(header.Key, true))
 					continue;

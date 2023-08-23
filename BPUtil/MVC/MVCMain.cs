@@ -106,7 +106,7 @@ namespace BPUtil.MVC
 						body = compressed;
 					}
 				}
-				foreach (KeyValuePair<string, string> header in actionResult.headers)
+				foreach (HttpHeader header in actionResult.headers)
 				{
 					if (!header.Key.IEquals("Content-Type"))
 					{
@@ -115,7 +115,7 @@ namespace BPUtil.MVC
 				}
 				if (context.additionalResponseHeaders != null)
 				{
-					foreach (KeyValuePair<string, string> header in context.additionalResponseHeaders)
+					foreach (HttpHeader header in context.additionalResponseHeaders)
 					{
 						if (addedContentEncoding && header.Key.IEquals("Content-Encoding"))
 							continue;
