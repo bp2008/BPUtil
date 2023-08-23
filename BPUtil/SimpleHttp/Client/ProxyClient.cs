@@ -181,7 +181,7 @@ namespace BPUtil.SimpleHttp.Client
 				host = uri.DnsSafeHost;
 
 			p.tcpClient.NoDelay = true;
-			p.tcpClient.SendTimeout = p.tcpClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(0, 45000) + 15000;
+			p.tcpClient.SendTimeout = p.tcpClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(1000, 60000);
 
 			///////////////////////////
 			// PHASE 1: ANALYZE REQUEST //
@@ -228,7 +228,7 @@ namespace BPUtil.SimpleHttp.Client
 				requestHeader_Connection = "upgrade";
 			else
 			{
-				if (options.allowConnectionKeepalive)
+				if (options.allowConnectionKeepalive && !p.ServerIsUnderHighLoad)
 					requestHeader_Connection = "keep-alive";
 				else
 					requestHeader_Connection = "close";
@@ -268,7 +268,7 @@ namespace BPUtil.SimpleHttp.Client
 			else
 				options.log.AppendLine("Reusing old connection");
 
-			proxyClient.SendTimeout = proxyClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(0, 45000) + 15000;
+			proxyClient.SendTimeout = proxyClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(1000, 60000);
 
 			// Connection to remote server is now established and ready for data transfer.
 			///////////////////////////
@@ -483,10 +483,17 @@ namespace BPUtil.SimpleHttp.Client
 				responseConnectionHeader = "close";
 			else
 			{
-				responseConnectionHeader = "keep-alive";
-				p.keepAlive = true;
+				if (!p.ServerIsUnderHighLoad)
+				{
+					responseConnectionHeader = "keep-alive";
+					p.keepAlive = true;
+				}
+				else
+					responseConnectionHeader = "close";
 			}
 			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Connection: " + responseConnectionHeader + "\r\n", snoopy);
+			if (p.keepAlive)
+				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Keep-Alive: timeout=" + ((options.networkTimeoutMs.Clamp(1000, 60000) / 1000) - 1).Clamp(1, 60) + "\r\n", snoopy);
 
 			if (decision == ProxyResponseDecision.Websocket)
 				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Upgrade: websocket\r\n", snoopy);

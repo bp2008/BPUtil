@@ -20,7 +20,7 @@ namespace BPUtil.SimpleHttp.Client
 		/// </summary>
 		public readonly long RequestId = Interlocked.Increment(ref counter);
 		/// <summary>
-		/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds.
+		/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds. Clamped to the range [1000, 60000].
 		/// </summary>
 		public int networkTimeoutMs = 60000;
 		/// <summary>

@@ -43,6 +43,10 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public const SslProtocols Tls13 = (SslProtocols)12288;
 		private readonly AllowedConnectionTypes allowedConnectionTypes;
+		/// <summary>
+		/// Read timeout for "keep-alive" connections, in seconds.  Clients are given this value minus one in the "Keep-Alive: timeout=N" header.
+		/// </summary>
+		private const int keepaliveTimeSeconds = 5;
 
 		#region Fields and Properties
 		/// <summary>
@@ -148,11 +152,17 @@ namespace BPUtil.SimpleHttp
 		public bool keepAliveRequested { get; private set; }
 
 		/// <summary>
-		/// <para>True if a "Connection: keep-alive;" header was sent to the client.</para>
+		/// <para>True if a "Connection: keep-alive" header was sent to the client.</para>
 		/// <para>This flag is reset to false at the start of each request.</para>
 		/// <para>If true at the end of a request, the server will attempt to read another request from this connection.</para>
 		/// </summary>
 		public bool keepAlive { get; internal set; } = false;
+
+		/// <summary>
+		/// <para>Gets true if the HTTP server is believed to be under high load conditions.</para>
+		/// <para>In high load conditions, buffers may be smaller and "Connection: keep-alive" may not be allowed.</para>
+		/// </summary>
+		public bool ServerIsUnderHighLoad { get { return srv.IsServerUnderHighLoad(_currentNumberOfOpenConnections); } }
 
 		#region Properties dealing with the IP Address of the remote host
 		private int isLanConnection = -1;
@@ -342,6 +352,11 @@ namespace BPUtil.SimpleHttp
 		/// The hostname that was requested by the client.  This is populated from TLS Server Name Indication if available, otherwise from the Host header.  Null if not provided in either place.
 		/// </summary>
 		public string hostName { get; private set; }
+
+		/// <summary>
+		/// The current number of open connections.  Should be written only via the <see cref="Interlocked"/> API.
+		/// </summary>
+		private static volatile int _currentNumberOfOpenConnections = 0;
 		#endregion
 
 		/// <summary>
@@ -399,9 +414,11 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public void Process()
 		{
+			Interlocked.Increment(ref _currentNumberOfOpenConnections);
 			try
 			{
-				tcpClient.SendBufferSize = 65536;
+				tcpClient.ReceiveTimeout = 5000;
+				tcpClient.SendTimeout = 5000;
 				tcpStream = tcpClient.GetStream();
 				if (allowedConnectionTypes.HasFlag(AllowedConnectionTypes.https))
 				{
@@ -501,16 +518,22 @@ namespace BPUtil.SimpleHttp
 					}
 					keepAliveRequestCount++;
 					tcpStream = originalTcpStream;
+					// While the server is under low load, a larger buffer is allowed for better write performance.
+					if (this.ServerIsUnderHighLoad)
+						tcpClient.SendBufferSize = 8192;
+					else
+						tcpClient.SendBufferSize = 65536;
 					//int inputStreamThrottlingRuleset = 1;
 					//int outputStreamThrottlingRuleset = 0;
 					//if (IsLanConnection)
 					//	inputStreamThrottlingRuleset = outputStreamThrottlingRuleset = 2;
 					//inputStream =  new GlobalThrottledStream(tcpStream, inputStreamThrottlingRuleset, RemoteIPAddressInt);
 					//rawOutputStream = new GlobalThrottledStream(tcpStream, outputStreamThrottlingRuleset, RemoteIPAddressInt);
-					outputStream = new StreamWriter(tcpStream, Utf8NoBOM, tcpClient.SendBufferSize, true);
+					outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
 					try
 					{
-						tcpClient.ReceiveTimeout = keepAliveRequestCount <= 1 ? 10000 : 60000;
+						tcpClient.ReceiveTimeout = keepAliveRequestCount <= 1 ? 5000 : keepaliveTimeSeconds * 1000;
+						tcpClient.SendTimeout = 5000;
 						if (!parseRequest())
 							return; // End of stream was encountered. Very common with "Connection: keep-alive" when another request does not arrive.
 						readHeaders(tcpStream, httpHeaders);
@@ -683,6 +706,7 @@ namespace BPUtil.SimpleHttp
 			}
 			finally
 			{
+				Interlocked.Decrement(ref _currentNumberOfOpenConnections);
 				try
 				{
 					tcpClient?.Close();
@@ -900,7 +924,7 @@ namespace BPUtil.SimpleHttp
 							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "The request specified \"Content-Type: application/x-www-form-urlencoded\" but this server was unable to read the request body.");
 							return;
 						}
-						const int MAX_FORM_SIZE = 5 * 1024 * 1024;
+						const int MAX_FORM_SIZE = 2 * 1024 * 1024;
 						bool lengthLimitExceeded = false;
 						if (ContentLength != null)
 							lengthLimitExceeded = ContentLength > MAX_FORM_SIZE;
@@ -921,7 +945,7 @@ namespace BPUtil.SimpleHttp
 						}
 						if (lengthLimitExceeded)
 						{
-							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE);
+							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE + " bytes.");
 							this.writeFailure("413 Request Entity Too Large", "Request Too Large");
 							return;
 						}
@@ -1006,7 +1030,7 @@ namespace BPUtil.SimpleHttp
 				outputStream.Flush();
 				tcpStream.Flush();
 				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, true);
-				outputStream = new StreamWriter(tcpStream, Utf8NoBOM, tcpClient.SendBufferSize, true);
+				outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
 			}
 		}
 		/// <summary>
@@ -1023,7 +1047,7 @@ namespace BPUtil.SimpleHttp
 			outputStream.Flush();
 			tcpStream.Flush();
 			tcpStream = new WritableChunkedTransferEncodingStream(tcpStream);
-			outputStream = new StreamWriter(tcpStream, Utf8NoBOM, tcpClient.SendBufferSize, true);
+			outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
 		}
 		/// <summary>
 		/// Returns true if the client has requested gzip compression.
@@ -1071,8 +1095,7 @@ namespace BPUtil.SimpleHttp
 			}
 
 			responseWritten = true;
-			HashSet<string> reservedHeaderKeys = new HashSet<string>();
-			reservedHeaderKeys.Add("Connection");
+			HashSet<string> reservedHeaderKeys = new HashSet<string>(new string[] { "Connection", "Keep-Alive" });
 
 			outputStream.WriteLineRN("HTTP/1.1 " + responseCode);
 			if (!string.IsNullOrEmpty(contentType))
@@ -1098,12 +1121,15 @@ namespace BPUtil.SimpleHttp
 					outputStream.WriteLineRN(header.Key + ": " + header.Value);
 				}
 			if (this.keepAliveRequested)
+			{
 				outputStream.WriteLineRN("Connection: keep-alive");
+				outputStream.WriteLineRN("Keep-Alive: timeout=" + (keepaliveTimeSeconds - 1));
+			}
 			else
 				outputStream.WriteLineRN("Connection: close");
 			outputStream.WriteLineRN("");
 
-			this.keepAlive = this.keepAliveRequested;
+			this.keepAlive = this.keepAliveRequested && !this.ServerIsUnderHighLoad;
 
 			tcpClient.NoDelay = true;
 			EnableCompressionIfSet();
@@ -1146,8 +1172,12 @@ namespace BPUtil.SimpleHttp
 						throw new ApplicationException("writeFailure() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
 					outputStream.WriteLineRN(header.Key + ": " + header.Value);
 				}
-			if (this.keepAliveRequested)
+			this.keepAlive = this.keepAliveRequested && !this.ServerIsUnderHighLoad;
+			if (this.keepAlive)
+			{
 				outputStream.WriteLineRN("Connection: keep-alive");
+				outputStream.WriteLineRN("Keep-Alive: timeout=" + (keepaliveTimeSeconds - 1));
+			}
 			else
 				outputStream.WriteLineRN("Connection: close");
 			outputStream.WriteLineRN("");
@@ -1479,6 +1509,8 @@ namespace BPUtil.SimpleHttp
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
 				if (!allowKeepalive)
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
+				else
+					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: keep-alive\r\n", snoopy);
 				foreach (HttpHeader header in httpHeaders)
 				{
 					if (!header.Key.IEquals("Host") && (allowKeepalive || !header.Key.IEquals("Connection")))
@@ -2090,9 +2122,9 @@ namespace BPUtil.SimpleHttp
 							{
 								TcpClient s = await tcpListener.AcceptTcpClientAsync().ConfigureAwait(false);
 								// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
-								if (s.ReceiveTimeout < 10000 && s.ReceiveTimeout != 0) // Timeout of 0 is infinite
+								if (s.ReceiveTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
 									s.ReceiveTimeout = 10000;
-								if (s.SendTimeout < 10000 && s.SendTimeout != 0) // Timeout of 0 is infinite
+								if (s.SendTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
 									s.SendTimeout = 10000;
 								int? rbuf = Server.ReceiveBufferSize;
 								if (rbuf != null)
@@ -2185,7 +2217,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// The thread pool to use for processing client connections.
 		/// </summary>
-		public SimpleThreadPool pool = new SimpleThreadPool("SimpleHttp.HttpServer");
+		public SimpleThreadPool pool = new SimpleThreadPool("SimpleHttp.HttpServer", 6, 48, 5000);
 		/// <summary>
 		/// List of ListenerData instances responsible for asynchronously accepting TCP clients.
 		/// </summary>
@@ -2602,6 +2634,15 @@ namespace BPUtil.SimpleHttp
 		public virtual bool CanCacheFileExtension(string extension)
 		{
 			return !NoCacheStaticFileExtensions.Contains(extension, true);
+		}
+		/// <summary>
+		/// <para>Gets true if the HTTP server is believed to be under high load conditions.</para>
+		/// <para>In high load conditions, buffers may be smaller, "Connection: keep-alive" may not be allowed, and other resource-saving effects may be used.</para>
+		/// </summary>
+		/// <param name="currentNumberOfOpenConnections">The current number of open connections to this server.</param>
+		public virtual bool IsServerUnderHighLoad(int currentNumberOfOpenConnections)
+		{
+			return currentNumberOfOpenConnections > Math.Max(0, pool.MaxThreads / 2);
 		}
 
 #if NET6_0
