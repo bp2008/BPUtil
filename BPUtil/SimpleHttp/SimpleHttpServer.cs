@@ -979,8 +979,8 @@ namespace BPUtil.SimpleHttp
 						if (endOfStream)
 						{
 							if (bytesDiscarded > 0)
-								SimpleHttpLogger.Log(GetDebugLogPrefix() + "Request body was not fully read by the server.  The remainder of the stream was discarded.");
-							// else Nothing was discarded, meaning the server did read the entire request body.
+								SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Request body was not fully read by the server.  The remainder of the stream was discarded.");
+							// else // Nothing was discarded, meaning the server did read the entire request body.
 						}
 						else
 						{
