@@ -596,7 +596,7 @@ namespace BPUtil.SimpleHttp.Client
 				expireTimer = CountdownStopwatch.StartNew(TimeSpan.FromSeconds(seconds));
 			}
 			lastRequestDetails = p.TrueRemoteIPAddress + " -> " + p.hostName + " " + requestLine;
-			return new ProxyResult(ProxyResultErrorCode.Success, null, remoteServerWantsKeepalive && options.allowConnectionKeepalive, false);
+			return new ProxyResult(ProxyResultErrorCode.Success, null, remoteServerWantsKeepalive && options.allowConnectionKeepalive && !p.ServerIsUnderHighLoad, false);
 		}
 		/// <summary>
 		/// Connects to the given URI and sets the <see cref="proxyClient"/> and <see cref="proxyStream"/> fields of this ProxyClient.
