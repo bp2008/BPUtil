@@ -2116,19 +2116,23 @@ namespace BPUtil.SimpleHttp
 							try
 							{
 								TcpClient s = await tcpListener.AcceptTcpClientAsync().ConfigureAwait(false);
-								// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
-								if (s.ReceiveTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
-									s.ReceiveTimeout = 10000;
-								if (s.SendTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
-									s.SendTimeout = 10000;
-								int? rbuf = Server.ReceiveBufferSize;
-								if (rbuf != null)
-									s.ReceiveBufferSize = rbuf.Value;
-								int? sbuf = Server.SendBufferSize;
-								if (sbuf != null)
-									s.SendBufferSize = sbuf.Value;
-								IProcessor processor = Server.MakeClientProcessor(s, Server, Server.certificateSelector, Binding.AllowedConnectionTypes);
-								Server.pool.Enqueue(processor.Process);
+								if (Server.IsServerTooBusyToProcessNewConnection(s))
+								{
+									_ = DismissTcpClientWithHttp503(s);
+								}
+								else
+								{
+									// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
+									if (s.ReceiveTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
+										s.ReceiveTimeout = 10000;
+									if (s.SendTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
+										s.SendTimeout = 10000;
+									int? rbuf = Server.ReceiveBufferSize;
+									if (rbuf != null)
+										s.ReceiveBufferSize = rbuf.Value;
+									IProcessor processor = Server.MakeClientProcessor(s, Server, Server.certificateSelector, Binding.AllowedConnectionTypes);
+									Server.pool.Enqueue(processor.Process);
+								}
 							}
 							catch (ObjectDisposedException ex)
 							{
@@ -2162,6 +2166,19 @@ namespace BPUtil.SimpleHttp
 					}
 				}
 			}
+			private static byte[] http503ResponseData = ByteUtil.Utf8NoBOM.GetBytes("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\nServer too busy");
+			private static async Task DismissTcpClientWithHttp503(TcpClient s)
+			{
+				try
+				{
+					await s.GetStream().WriteAsync(http503ResponseData, 0, http503ResponseData.Length);
+				}
+				finally
+				{
+					s.Close();
+				}
+			}
+
 			public void Stop()
 			{
 				isStopping = true;
@@ -2181,7 +2198,12 @@ namespace BPUtil.SimpleHttp
 				return "Listener " + Binding.ToString();
 			}
 		}
-		public int? SendBufferSize = null;
+		/// <summary>
+		/// <para>If not null, each TCP connection will be assigned this receive bufffer size in bytes (default if unassigned is 8192).</para>
+		/// <para>If your application will be recieving large amounts of data on a single connection, it can improve transfer rate by assigning a larger receive buffer.</para>
+		/// <para>HttpProcessor may be upgraded in the future to automatically tune the receive buffer size depending on the amount of data being received, in which case this field would likely be deleted.</para>
+		/// <para>If you wish to set the size of the send buffer, you should do it on a per-connection basis via the HttpProcessor when you process each request.</para>
+		/// </summary>
 		public int? ReceiveBufferSize = null;
 		/// <summary>
 		/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Real-IP".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.
@@ -2662,6 +2684,15 @@ namespace BPUtil.SimpleHttp
 		{
 			return CurrentNumberOfOpenConnections > Math.Max(0, pool.MaxThreads / 2);
 		}
+		/// <summary>
+		/// Each incoming connection to the server is passed to this method.  If the method returns true, an HTTP "503 Service Unavailable" response will be written and the connection will not be processed by an <see cref="HttpProcessor"/>.
+		/// </summary>
+		/// <param name="tcpClient">The new connection from a client.</param>
+		/// <returns>True if the connection should be dismissed with an HTTP 503 response.</returns>
+		protected virtual bool IsServerTooBusyToProcessNewConnection(TcpClient tcpClient)
+		{
+			return pool.QueuedActionCount > pool.MaxThreads.Clamp(24, 256);
+		}
 
 #if NET6_0
 		/// <summary>
@@ -2897,22 +2928,42 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Returns the date and time formatted for insertion as the expiration date in a "Set-Cookie" header.
 		/// </summary>
-		/// <param name="time"></param>
+		/// <param name="time">This DateTime instance.</param>
 		/// <returns></returns>
 		public static string ToCookieTime(this DateTime time)
 		{
 			return time.ToString("dd MMM yyyy hh:mm:ss GMT");
 		}
 		/// <summary>
-		/// For linux compatibility. The HTTP protocol uses \r\n, but linux normally uses just \n.
+		/// Writes text, followed by the "\r\n" line terminator, regardless of which platform this program is run on.
 		/// </summary>
-		/// <param name="sw"></param>
-		/// <param name="line"></param>
+		/// <param name="sw">This TextWriter.</param>
+		/// <param name="line">Text content of the line.</param>
 		public static void WriteLineRN(this TextWriter sw, string line)
 		{
-			sw.Write(line);
-			sw.Write("\r\n");
+			sw.Write(line + "\r\n");
 		}
+		/// <summary>
+		/// Writes text, followed by the "\r\n" line terminator, regardless of which platform this program is run on.
+		/// </summary>
+		/// <param name="sw">This TextWriter.</param>
+		/// <param name="line">Text content of the line.</param>
+		public static Task WriteLineRNAsync(this TextWriter sw, string line)
+		{
+			return sw.WriteAsync(line + "\r\n");
+		}
+#if NET6_0
+		/// <summary>
+		/// Writes text, followed by the "\r\n" line terminator, regardless of which platform this program is run on.
+		/// </summary>
+		/// <param name="sw">This TextWriter.</param>
+		/// <param name="line">Text content of the line.</param>
+		/// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+		public static Task WriteLineRNAsync(this TextWriter sw, string line, CancellationToken cancellationToken)
+		{
+			return sw.WriteAsync((line + "\r\n").AsMemory(), cancellationToken);
+		}
+#endif
 	}
 	/// <summary>
 	/// A class which handles error logging by the http server.  It allows you to (optionally) register an ILogger instance to use for logging.
@@ -3378,7 +3429,7 @@ namespace BPUtil.SimpleHttp
 	//							pool.Enqueue(processor.Process);
 	//							//	try
 	//							//	{
-	//							//		StreamWriter outputStream = new StreamWriter(s.GetStream());
+	//							//		StreamWriter outputStream = new StreamWriter(s.GetStream(), ByteUtil.Utf8NoBOM);
 	//							//		outputStream.WriteLineRN("HTTP/1.1 503 Service Unavailable");
 	//							//		outputStream.WriteLineRN("Connection: close");
 	//							//		outputStream.WriteLineRN("");

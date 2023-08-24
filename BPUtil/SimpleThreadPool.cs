@@ -206,6 +206,11 @@ namespace BPUtil
 			SpawnNewThreads();
 		}
 
+		/// <summary>
+		/// Gets the number of actions which have been queued but not yet assigned to a thread.
+		/// </summary>
+		public int QueuedActionCount => actionQueue.Count;
+
 		private void threadLoop()
 		{
 			try
