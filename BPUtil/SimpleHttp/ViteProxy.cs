@@ -75,7 +75,8 @@ namespace BPUtil.SimpleHttp
 				ex = TryProxy(p);
 			if (ex == null)
 				return;
-			Logger.Debug(ex, "Failed to proxy \"" + p.request_url.PathAndQuery + "\" to Vite dev server.");
+			if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
+				Logger.Debug(ex, "Failed to proxy \"" + p.request_url.PathAndQuery + "\" to Vite dev server.");
 			if (!p.responseWritten)
 				p.writeFailure("504 Gateway Timeout");
 		}

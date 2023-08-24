@@ -690,6 +690,7 @@ namespace BPUtil.SimpleHttp
 					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 					outputStream = null;
 					tcpStream = null;
+					srv.Notify_RequestHandled();
 				}
 				while (keepAlive && CheckIfStillConnected());
 			}
@@ -2244,16 +2245,32 @@ namespace BPUtil.SimpleHttp
 		/// The current number of open connections.  Should be written only via the <see cref="Interlocked"/> API.
 		/// </summary>
 		private volatile int _currentNumberOfOpenConnections = 0;
-
+		/// <summary>
+		/// Total number of connections served by this server.  Should be written only via the <see cref="Interlocked"/> API.
+		/// </summary>
+		private long _totalConnectionsServed = 0;
+		/// <summary>
+		/// Total number of requests served by this server.  Should be written only via the <see cref="Interlocked"/> API.
+		/// </summary>
+		private long _totalRequestsServed = 0;
 		/// <summary>
 		/// Gets the current number of open connections.
 		/// </summary>
 		public int CurrentNumberOfOpenConnections => _currentNumberOfOpenConnections;
 		/// <summary>
+		/// Gets the total number of connections served by this server.
+		/// </summary>
+		public long TotalConnectionsServed => Interlocked.Read(ref _totalConnectionsServed);
+		/// <summary>
+		/// Gets the total number of requests served by this server.
+		/// </summary>
+		public long TotalRequestsServed => Interlocked.Read(ref _totalRequestsServed);
+		/// <summary>
 		/// Increments the <see cref="CurrentNumberOfOpenConnections"/> counter in a thread-safe manner.
 		/// </summary>
 		internal void Notify_ConnectionOpen()
 		{
+			Interlocked.Increment(ref _totalConnectionsServed);
 			Interlocked.Increment(ref _currentNumberOfOpenConnections);
 		}
 		/// <summary>
@@ -2262,6 +2279,13 @@ namespace BPUtil.SimpleHttp
 		internal void Notify_ConnectionClosed()
 		{
 			Interlocked.Decrement(ref _currentNumberOfOpenConnections);
+		}
+		/// <summary>
+		/// Increments the <see cref="TotalRequestsServed"/> counter in a thread-safe manner.
+		/// </summary>
+		internal void Notify_RequestHandled()
+		{
+			Interlocked.Increment(ref _totalRequestsServed);
 		}
 
 #if NET6_0
@@ -2501,6 +2525,9 @@ namespace BPUtil.SimpleHttp
 		/// <param name="newBindings">All bindings which this server should listen on.</param>
 		public void SetBindings(params Binding[] newBindings)
 		{
+			if (stopRequested)
+				return;
+
 			if (newBindings == null)
 				newBindings = new Binding[0];
 
