@@ -162,7 +162,7 @@ namespace BPUtil.SimpleHttp
 		/// <para>Gets true if the HTTP server is believed to be under high load conditions.</para>
 		/// <para>In high load conditions, buffers may be smaller and "Connection: keep-alive" may not be allowed.</para>
 		/// </summary>
-		public bool ServerIsUnderHighLoad { get { return srv.IsServerUnderHighLoad(_currentNumberOfOpenConnections); } }
+		public bool ServerIsUnderHighLoad { get { return srv.IsServerUnderHighLoad(); } }
 
 		#region Properties dealing with the IP Address of the remote host
 		private int isLanConnection = -1;
@@ -352,11 +352,6 @@ namespace BPUtil.SimpleHttp
 		/// The hostname that was requested by the client.  This is populated from TLS Server Name Indication if available, otherwise from the Host header.  Null if not provided in either place.
 		/// </summary>
 		public string hostName { get; private set; }
-
-		/// <summary>
-		/// The current number of open connections.  Should be written only via the <see cref="Interlocked"/> API.
-		/// </summary>
-		private static volatile int _currentNumberOfOpenConnections = 0;
 		#endregion
 
 		/// <summary>
@@ -414,7 +409,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public void Process()
 		{
-			Interlocked.Increment(ref _currentNumberOfOpenConnections);
+			srv.Notify_ConnectionOpen();
 			try
 			{
 				tcpClient.ReceiveTimeout = 5000;
@@ -706,7 +701,7 @@ namespace BPUtil.SimpleHttp
 			}
 			finally
 			{
-				Interlocked.Decrement(ref _currentNumberOfOpenConnections);
+				srv.Notify_ConnectionClosed();
 				try
 				{
 					tcpClient?.Close();
@@ -2223,6 +2218,30 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		private List<ListenerData> listeners = new List<ListenerData>();
 
+		/// <summary>
+		/// The current number of open connections.  Should be written only via the <see cref="Interlocked"/> API.
+		/// </summary>
+		private volatile int _currentNumberOfOpenConnections = 0;
+
+		/// <summary>
+		/// Gets the current number of open connections.
+		/// </summary>
+		public int CurrentNumberOfOpenConnections => _currentNumberOfOpenConnections;
+		/// <summary>
+		/// Increments the <see cref="CurrentNumberOfOpenConnections"/> counter in a thread-safe manner.
+		/// </summary>
+		internal void Notify_ConnectionOpen()
+		{
+			Interlocked.Increment(ref _currentNumberOfOpenConnections);
+		}
+		/// <summary>
+		/// Decrements the <see cref="CurrentNumberOfOpenConnections"/> counter in a thread-safe manner.
+		/// </summary>
+		internal void Notify_ConnectionClosed()
+		{
+			Interlocked.Decrement(ref _currentNumberOfOpenConnections);
+		}
+
 #if NET6_0
 		private static bool? _cipherSuitesPolicySupported = null;
 #endif
@@ -2639,10 +2658,9 @@ namespace BPUtil.SimpleHttp
 		/// <para>Gets true if the HTTP server is believed to be under high load conditions.</para>
 		/// <para>In high load conditions, buffers may be smaller, "Connection: keep-alive" may not be allowed, and other resource-saving effects may be used.</para>
 		/// </summary>
-		/// <param name="currentNumberOfOpenConnections">The current number of open connections to this server.</param>
-		public virtual bool IsServerUnderHighLoad(int currentNumberOfOpenConnections)
+		public virtual bool IsServerUnderHighLoad()
 		{
-			return currentNumberOfOpenConnections > Math.Max(0, pool.MaxThreads / 2);
+			return CurrentNumberOfOpenConnections > Math.Max(0, pool.MaxThreads / 2);
 		}
 
 #if NET6_0
