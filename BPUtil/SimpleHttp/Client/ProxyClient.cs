@@ -16,7 +16,7 @@ namespace BPUtil.SimpleHttp.Client
 	/// <summary>
 	/// Provides advanced web proxying capability.
 	/// </summary>
-	public class ProxyClient
+	public class ProxyClient : IDisposable
 	{
 		/// <summary>
 		/// Web origin which this client is bound to, all lower case. e.g. "https://example.com"
@@ -79,6 +79,8 @@ namespace BPUtil.SimpleHttp.Client
 						if (client.expireTimer.Finished)
 						{
 							options.log.AppendLine("Removing Expired ProxyClient");
+							client.Dispose();
+							client = null;
 							continue;
 						}
 						options.log.AppendLine("Using Existing ProxyClient");
@@ -96,6 +98,8 @@ namespace BPUtil.SimpleHttp.Client
 							options.log.AppendLine("Unexpected disconnection!");
 						else
 							options.log.AppendLine("ERROR: Exception occurred: " + ex.FlattenMessages());
+						client.Dispose();
+						client = null;
 						ex.Rethrow();
 					}
 					options.bet?.Start("ProxyRequest analyze result #" + numTries + ": " + result.ErrorCode);
@@ -104,6 +108,11 @@ namespace BPUtil.SimpleHttp.Client
 					{
 						pool.Enqueue(client);
 						options.log.AppendLine("Recycling ProxyClient for future use.");
+					}
+					else
+					{
+						client.Dispose();
+						client = null;
 					}
 					if (result.Success)
 						break;
@@ -1178,6 +1187,42 @@ namespace BPUtil.SimpleHttp.Client
 					}
 				}
 			}
+		}
+		
+		private bool disposedValue;
+		protected virtual void Dispose(bool disposing)
+		{
+			if (!disposedValue)
+			{
+				if (disposing)
+				{
+					// dispose managed state (managed objects)
+					try
+					{
+						proxyClient?.Close();
+					}
+					catch (Exception ex)
+					{
+						Logger.Debug(ex, "ProxyClient.Dispose");
+					}
+				}
+
+				// free unmanaged resources (unmanaged objects) and override finalizer
+				// set large fields to null
+				disposedValue = true;
+			}
+		}
+		// // override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+		// ~ProxyClient()
+		// {
+		//     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+		//     Dispose(disposing: false);
+		// }
+		public void Dispose()
+		{
+			// Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+			Dispose(disposing: true);
+			GC.SuppressFinalize(this);
 		}
 		#endregion
 	}

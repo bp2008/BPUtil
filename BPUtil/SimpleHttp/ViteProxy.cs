@@ -91,7 +91,8 @@ namespace BPUtil.SimpleHttp
 				p.ProxyToAsync(builder.Uri.ToString(), new ProxyOptions()
 				{
 					allowGatewayTimeoutResponse = false,
-					allowConnectionKeepalive = true
+					allowConnectionKeepalive = true,
+					networkTimeoutMs = 5000,
 				}).Wait();
 				return null;
 			}

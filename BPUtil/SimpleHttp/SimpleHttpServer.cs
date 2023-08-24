@@ -549,10 +549,15 @@ namespace BPUtil.SimpleHttp
 							.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
 							.Select(s => s.Trim())
 							.ToArray();
+						keepAliveRequested = http_protocol_versionstring == "HTTP/1.1";
 						if (connectionHeaderValues != null)
-							keepAliveRequested = connectionHeaderValues.Contains("keep-alive", true);
-						else
-							keepAliveRequested = http_protocol_versionstring == "HTTP/1.1";
+						{
+							if (connectionHeaderValues.Contains("keep-alive", true))
+								keepAliveRequested = true;
+							if (connectionHeaderValues.Contains("close", true))
+								keepAliveRequested = false;
+						}
+
 
 						IPAddress originalRemoteIp = RemoteIPAddress;
 						if (srv.XRealIPHeader)
@@ -1119,7 +1124,7 @@ namespace BPUtil.SimpleHttp
 			if (this.keepAliveRequested)
 			{
 				outputStream.WriteLineRN("Connection: keep-alive");
-				outputStream.WriteLineRN("Keep-Alive: timeout=" + (keepaliveTimeSeconds - 1));
+				outputStream.WriteLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
 			}
 			else
 				outputStream.WriteLineRN("Connection: close");
@@ -1172,7 +1177,7 @@ namespace BPUtil.SimpleHttp
 			if (this.keepAlive)
 			{
 				outputStream.WriteLineRN("Connection: keep-alive");
-				outputStream.WriteLineRN("Keep-Alive: timeout=" + (keepaliveTimeSeconds - 1));
+				outputStream.WriteLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
 			}
 			else
 				outputStream.WriteLineRN("Connection: close");
@@ -1443,6 +1448,28 @@ namespace BPUtil.SimpleHttp
 			}
 			else
 				throw new Exception("Request body was too large (max " + StringUtil.FormatNetworkBytes(maxLength) + ").");
+		}
+
+		/// <summary>
+		/// Returns the number of seconds the `Keep-Alive: timeout=N` header should specify.
+		/// </summary>
+		/// <returns></returns>
+		private int GetKeepaliveTimeoutSeconds()
+		{
+			int receiveTimeout = tcpClient.ReceiveTimeout;
+			if (receiveTimeout == 0)
+				return 60;
+			else if (receiveTimeout > 0)
+				return ((receiveTimeout / 1000) - 1).Clamp(1, 60);
+			else
+				return 3;
+		}
+		/// <summary>
+		/// Call this method before writing a response in order to prevent "Connection: keep-alive" from being sent.
+		/// </summary>
+		public void PreventKeepalive()
+		{
+			this.keepAliveRequested = false;
 		}
 
 		#region Request Proxy Http(s)
