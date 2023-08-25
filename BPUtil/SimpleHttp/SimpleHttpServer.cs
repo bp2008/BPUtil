@@ -1121,7 +1121,9 @@ namespace BPUtil.SimpleHttp
 						throw new ApplicationException("writeSuccess() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
 					outputStream.WriteLineRN(header.Key + ": " + header.Value);
 				}
-			if (this.keepAliveRequested)
+
+			this.keepAlive = this.keepAliveRequested && !this.ServerIsUnderHighLoad;
+			if (this.keepAlive)
 			{
 				outputStream.WriteLineRN("Connection: keep-alive");
 				outputStream.WriteLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
@@ -1129,8 +1131,6 @@ namespace BPUtil.SimpleHttp
 			else
 				outputStream.WriteLineRN("Connection: close");
 			outputStream.WriteLineRN("");
-
-			this.keepAlive = this.keepAliveRequested && !this.ServerIsUnderHighLoad;
 
 			tcpClient.NoDelay = true;
 			EnableCompressionIfSet();
@@ -2100,10 +2100,16 @@ namespace BPUtil.SimpleHttp
 		}
 		public class ListenerData
 		{
+			/// <summary>
+			/// <para>The binding which this ListenerData uses.</para>
+			/// <para>If port 0 is specified during ListenerData construction, a port number will be automatically selected and this Binding will be replaced with an updated one after listening begins.</para>
+			/// </summary>
 			public Binding Binding { get; private set; }
-			private TcpListener tcpListener;
-			private volatile bool isStopping = false;
-			internal HttpServer Server;
+			private TcpListener tcpListener = null;
+			private HttpServer Server;
+			private CancellationTokenSource cts;
+			private CancellationToken cancellationToken;
+			private volatile bool didCallRun = false;
 			/// <summary>
 			/// Constructs a ListenerData.
 			/// </summary>
@@ -2113,86 +2119,138 @@ namespace BPUtil.SimpleHttp
 			{
 				this.Server = server;
 				this.Binding = binding;
+				cts = new CancellationTokenSource();
+				cancellationToken = cts.Token;
 			}
 			/// <summary>
-			/// Robustly listens on the Binding.  The task does not complete until Stop() is called.
+			/// Robustly listens on the Binding.  The task does not complete until Stop() is called.  You can only Run a ListenerData one time.
 			/// </summary>
-			public async void Run()
+			public async Task Run()
 			{
-				while (!isStopping)
+				if (didCallRun)
+					throw new ApplicationException("This ListenerData was already run before.  It can not be run again.");
+				didCallRun = true;
+				await Task.Run(async () =>
 				{
+					bool didAnnounceStart = false;
 					try
 					{
-						tcpListener = new TcpListener(Binding.Endpoint);
-						tcpListener.Start();
-						string trafficType;
-						if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.http)
-							trafficType = "http";
-						else if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.https)
-							trafficType = "https";
-						else if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.httpAndHttps)
-							trafficType = "http and https";
-						else
-							trafficType = "unknown";
-
-						if (Binding.Endpoint.Port != ((IPEndPoint)tcpListener.LocalEndpoint).Port)
-							Binding = new Binding(Binding.AllowedConnectionTypes, (IPEndPoint)tcpListener.LocalEndpoint);
-
-						Server.SocketBound.Invoke(this, "Listening on " + Binding.Endpoint.ToString() + " for " + trafficType);
-						while (!isStopping && tcpListener.Server?.IsBound == true)
+						CountdownStopwatch addressInUseCooldown = null;
+						while (!cancellationToken.IsCancellationRequested)
 						{
+							StopListening();
+
+							// Bind Socket Listener
 							try
 							{
-								TcpClient s = await tcpListener.AcceptTcpClientAsync().ConfigureAwait(false);
-								if (Server.IsServerTooBusyToProcessNewConnection(s))
-								{
-									_ = DismissTcpClientWithHttp503(s);
-								}
-								else
-								{
-									// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
-									if (s.ReceiveTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
-										s.ReceiveTimeout = 10000;
-									if (s.SendTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
-										s.SendTimeout = 10000;
-									int? rbuf = Server.ReceiveBufferSize;
-									if (rbuf != null)
-										s.ReceiveBufferSize = rbuf.Value;
-									IProcessor processor = Server.MakeClientProcessor(s, Server, Server.certificateSelector, Binding.AllowedConnectionTypes);
-									Server.pool.Enqueue(processor.Process);
-								}
-							}
-							catch (ObjectDisposedException ex)
-							{
-								if (!isStopping)
-									SimpleHttpLogger.Log(ex, "SimpleHttp.HttpServer.ListenerData error processing TcpClient.");
+								tcpListener = new TcpListener(Binding.Endpoint);
+								tcpListener.Start();
+								addressInUseCooldown = null;
 							}
 							catch (Exception ex)
 							{
-								if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
-									SimpleHttpLogger.Log(ex, "SimpleHttp.HttpServer.ListenerData error processing TcpClient.");
+								if (ex is SocketException && ((SocketException)ex).SocketErrorCode == SocketError.AddressAlreadyInUse)
+								{
+									if (addressInUseCooldown == null || addressInUseCooldown.Finished)
+									{
+										SimpleHttpLogger.Log(ToString() + " - Address in use.  Will keep trying to bind.");
+										addressInUseCooldown = CountdownStopwatch.StartNew(TimeSpan.FromSeconds(60));
+									}
+									StopListening();
+									await Task.Delay(1000, cancellationToken);
+								}
+								else
+								{
+									SimpleHttpLogger.Log(ex, ToString() + " - Unable to bind TcpListener due to error.");
+									StopListening();
+									await Task.Delay(10000, cancellationToken);
+								}
+								continue;
+							}
+
+							// Accept Connections
+							try
+							{
+								Server.SocketLog((didAnnounceStart ? "Resumed " : "Started ") + ToString());
+								didAnnounceStart = true;
+
+								string trafficType;
+								if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.http)
+									trafficType = "http";
+								else if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.https)
+									trafficType = "https";
+								else if (Binding.AllowedConnectionTypes == AllowedConnectionTypes.httpAndHttps)
+									trafficType = "http and https";
+								else
+									trafficType = "unknown";
+
+								if (Binding.Endpoint.Port != ((IPEndPoint)tcpListener.LocalEndpoint).Port)
+									Binding = new Binding(Binding.AllowedConnectionTypes, (IPEndPoint)tcpListener.LocalEndpoint);
+
+								Server.SocketBound.Invoke(this, "Listening on " + Binding.Endpoint.ToString() + " for " + trafficType);
+								while (!cancellationToken.IsCancellationRequested && tcpListener.Server?.IsBound == true)
+								{
+									try
+									{
+#if NETFRAMEWORK
+										TcpClient s = await tcpListener.AcceptTcpClientAsync().ConfigureAwait(false);
+#else
+										TcpClient s = await tcpListener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
+#endif
+										if (Server.IsServerTooBusyToProcessNewConnection(s))
+										{
+											_ = DismissTcpClientWithHttp503(s);
+										}
+										else
+										{
+											// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
+											if (s.ReceiveTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
+												s.ReceiveTimeout = 10000;
+											if (s.SendTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
+												s.SendTimeout = 10000;
+											int? rbuf = Server.ReceiveBufferSize;
+											if (rbuf != null)
+												s.ReceiveBufferSize = rbuf.Value;
+											IProcessor processor = Server.MakeClientProcessor(s, Server, Server.certificateSelector, Binding.AllowedConnectionTypes);
+											Server.pool.Enqueue(processor.Process);
+										}
+									}
+									catch (OperationCanceledException)
+									{
+									}
+									catch (ObjectDisposedException ex)
+									{
+										if (!cancellationToken.IsCancellationRequested)
+											SimpleHttpLogger.Log(ex, ToString() + " - Error processing TcpClient.");
+									}
+									catch (Exception ex)
+									{
+										if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
+											SimpleHttpLogger.Log(ex, ToString() + " - Error processing TcpClient.");
+									}
+								}
+							}
+							catch (OperationCanceledException)
+							{
+							}
+							catch (Exception ex)
+							{
+								SimpleHttpLogger.Log(ex, ToString() + " - Restarting due to an error.");
+								StopListening();
+								await Task.Delay(1000, cancellationToken);
 							}
 						}
 					}
-					catch (SocketException ex)
+					catch (OperationCanceledException)
 					{
-						SimpleHttpLogger.Log(ex, "SimpleHttp.HttpServer.ListenerData SocketException managing socket.");
-						Thread.Sleep(10000);
-					}
-					catch (Exception ex)
-					{
-						SimpleHttpLogger.Log(ex, "SimpleHttp.HttpServer.ListenerData Exception managing socket.");
-						Thread.Sleep(1000);
 					}
 					finally
 					{
-						try
-						{
-							tcpListener?.Stop();
-						}
-						catch { }
+						StopListening();
+						if (didAnnounceStart)
+							Server.SocketLog("Stopped " + ToString());
 					}
-				}
+				});
 			}
 			private static byte[] http503ResponseData = ByteUtil.Utf8NoBOM.GetBytes("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\nServer too busy");
 			private static async Task DismissTcpClientWithHttp503(TcpClient s)
@@ -2206,20 +2264,26 @@ namespace BPUtil.SimpleHttp
 					s.Close();
 				}
 			}
-
-			public void Stop()
+			private void StopListening()
 			{
-				isStopping = true;
-				TcpListener l = tcpListener;
-				tcpListener = null;
 				try
 				{
-					l?.Stop();
+					tcpListener?.Stop();
 				}
 				catch (Exception ex)
 				{
 					SimpleHttpLogger.Log(ex);
 				}
+				tcpListener = null;
+			}
+
+			public void Stop()
+			{
+				cts.Cancel();
+#if NETFRAMEWORK
+				// .NET Framework 4.5 does not support `AcceptTcpClientAsync(cancellationToken)`, therefore we must stop the TcpListener to make the pending client acceptance get canceled.
+				StopListening();
+#endif
 			}
 			public override string ToString()
 			{
@@ -2601,17 +2665,15 @@ namespace BPUtil.SimpleHttp
 			foreach (ListenerData listener in toStop)
 			{
 				listener.Stop();
-				SocketLog("Stopped " + listener.ToString());
 			}
 
 			// Start new listeners
 			foreach (ListenerData listener in toStart)
 			{
-				listener.Run();
-				SocketLog("Started " + listener.ToString());
+				_ = listener.Run();
 			}
 		}
-		private void SocketLog(string str)
+		internal void SocketLog(string str)
 		{
 			if (shouldLogSocketBind())
 				SimpleHttpLogger.Log(str);

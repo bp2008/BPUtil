@@ -72,6 +72,7 @@
     <Compile Include="Debounce.cs" />
     <Compile Include="IO\ConcatenatedStream.cs" />
     <Compile Include="IO\Substream.cs" />
+    <Compile Include="RateOfChange.cs" />
     <Compile Include="SimpleHttp\TLS\ITlsCipherSuiteSet.cs" />
     <Compile Include="SimpleHttp\ReadableChunkedTransferEncodingStream.cs" />
     <Compile Include="Throttle.cs" />
