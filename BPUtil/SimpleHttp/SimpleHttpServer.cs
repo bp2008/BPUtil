@@ -717,13 +717,25 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 
+#if NET6_0
+		private ConcurrentDictionary<X509Certificate, SslStreamCertificateContext> tlsCertContexts = new ConcurrentDictionary<X509Certificate, SslStreamCertificateContext>();
+		private SslStreamCertificateContext CreateSslStreamCertificateContextFromCert(X509Certificate cert)
+		{
+			X509Certificate2 c2;
+			if (cert is X509Certificate2)
+				c2 = (X509Certificate2)cert;
+			else
+				c2 = new X509Certificate2(cert);
+			return SslStreamCertificateContext.Create(c2, null);
+		}
+#endif
 		private void TlsNegotiate(X509Certificate cert)
 		{
 #if NET6_0
 			SslServerAuthenticationOptions sslServerOptions = new SslServerAuthenticationOptions();
-			sslServerOptions.ServerCertificate = cert;
+			sslServerOptions.ServerCertificateContext = tlsCertContexts.GetOrAdd(cert, CreateSslStreamCertificateContextFromCert);
 			sslServerOptions.EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
-
+			sslServerOptions.AllowRenegotiation = false; // Client-side renegotiation is viewed as insecure by the industry and is not available in TLS 1.3.
 			if (HttpServer.IsTlsCipherSuitesPolicySupported())
 			{
 				IEnumerable<TlsCipherSuite> suites = srv.GetAllowedCipherSuites(this);
