@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BPUtil.SimpleHttp
+namespace BPUtil.SimpleHttp.Client
 {
 	/// <summary>
 	/// Contains a list of ProxyDataItems in the order that they were proxied.

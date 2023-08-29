@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BPUtil
@@ -117,7 +118,8 @@ namespace BPUtil
 		/// <param name="zipFilePath">The .zip file path.</param>
 		/// <param name="fileName">The file name to add.</param>
 		/// <param name="fileBody">The file body to add.</param>
-		public static async Task AddFileToZipAsync(string zipFilePath, string fileName, byte[] fileBody)
+		/// /// <param name="cancellationToken">Cancellation Token</param>
+		public static async Task AddFileToZipAsync(string zipFilePath, string fileName, byte[] fileBody, CancellationToken cancellationToken = default)
 		{
 			await Robust.RetryPeriodicAsync(async () =>
 			{
@@ -128,11 +130,11 @@ namespace BPUtil
 						ZipArchiveEntry entry = archive.CreateEntry(fileName);
 						using (Stream entryStream = entry.Open())
 						{
-							await entryStream.WriteAsync(fileBody, 0, fileBody.Length);
+							await entryStream.WriteAsync(fileBody, 0, fileBody.Length, cancellationToken).ConfigureAwait(false);
 						}
 					}
 				}
-			}, 50, 6);
+			}, 50, 6, cancellationToken).ConfigureAwait(false);
 		}
 	}
 }

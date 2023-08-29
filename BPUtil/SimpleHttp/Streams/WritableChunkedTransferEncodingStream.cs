@@ -54,9 +54,9 @@ namespace BPUtil.SimpleHttp
 			_stream.Flush();
 		}
 		/// <inheritdoc />
-		public override Task FlushAsync(CancellationToken cancellationToken)
+		public override async Task FlushAsync(CancellationToken cancellationToken)
 		{
-			return _stream.FlushAsync(cancellationToken);
+			await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 		}
 		/// <inheritdoc />
 		public override int Read(byte[] buffer, int offset, int count)
@@ -103,9 +103,9 @@ namespace BPUtil.SimpleHttp
 				throw new ApplicationException("WritableChunkedTransferEncodingStream.WriteAsync() is not allowed to be called after WriteFinalChunk() or WriteFinalChunkAsync() is called.");
 			if (count <= 0)
 				return;
-			await WriteChunkHeaderAsync(count, cancellationToken);
-			await _stream.WriteAsync(buffer, offset, count, cancellationToken);
-			await WriteChunkTrailerAsync(cancellationToken);
+			await WriteChunkHeaderAsync(count, cancellationToken).ConfigureAwait(false);
+			await _stream.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+			await WriteChunkTrailerAsync(cancellationToken).ConfigureAwait(false);
 		}
 		/// <summary>
 		/// Writes an empty chunk to the stream, indicating that the HTTP response is completed.  You should discontinue use of the WritableChunkedTransferEncodingStream after calling this.
@@ -128,8 +128,8 @@ namespace BPUtil.SimpleHttp
 			if (streamEnded)
 				throw new ApplicationException("WritableChunkedTransferEncodingStream.WriteFinalChunkAsync() is not allowed to be called after WriteTrailingChunk() or WriteTrailingChunkAsync() is called.");
 			streamEnded = true;
-			await WriteChunkHeaderAsync(0, cancellationToken);
-			await WriteChunkTrailerAsync(cancellationToken);
+			await WriteChunkHeaderAsync(0, cancellationToken).ConfigureAwait(false);
+			await WriteChunkTrailerAsync(cancellationToken).ConfigureAwait(false);
 		}
 
 		private void WriteChunkHeader(int count)

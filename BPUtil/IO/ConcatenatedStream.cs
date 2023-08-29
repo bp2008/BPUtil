@@ -106,7 +106,7 @@ namespace BPUtil.IO
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 
-				int bytesRead = await currentUnderlyingStream.ReadAsync(buffer, offset, count, cancellationToken);
+				int bytesRead = await currentUnderlyingStream.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
 
 				totalBytesRead += bytesRead;
 				offset += bytesRead;

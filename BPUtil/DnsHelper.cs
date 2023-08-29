@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BPUtil
@@ -20,8 +21,9 @@ namespace BPUtil
 		/// Asynchronously retrieves an IP address associated with a host.  IPv4 will be preferred over IPv6.
 		/// </summary>
 		/// <param name="hostNameOrAddress">The host name or IP address to resolve.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <returns>A task that represents the asynchronous operation. The value of the TResult parameter contains an IPAddress for the host that is specified by the hostNameOrAddress parameter.</returns>
-		public static async Task<IPAddress> GetHostAddressAsync(string hostNameOrAddress)
+		public static async Task<IPAddress> GetHostAddressAsync(string hostNameOrAddress, CancellationToken cancellationToken = default)
 		{
 			IPAddress ip;
 			if (IPAddress.TryParse(hostNameOrAddress, out ip))
@@ -30,7 +32,11 @@ namespace BPUtil
 			if (cache.TryGetValue(hostNameOrAddress, out DnsCacheEntry cacheEntry) && !cacheEntry.Expired)
 				return cacheEntry.Address;
 
+#if NET6_0
+			IPAddress[] addresses = await Dns.GetHostAddressesAsync(hostNameOrAddress, cancellationToken).ConfigureAwait(false);
+#else
 			IPAddress[] addresses = await Dns.GetHostAddressesAsync(hostNameOrAddress).ConfigureAwait(false);
+#endif
 
 			ip = addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
 			if (ip == null)

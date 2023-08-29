@@ -41,7 +41,8 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="currentValue">The current value to track.</param>
 		/// <param name="decimals">(Default: 2) The number of decimal places of precision to use in the output.</param>
-		/// <param name="label">(Default: "/sec") The string to append to the number as a label.</returns>
+		/// <param name="label">(Default: "/sec") The string to append to the number as a label.</param>
+		/// <returns>The rate of change as a string.</returns>
 		public string GetRate(double currentValue, int decimals = 2, string label = "/sec")
 		{
 			double elapsedTime = _stopwatch.Elapsed.TotalSeconds;

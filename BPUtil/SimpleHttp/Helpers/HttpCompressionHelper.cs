@@ -35,6 +35,11 @@ namespace BPUtil.SimpleHttp
 			return commonlyCompressedExtensions.TryGetValue(extensionIncludingDot, out compress) ? compress : false;
 		}
 	}
+	public enum CompressionType
+	{
+		None,
+		GZip
+	}
 	/// <summary>
 	/// A class which compresses or does not compress a content body, depending on its type and length.
 	/// </summary>

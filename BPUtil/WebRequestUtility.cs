@@ -214,7 +214,7 @@ namespace BPUtil
 		{
 			Task<BpWebResponse> task = GETAsync(url, headers, earlyTerminationBytes, fileDownloadPath);
 			task.Wait();
-			return task.Result;
+			return task.GetAwaiter().GetResult();
 		}
 		/// <summary>
 		/// Performs an HTTP GET request.
@@ -253,7 +253,7 @@ namespace BPUtil
 		{
 			Task<BpWebResponse> task = POSTAsync(url, keysAndValues, headers, earlyTerminationBytes, fileDownloadPath);
 			task.Wait();
-			return task.Result;
+			return task.GetAwaiter().GetResult();
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending key and value strings to the server using the content type "application/x-www-form-urlencoded".
@@ -301,7 +301,7 @@ namespace BPUtil
 		{
 			Task<BpWebResponse> task = POSTAsync(url, postBody, contentType, headers, earlyTerminationBytes, fileDownloadPath);
 			task.Wait();
-			return task.Result;
+			return task.GetAwaiter().GetResult();
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending the specified body content.
@@ -357,7 +357,7 @@ namespace BPUtil
 		{
 			Task<BpWebResponse> task = PUTAsync(url, putBody, contentType, headers, earlyTerminationBytes, fileDownloadPath);
 			task.Wait();
-			return task.Result;
+			return task.GetAwaiter().GetResult();
 		}
 		/// <summary>
 		/// Sends the request and retrieves the response.

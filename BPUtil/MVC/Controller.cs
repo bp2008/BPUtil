@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using BPUtil.SimpleHttp;
 
@@ -46,6 +47,10 @@ namespace BPUtil.MVC
 		/// A wrapper around ViewData which can have key/value pairs added and read as dynamic properties.
 		/// </summary>
 		public readonly dynamic ViewBag;
+		/// <summary>
+		/// Cancellation Token which may be used to cancel execution of the action method being run.
+		/// </summary>
+		public CancellationToken CancellationToken { get; internal set; } = default;
 
 		public Controller()
 		{

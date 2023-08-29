@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BPUtil.IO;
+using System;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -14,7 +15,7 @@ namespace BPUtil.SimpleHttp
 	/// </summary>
 	public class ReadableChunkedTransferEncodingStream : Stream
 	{
-		private readonly Stream _stream;
+		private readonly UnreadableStream _stream;
 		/// <summary>
 		/// Gets a value indicating if this ReadableChunkedTransferEncodingStream is currently positioned at the end of the stream.
 		/// </summary>
@@ -26,7 +27,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="stream">The underlying stream to write to.</param>
 		public ReadableChunkedTransferEncodingStream(Stream stream)
 		{
-			_stream = stream;
+			_stream = new UnreadableStream(stream, true);
 		}
 
 		/// <inheritdoc />
@@ -50,9 +51,9 @@ namespace BPUtil.SimpleHttp
 			_stream.Flush();
 		}
 		/// <inheritdoc />
-		public override Task FlushAsync(CancellationToken cancellationToken)
+		public override async Task FlushAsync(CancellationToken cancellationToken)
 		{
-			return _stream.FlushAsync(cancellationToken);
+			await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 		}
 		long remainingThisChunk = 0;
 		/// <inheritdoc />
@@ -119,7 +120,7 @@ namespace BPUtil.SimpleHttp
 				cancellationToken.ThrowIfCancellationRequested();
 
 				if (remainingThisChunk == 0)
-					remainingThisChunk = await ReadChunkSizeLineAsync();
+					remainingThisChunk = await ReadChunkSizeLineAsync(cancellationToken).ConfigureAwait(false);
 				if (remainingThisChunk == 0)
 				{
 					EndOfStream = true;
@@ -128,7 +129,7 @@ namespace BPUtil.SimpleHttp
 				}
 				cancellationToken.ThrowIfCancellationRequested();
 				int toRead = (int)Math.Min(remainingThisChunk, count - totalRead);
-				int justRead = await _stream.ReadAsync(buffer, offset, toRead, cancellationToken);
+				int justRead = await _stream.ReadAsync(buffer, offset, toRead, cancellationToken).ConfigureAwait(false);
 				if (justRead == 0)
 					throw new EndOfStreamException("ReadableChunkedTransferEncodingStream encountered end of stream with " + remainingThisChunk + " bytes of a chunk remaining to read.");
 				totalRead += justRead;
@@ -138,24 +139,24 @@ namespace BPUtil.SimpleHttp
 					throw new ApplicationException("ReadableChunkedInputStream somehow read too much.");
 				cancellationToken.ThrowIfCancellationRequested();
 				if (remainingThisChunk == 0)
-					await ReadChunkTrailerAsync();
+					await ReadChunkTrailerAsync(cancellationToken).ConfigureAwait(false); ;
 			}
 
 			return totalRead;
 		}
 
-		private async Task<long> ReadChunkSizeLineAsync()
+		private async Task<long> ReadChunkSizeLineAsync(CancellationToken cancellationToken)
 		{
-			string chunkSizeLine = await Task.Run(() => HttpProcessor.streamReadLine(_stream));
+			string chunkSizeLine = await HttpProcessor.streamReadLineAsync(_stream, cancellationToken: cancellationToken).ConfigureAwait(false);
 			if (chunkSizeLine == null)
 				throw new EndOfStreamException("The end of the stream was encountered when attempting to read the next chunk header.");
 
 			long chunkSize = long.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
 			return chunkSize;
 		}
-		private async Task ReadChunkTrailerAsync()
+		private async Task ReadChunkTrailerAsync(CancellationToken cancellationToken)
 		{
-			string trailerLine = await Task.Run(() => HttpProcessor.streamReadLine(_stream));
+			string trailerLine = await HttpProcessor.streamReadLineAsync(_stream, cancellationToken: cancellationToken).ConfigureAwait(false);
 			if (trailerLine != "")
 				throw new InvalidDataException();
 		}

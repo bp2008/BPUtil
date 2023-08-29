@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BPUtil
@@ -293,8 +294,81 @@ namespace BPUtil
 				return ((MemoryStream)stream).ToArray();
 			using (MemoryStream memoryStream = new MemoryStream())
 			{
-				await stream.CopyToAsync(memoryStream);
+				await stream.CopyToAsync(memoryStream).ConfigureAwait(false);
 				return memoryStream.ToArray();
+			}
+		}
+		/// <summary>
+		/// Contains the result of an async read operation.
+		/// </summary>
+		public class AsyncReadResult
+		{
+			/// <summary>
+			/// True if the end of the stream is reached.
+			/// </summary>
+			public bool EndOfStream;
+			/// <summary>
+			/// The bytes that were read, or null if the max length was exceeded.
+			/// </summary>
+			public byte[] Data;
+			/// <summary>
+			/// Constructs a new AsyncReadResult.
+			/// </summary>
+			/// <param name="endOfStream">True if the end of the stream is reached.</param>
+			/// <param name="data">The bytes that were read, or null if the max length was exceeded.</param>
+			public AsyncReadResult(bool endOfStream, byte[] data)
+			{
+				EndOfStream = endOfStream;
+				Data = data;
+			}
+		}
+		/// <summary>
+		/// Reads all bytes until the end of the stream, then returns true.  The read data is placed in an output argument byte array.  If maxLength is exceeded while reading, the read data is unavailable and the method returns false.
+		/// </summary>
+		/// <param name="stream">The stream to read data from.</param>
+		/// <param name="maxLength">Maximium number of bytes to read before aborting.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <returns>An object indicating the result of the operation.</returns>
+		public static async Task<AsyncReadResult> ReadToEndWithMaxLengthAsync(Stream stream, int maxLength, CancellationToken cancellationToken = default)
+		{
+			if (stream == null)
+				throw new ArgumentNullException(nameof(stream));
+			if (maxLength < 0)
+				throw new ArgumentOutOfRangeException(nameof(maxLength));
+
+			if (stream is MemoryStream && (stream as MemoryStream).Position == 0)
+			{
+				if (stream.Length > maxLength)
+					return new AsyncReadResult(false, null);
+				else
+				{
+					byte[] data = ((MemoryStream)stream).ToArray();
+					return new AsyncReadResult(true, data);
+				}
+			}
+			using (MemoryStream memoryStream = new MemoryStream())
+			{
+				byte[] buf = BufferGet();
+				try
+				{
+					int totalRead = 0;
+					int read = 1;
+					while (read > 0 && totalRead <= maxLength)
+					{
+						read = await stream.ReadAsync(buf, 0, buf.Length, cancellationToken).ConfigureAwait(false);
+						if (read > 0)
+							memoryStream.Write(buf, 0, read);
+						totalRead += read;
+					}
+					if (totalRead > maxLength)
+						return new AsyncReadResult(false, null);
+					byte[] data = memoryStream.ToArray();
+					return new AsyncReadResult(true, data);
+				}
+				finally
+				{
+					BufferRecycle(buf);
+				}
 			}
 		}
 		/// <summary>
@@ -373,11 +447,78 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
+		/// Contains the result of an async discard operation.
+		/// </summary>
+		public class AsyncDiscardResult
+		{
+			/// <summary>
+			/// True if the end of the stream is reached.
+			/// </summary>
+			public bool EndOfStream;
+			/// <summary>
+			/// The number of bytes that were read.
+			/// </summary>
+			public long BytesDiscarded;
+			/// <summary>
+			/// Constructs a new AsyncDiscardResult.
+			/// </summary>
+			/// <param name="endOfStream">True if the end of the stream is reached.</param>
+			/// <param name="bytesDiscarded">The number of bytes that were read.</param>
+			public AsyncDiscardResult(bool endOfStream, long bytesDiscarded)
+			{
+				EndOfStream = endOfStream;
+				BytesDiscarded = bytesDiscarded;
+			}
+		}
+		/// <summary>
+		/// Reads data from the stream in 81920-byte chunks until the end of stream is reached.  The data is discarded as soon as it is read. If the stream supports seeking, it is simply seeked to the end.
+		/// </summary>
+		/// <param name="stream">The stream to read data from.</param>
+		/// <param name="maxLength">If more than this many bytes are read, the method will return false without continuing to the end of the stream.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <returns>An object indicating the result of the operation.</returns>
+		public static async Task<AsyncDiscardResult> DiscardUntilEndOfStreamWithMaxLengthAsync(Stream stream, long maxLength, CancellationToken cancellationToken = default)
+		{
+			if (stream == null)
+				throw new ArgumentNullException(nameof(stream));
+			if (maxLength < 0)
+				throw new ArgumentOutOfRangeException(nameof(maxLength));
+
+			if (stream.CanSeek)
+			{
+				stream.Seek(0, SeekOrigin.End);
+				return new AsyncDiscardResult(true, 0);
+			}
+			byte[] buf = BufferGet();
+			try
+			{
+				long bytesDiscarded = 0;
+				int read = 1;
+				while (read > 0 && bytesDiscarded < maxLength)
+				{
+					int toRead = (int)Math.Min(buf.Length, maxLength - bytesDiscarded);
+					read = await stream.ReadAsync(buf, 0, toRead, cancellationToken).ConfigureAwait(false);
+					bytesDiscarded += read;
+				}
+				if (read != 0)
+				{
+					read = await stream.ReadAsync(buf, 0, 1, cancellationToken).ConfigureAwait(false);
+					bytesDiscarded += read;
+				}
+				return new AsyncDiscardResult(read == 0, bytesDiscarded);
+			}
+			finally
+			{
+				BufferRecycle(buf);
+			}
+		}
+		/// <summary>
 		/// Reads data from the stream in 81920-byte chunks until the end of stream is reached.  The data is discarded as soon as it is read. If the stream supports seeking, it is simply seeked to the end.  Returns true if the end of the stream is reached.
 		/// </summary>
 		/// <param name="stream">The stream to read data from.</param>
 		/// <param name="maxLength">If more than this many bytes are read, the method will return false without continuing to the end of the stream.</param>
 		/// <param name="bytesDiscarded">(Output) The number of bytes that were read.</param>
+		/// <returns>True if the end of the stream is reached.</returns>
 		public static bool DiscardUntilEndOfStreamWithMaxLength(Stream stream, long maxLength, out long bytesDiscarded)
 		{
 			if (stream == null)
@@ -402,10 +543,11 @@ namespace BPUtil
 					read = stream.Read(buf, 0, toRead);
 					bytesDiscarded += read;
 				}
-				if (read == 0)
-					return true;
-				read = stream.Read(buf, 0, 1);
-				bytesDiscarded += read;
+				if (read != 0)
+				{
+					read = stream.Read(buf, 0, 1);
+					bytesDiscarded += read;
+				}
 				return read == 0;
 			}
 			finally

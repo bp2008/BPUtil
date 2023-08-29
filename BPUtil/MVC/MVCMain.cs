@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using BPUtil.SimpleHttp;
 
@@ -50,6 +51,17 @@ namespace BPUtil.MVC
 		/// <returns></returns>
 		public bool ProcessRequest(HttpProcessor httpProcessor, string requestPath = null)
 		{
+			return ProcessRequestAsync(httpProcessor, requestPath).GetAwaiter().GetResult();
+		}
+		/// <summary>
+		/// Processes a request from a client, then returns true. Returns false if the request could not be processed. Exceptions thrown by a controller are caught here.
+		/// </summary>
+		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
+		/// <param name="requestPath">(Optional) The path requested by the client.  If this path starts with '/', the '/' will be removed automatically (if there are multiple '/' at the start, only one is removed). (if null, defaults to httpProcessor.request_url.PathAndQuery)</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <returns></returns>
+		public async Task<bool> ProcessRequestAsync(HttpProcessor httpProcessor, string requestPath = null, CancellationToken cancellationToken = default)
+		{
 			if (httpProcessor.responseWritten)
 				throw new Exception("MVCMain.ProcessRequest was called with an HttpProcessor that had already written a response.");
 			if (requestPath == null)
@@ -63,7 +75,7 @@ namespace BPUtil.MVC
 			ActionResult actionResult = null;
 			try
 			{
-				actionResult = controllerInfo.CallMethod(context);
+				actionResult = await controllerInfo.CallMethod(context, cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{

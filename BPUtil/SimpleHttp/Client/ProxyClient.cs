@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BPUtil.IO;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -23,7 +24,7 @@ namespace BPUtil.SimpleHttp.Client
 		/// </summary>
 		public readonly string Origin;
 		private TcpClient proxyClient;
-		private Stream proxyStream;
+		private UnreadableStream proxyStream;
 		private CountdownStopwatch expireTimer = CountdownStopwatch.StartNew(TimeSpan.FromMinutes(60));
 		private string lastRequestDetails;
 
@@ -90,7 +91,12 @@ namespace BPUtil.SimpleHttp.Client
 					ProxyResult result = null;
 					try
 					{
-						result = await client.BeginProxyRequestAsync(p, uri, options);
+						options.cancellationToken.ThrowIfCancellationRequested();
+						result = await client.BeginProxyRequestAsync(p, uri, options).ConfigureAwait(false);
+					}
+					catch (OperationCanceledException)
+					{
+						break;
 					}
 					catch (Exception ex)
 					{
@@ -228,7 +234,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			if (!ourClientWantsConnectionClose && !ourClientWantsConnectionKeepAlive && !ourClientWantsConnectionUpgrade)
 			{
-				p.writeFullResponseUTF8("Connection header had unrecognized value.", "text/plain; charset=UTF-8", "400 Bad Request");
+				await p.writeFullResponseUTF8Async("Connection header had unrecognized value.", "text/plain; charset=UTF-8", "400 Bad Request", cancellationToken: options.cancellationToken).ConfigureAwait(false);
 				return new ProxyResult(ProxyResultErrorCode.Error, "Connection header had unrecognized value: " + incomingConnectionHeader, false, false);
 			}
 
@@ -256,21 +262,21 @@ namespace BPUtil.SimpleHttp.Client
 				options.log.AppendLine("Constructing new TcpClient");
 				try
 				{
-					await Connect(uri, host, options, proxyTiming);
+					await Connect(uri, host, options, proxyTiming).ConfigureAwait(false);
 					didConnect = true;
 				}
 				catch (GatewayTimeoutException ex)
 				{
 					if (options.allowGatewayTimeoutResponse)
 					{
-						p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "504 Gateway Timeout");
+						await p.writeFullResponseUTF8Async("", "text/plain; charset=utf-8", "504 Gateway Timeout", cancellationToken: options.cancellationToken).ConfigureAwait(false);
 						return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
 					}
 					ex.Rethrow();
 				}
 				catch (TLSNegotiationFailedException ex)
 				{
-					p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
+					await p.writeFullResponseUTF8Async("", "text/plain; charset=utf-8", "502 Bad Gateway", cancellationToken: options.cancellationToken).ConfigureAwait(false);
 					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, ex.ToHierarchicalString(), false, false);
 				}
 			}
@@ -286,32 +292,34 @@ namespace BPUtil.SimpleHttp.Client
 			// Send the first line of our HTTP request.
 			proxyTiming?.Start("Send Request");
 			options.bet?.Start("Send Request");
+			StringBuilder sbRequestText = new StringBuilder();
 			string requestLine = p.http_method + ' ' + uri.PathAndQuery + ' ' + p.http_protocol_versionstring;
+			sbRequestText.AppendLineRN(requestLine);
+			// After the first line comes the request headers.
+			string outgoingHostHeader = host;
+			if (!uri.IsDefaultPort)
+				outgoingHostHeader += ":" + uri.Port;
+			sbRequestText.AppendLineRN("Host: " + outgoingHostHeader);
+			sbRequestText.AppendLineRN("Connection: " + requestHeader_Connection);
+			if (requestHeader_Upgrade != null)
+				sbRequestText.AppendLineRN("Upgrade: " + requestHeader_Upgrade);
+			if (p.RequestBodyStream is ReadableChunkedTransferEncodingStream)
+				sbRequestText.AppendLineRN("Transfer-Encoding: chunked");
+			ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
+
+			options.RaiseBeforeRequestHeadersSent(this, p.httpHeaders);
+
+			foreach (HttpHeader header in p.httpHeaders)
+			{
+				if (!doNotProxyHeaders.Contains(header.Key, true))
+					sbRequestText.AppendLineRN(header.Key + ": " + header.Value);
+			}
+			// Now a blank line to indicate the end of the request headers.
+			sbRequestText.AppendLineRN("");
+
 			try
 			{
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, requestLine + "\r\n", snoopy);
-				// After the first line comes the request headers.
-				string outgoingHostHeader = host;
-				if (!uri.IsDefaultPort)
-					outgoingHostHeader += ":" + uri.Port;
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + outgoingHostHeader + "\r\n", snoopy);
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: " + requestHeader_Connection + "\r\n", snoopy);
-				if (requestHeader_Upgrade != null)
-					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Upgrade: " + requestHeader_Upgrade + "\r\n", snoopy);
-				if (p.RequestBodyStream is ReadableChunkedTransferEncodingStream)
-					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Transfer-Encoding: chunked\r\n", snoopy);
-
-				ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
-
-				options.RaiseBeforeRequestHeadersSent(this, p.httpHeaders);
-
-				foreach (HttpHeader header in p.httpHeaders)
-				{
-					if (!doNotProxyHeaders.Contains(header.Key, true))
-						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
-				}
-				// Now a blank line to indicate the end of the request headers.
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
+				await _ProxyStringAsync(ProxyDataDirection.RequestToServer, proxyStream, sbRequestText.ToString(), snoopy, options.cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
@@ -324,7 +332,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			// Write the original request body if there was one.
 			if (p.RequestBodyStream != null)
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.RequestBodyStream, proxyStream, snoopy);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.RequestBodyStream, proxyStream, snoopy, options.cancellationToken).ConfigureAwait(false);
 
 			proxyStream.Flush();
 
@@ -339,7 +347,7 @@ namespace BPUtil.SimpleHttp.Client
 			int responseStatusCodeInt = 0;
 			try
 			{
-				string statusLineStr = HttpProcessor.streamReadLine(proxyStream);
+				string statusLineStr = await HttpProcessor.streamReadLineAsync(proxyStream, cancellationToken: options.cancellationToken).ConfigureAwait(false);
 				if (statusLineStr == null)
 					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
 				try
@@ -365,7 +373,7 @@ namespace BPUtil.SimpleHttp.Client
 				responseStatusCodeInt = responseStatusCodeIntNullable.Value;
 
 				// Read response headers from remote server
-				HttpProcessor.readHeaders(proxyStream, proxyHttpHeaders);
+				await HttpProcessor.readHeadersAsync(proxyStream, proxyHttpHeaders, options.cancellationToken).ConfigureAwait(false);
 			}
 			catch (HttpProcessor.EndOfStreamException ex)
 			{
@@ -481,7 +489,8 @@ namespace BPUtil.SimpleHttp.Client
 			options.bet?.Start("Proxy Write Response: " + decision);
 			Stream outgoingStream = p.tcpStream;
 			p.responseWritten = true;
-			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, responseStatusLine + "\r\n", snoopy);
+			StringBuilder sbResponseText = new StringBuilder();
+			sbResponseText.AppendLineRN(responseStatusLine.ToString());
 
 			// Write response headers
 			bool wrapOutputStreamChunked = false;
@@ -500,12 +509,12 @@ namespace BPUtil.SimpleHttp.Client
 				else
 					responseConnectionHeader = "close";
 			}
-			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Connection: " + responseConnectionHeader + "\r\n", snoopy);
+			sbResponseText.AppendLineRN("Connection: " + responseConnectionHeader);
 			if (p.keepAlive)
-				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Keep-Alive: timeout=" + ((options.networkTimeoutMs.Clamp(1000, 60000) / 1000) - 1).Clamp(1, 60) + "\r\n", snoopy);
+				sbResponseText.AppendLineRN("Keep-Alive: timeout=" + ((options.networkTimeoutMs.Clamp(1000, 60000) / 1000) - 1).Clamp(1, 60));
 
 			if (decision == ProxyResponseDecision.Websocket)
-				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Upgrade: websocket\r\n", snoopy);
+				sbResponseText.AppendLineRN("Upgrade: websocket");
 			else
 			{
 				if (p.keepAlive)
@@ -513,7 +522,7 @@ namespace BPUtil.SimpleHttp.Client
 					if (decision != ProxyResponseDecision.ContentLength && decision != ProxyResponseDecision.NoBody)
 					{
 						// No content-length was provided, and there is assumed to be a response body.  We must use "Transfer-Encoding: chunked" for our response.
-						_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "Transfer-Encoding: chunked\r\n", snoopy);
+						sbResponseText.AppendLineRN("Transfer-Encoding: chunked");
 						wrapOutputStreamChunked = true;
 					}
 				}
@@ -525,12 +534,13 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				if (doNotProxyHeaders.Contains(header.Key, true))
 					continue;
-				_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, header.Key + ": " + header.Value + "\r\n", snoopy);
+				sbResponseText.AppendLineRN(header.Key + ": " + header.Value);
 			}
 
 			// Write blank line to indicate the end of the response headers
-			_ProxyString(ProxyDataDirection.ResponseFromServer, outgoingStream, "\r\n", snoopy);
+			sbResponseText.AppendLineRN("");
 
+			await _ProxyStringAsync(ProxyDataDirection.ResponseFromServer, outgoingStream, sbResponseText.ToString(), snoopy, options.cancellationToken).ConfigureAwait(false);
 			// RESPONSE HEADERS ARE WRITTEN
 
 			if (wrapOutputStreamChunked)
@@ -542,23 +552,23 @@ namespace BPUtil.SimpleHttp.Client
 			// Handle the rest of the response based on the decision made earlier.
 			if (decision == ProxyResponseDecision.ContentLength)
 			{
-				await CopyNBytesAsync(proxyContentLength, ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy);
+				await CopyNBytesAsync(proxyContentLength, ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
 			}
 			else if (decision == ProxyResponseDecision.ReadChunked)
 			{
-				await CopyChunkedResponseAsync(ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, new ReadableChunkedTransferEncodingStream(proxyStream), outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
 			}
 			else if (decision == ProxyResponseDecision.UntilClosed)
 			{
-				await ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy);
+				await ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
 			}
 			else if (decision == ProxyResponseDecision.Websocket)
 			{
 				// Proxy response to client asynchronously (do not await)
-				_ = ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy);
+				_ = ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
 
 				// The current thread will handle additional incoming data from our client and proxy it to the remote server.
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy, options.cancellationToken).ConfigureAwait(false);
 			}
 			else if (decision == ProxyResponseDecision.NoBody)
 			{
@@ -566,7 +576,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 
 			if (outgoingStream is WritableChunkedTransferEncodingStream)
-				await (outgoingStream as WritableChunkedTransferEncodingStream).WriteFinalChunkAsync(new CancellationToken());
+				await (outgoingStream as WritableChunkedTransferEncodingStream).WriteFinalChunkAsync(options.cancellationToken).ConfigureAwait(false);
 
 			//////////////////////
 			// PHASE 6: CLEANUP //
@@ -621,17 +631,21 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				proxyTiming?.Start("DNS Lookup");
 				options.bet?.Start("DNS Lookup");
-				IPAddress ip = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost);
+				IPAddress ip = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost).ConfigureAwait(false);
 
 				proxyClient = new TcpClient(ip.AddressFamily); // Create TcpClient with IPv4 or IPv6 support as needed. We are unable to construct one that can use both.
 				proxyClient.NoDelay = true;
-
+				Stream pStream = null;
 				try
 				{
 					proxyTiming?.Start("Connect");
 					options.bet?.Start("Connect");
-					await proxyClient.ConnectAsync(ip, uri.Port);
-					proxyStream = proxyClient.GetStream();
+#if NET6_0
+					await proxyClient.ConnectAsync(ip, uri.Port, options.cancellationToken).ConfigureAwait(false);
+#else
+					await proxyClient.ConnectAsync(ip, uri.Port).ConfigureAwait(false);
+#endif
+					pStream = proxyClient.GetStream();
 				}
 				catch (Exception ex)
 				{
@@ -649,14 +663,17 @@ namespace BPUtil.SimpleHttp.Client
 						System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
 						if (options.acceptAnyCert)
 							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
-						proxyStream = new System.Net.Security.SslStream(proxyStream, false, certCallback, null);
-						((System.Net.Security.SslStream)proxyStream).AuthenticateAsClient(host, null, HttpProcessor.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
+						pStream = new System.Net.Security.SslStream(pStream, false, certCallback, null);
+						((System.Net.Security.SslStream)pStream).AuthenticateAsClient(host, null, HttpProcessor.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
 					}
 				}
 				catch (Exception ex)
 				{
+					proxyClient = null;
+					proxyStream = null;
 					throw new TLSNegotiationFailedException("TLS Negotiation failed with remote host: " + uri.DnsSafeHost + ":" + uri.Port, ex);
 				}
+				proxyStream = new UnreadableStream(pStream, false);
 			}
 			finally
 			{
@@ -814,6 +831,7 @@ namespace BPUtil.SimpleHttp.Client
 			/// </summary>
 			NoBody
 		}
+		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
 		private static void _ProxyString(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy)
 		{
 			if (snoopy != null)
@@ -821,6 +839,7 @@ namespace BPUtil.SimpleHttp.Client
 			byte[] buf = ByteUtil.Utf8NoBOM.GetBytes(str);
 			target.Write(buf, 0, buf.Length);
 		}
+		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
 		private static void _ProxyData(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy)
 		{
 			if (snoopy != null)
@@ -834,14 +853,14 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			target.Write(buf, 0, length);
 		}
-		private static async Task _ProxyStringAsync(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy)
+		private static async Task _ProxyStringAsync(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
 		{
 			if (snoopy != null)
 				snoopy.AddItem(new ProxyDataItem(Direction, str));
 			byte[] buf = ByteUtil.Utf8NoBOM.GetBytes(str);
-			await target.WriteAsync(buf, 0, buf.Length).ConfigureAwait(false);
+			await target.WriteAsync(buf, 0, buf.Length, cancellationToken).ConfigureAwait(false);
 		}
-		private static async Task _ProxyDataAsync(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy)
+		private static async Task _ProxyDataAsync(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
 		{
 			if (snoopy != null)
 			{
@@ -852,9 +871,10 @@ namespace BPUtil.SimpleHttp.Client
 					item = new ProxyDataItem(Direction, buf);
 				snoopy?.AddItem(item);
 			}
-			await target.WriteAsync(buf, 0, length).ConfigureAwait(false);
+			await target.WriteAsync(buf, 0, length, cancellationToken).ConfigureAwait(false);
 		}
 
+		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
 		private static void ProxyResponseToClient(Stream serverStream, Stream clientStream, ProxyDataBuffer snoopy)
 		{
 			try
@@ -869,11 +889,11 @@ namespace BPUtil.SimpleHttp.Client
 			}
 		}
 
-		private static async Task ProxyResponseToClientAsync(Stream serverStream, Stream clientStream, ProxyDataBuffer snoopy)
+		private static async Task ProxyResponseToClientAsync(Stream serverStream, Stream clientStream, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
 		{
 			try
 			{
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, serverStream, clientStream, snoopy).ConfigureAwait(false);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, serverStream, clientStream, snoopy, cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
@@ -882,6 +902,7 @@ namespace BPUtil.SimpleHttp.Client
 				SimpleHttpLogger.LogVerbose(ex);
 			}
 		}
+		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
 		private static void CopyStreamUntilClosed(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
 			byte[] buf = ByteUtil.BufferGet();
@@ -900,7 +921,7 @@ namespace BPUtil.SimpleHttp.Client
 				ByteUtil.BufferRecycle(buf);
 			}
 		}
-		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
+		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
 		{
 			byte[] buf = ByteUtil.BufferGet();
 			try
@@ -908,9 +929,9 @@ namespace BPUtil.SimpleHttp.Client
 				int read = 1;
 				while (read > 0)
 				{
-					read = await source.ReadAsync(buf, 0, buf.Length).ConfigureAwait(false);
+					read = await source.ReadAsync(buf, 0, buf.Length, cancellationToken).ConfigureAwait(false);
 					if (read > 0)
-						await _ProxyDataAsync(Direction, target, buf, read, snoopy).ConfigureAwait(false);
+						await _ProxyDataAsync(Direction, target, buf, read, snoopy, cancellationToken).ConfigureAwait(false);
 				}
 			}
 			finally
@@ -918,6 +939,7 @@ namespace BPUtil.SimpleHttp.Client
 				ByteUtil.BufferRecycle(buf);
 			}
 		}
+		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
 		private static long CopyNBytes(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
 			long totalProxied = 0;
@@ -939,7 +961,7 @@ namespace BPUtil.SimpleHttp.Client
 				ByteUtil.BufferRecycle(buf);
 			}
 		}
-		private static async Task<long> CopyNBytesAsync(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
+		private static async Task<long> CopyNBytesAsync(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
 		{
 			long totalProxied = 0;
 			byte[] buf = ByteUtil.BufferGet();
@@ -948,112 +970,17 @@ namespace BPUtil.SimpleHttp.Client
 				int read = 1;
 				while (read > 0 && totalProxied < N)
 				{
-					read = await source.ReadAsync(buf, 0, (int)Math.Min(N - totalProxied, buf.Length)).ConfigureAwait(false);
+					read = await source.ReadAsync(buf, 0, (int)Math.Min(N - totalProxied, buf.Length), cancellationToken).ConfigureAwait(false);
 					if (read > 0)
-						await _ProxyDataAsync(Direction, target, buf, read, snoopy);
+						await _ProxyDataAsync(Direction, target, buf, read, snoopy, cancellationToken).ConfigureAwait(false);
 					totalProxied += read;
 				}
 				return totalProxied;
 			}
-			finally
+			catch (Exception ex)
 			{
-				ByteUtil.BufferRecycle(buf);
-			}
-		}
-		private static void CopyChunkedResponse(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
-		{
-			byte[] buf = ByteUtil.BufferGet();
-			try
-			{
-				int bytesRead;
-				while (true)
-				{
-					// Read chunk size
-					string chunkSizeLine = HttpProcessor.streamReadLine(source);
-					if (chunkSizeLine == null)
-						break;
-
-					int chunkSize = int.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
-
-					// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
-					// Write chunk size
-					//byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
-					//_ProxyData(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy);
-
-					// Copy chunk data
-					int bytesRemaining = chunkSize;
-					while (bytesRemaining > 0)
-					{
-						bytesRead = source.Read(buf, 0, Math.Min(buf.Length, bytesRemaining));
-						if (bytesRead == 0)
-							throw new EndOfStreamException();
-
-						_ProxyData(ProxyDataDirection.ResponseFromServer, target, buf, bytesRead, snoopy);
-						bytesRemaining -= bytesRead;
-					}
-
-					// Read and write chunk trailer
-					string trailerLine = HttpProcessor.streamReadLine(source);
-					if (trailerLine != "")
-						throw new InvalidDataException();
-
-					// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
-					//byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
-					//_ProxyData(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy);
-
-					if (chunkSize == 0)
-						break;
-				}
-			}
-			finally
-			{
-				ByteUtil.BufferRecycle(buf);
-			}
-		}
-		private static async Task CopyChunkedResponseAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
-		{
-			byte[] buf = ByteUtil.BufferGet();
-			try
-			{
-				int bytesRead;
-				while (true)
-				{
-					// Read chunk size
-					string chunkSizeLine = HttpProcessor.streamReadLine(source);
-					if (chunkSizeLine == null)
-						break;
-
-					int chunkSize = int.Parse(chunkSizeLine.Split(';')[0], System.Globalization.NumberStyles.HexNumber);
-
-					// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
-					// Write chunk size
-					//byte[] chunkSizeBytes = Encoding.ASCII.GetBytes(chunkSizeLine + "\r\n");
-					//await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, chunkSizeBytes, chunkSizeBytes.Length, snoopy).ConfigureAwait(false);
-
-					// Copy chunk data
-					int bytesRemaining = chunkSize;
-					while (bytesRemaining > 0)
-					{
-						bytesRead = await source.ReadAsync(buf, 0, Math.Min(buf.Length, bytesRemaining)).ConfigureAwait(false);
-						if (bytesRead == 0)
-							throw new EndOfStreamException();
-
-						await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, buf, bytesRead, snoopy).ConfigureAwait(false);
-						bytesRemaining -= bytesRead;
-					}
-
-					// Read and write chunk trailer
-					string trailerLine = HttpProcessor.streamReadLine(source);
-					if (trailerLine != "")
-						throw new InvalidDataException();
-
-					// Writing of the chunk header/trailer is now handled by a ChunkedTransferEncodingStream.
-					//byte[] trailerBytes = Encoding.ASCII.GetBytes("\r\n");
-					//await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, target, trailerBytes, trailerBytes.Length, snoopy).ConfigureAwait(false);
-
-					if (chunkSize == 0)
-						break;
-				}
+				Logger.Debug(ex);
+				throw;
 			}
 			finally
 			{
@@ -1188,7 +1115,7 @@ namespace BPUtil.SimpleHttp.Client
 				}
 			}
 		}
-		
+
 		private bool disposedValue;
 		protected virtual void Dispose(bool disposing)
 		{

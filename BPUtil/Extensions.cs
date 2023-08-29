@@ -164,12 +164,19 @@ namespace BPUtil
 				FlattenMessages(ex.InnerException, sb, level + 1);
 		}
 		/// <summary>
+		/// If not null, BPUtil's <see cref="ToHierarchicalString"/> extension method will use this function instead of the default logic.
+		/// </summary>
+		public static Func<Exception, string> OverrideToHierarchicalString = null;
+		/// <summary>
 		/// Returns a string representation of the exception using an indented hierarchical format such that each inner exception is indented for easier readability.
 		/// </summary>
 		/// <param name="ex">Exception to print in indented hierarchical format.</param>
 		/// <returns></returns>
 		public static string ToHierarchicalString(this Exception ex)
 		{
+			if (OverrideToHierarchicalString != null)
+				try { return OverrideToHierarchicalString(ex); } catch { }
+
 			StringBuilder sb = new StringBuilder();
 			sb.Append(ex.GetType().ToString());
 			if (ex.Message != null)

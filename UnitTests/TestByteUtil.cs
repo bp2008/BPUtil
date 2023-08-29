@@ -106,8 +106,8 @@ namespace UnitTests
 			}
 
 			Assert.AreEqual(len, ms.Position, "Position was not " + len);
-			Assert.AreEqual(0, ByteUtil.ReadToEndAsync(ms).Result.Length, "MemoryStream length was not " + 0);
-			Assert.AreEqual(0, ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)).Result.Length, "Substream length was not " + 0);
+			Assert.AreEqual(0, ByteUtil.ReadToEndAsync(ms).GetAwaiter().GetResult().Length, "MemoryStream length was not " + 0);
+			Assert.AreEqual(0, ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)).GetAwaiter().GetResult().Length, "Substream length was not " + 0);
 
 			ms.Position = 0;
 			byte[] output1 = ByteUtil.ReadToEnd(ms);
@@ -134,11 +134,11 @@ namespace UnitTests
 			Assert.AreEqual(0, ByteUtil.ReadToEnd(ms.Substream(ms.Length)).Length);
 
 			ms.Position = 0;
-			byte[] output1 = ByteUtil.ReadToEndAsync(ms).Result;
+			byte[] output1 = ByteUtil.ReadToEndAsync(ms).GetAwaiter().GetResult();
 			CollectionAssert.AreEqual(input, output1);
 
 			ms.Position = 0;
-			byte[] output2 = ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)).Result;
+			byte[] output2 = ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)).GetAwaiter().GetResult();
 			CollectionAssert.AreEqual(input, output2);
 		}
 		[TestMethod]

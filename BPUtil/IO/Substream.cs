@@ -93,7 +93,7 @@ namespace BPUtil.IO
 				return 0;
 			cancellationToken.ThrowIfCancellationRequested();
 			int toRead = (int)Math.Min(count, _length - _position);
-			int read = await _stream.ReadAsync(buffer, offset, toRead, cancellationToken);
+			int read = await _stream.ReadAsync(buffer, offset, toRead, cancellationToken).ConfigureAwait(false);
 			_position += read;
 			return read;
 		}
@@ -148,9 +148,9 @@ namespace BPUtil.IO
 		/// <inheritdoc />
 		public override void Flush() => _stream.Flush();
 		/// <inheritdoc />
-		public override Task FlushAsync(CancellationToken cancellationToken)
+		public override async Task FlushAsync(CancellationToken cancellationToken)
 		{
-			return _stream.FlushAsync(cancellationToken);
+			await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 		}
 		/// <inheritdoc />
 		public override void SetLength(long value)

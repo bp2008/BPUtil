@@ -1,4 +1,5 @@
 ﻿using BPUtil.IO;
+using BPUtil.SimpleHttp.Client;
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -33,7 +34,7 @@ using System.Threading.Tasks;
 namespace BPUtil.SimpleHttp
 {
 	/// <summary>
-	/// Implements the HTTP 1.1 protocol for a given <see cref="TcpClient"/> and <see cref="HttpServer"/>.
+	/// Implements the HTTP 1.1 protocol for a given <see cref="TcpClient"/> and <see cref="HttpServerBase"/>.
 	/// </summary>
 	public class HttpProcessor : IProcessor
 	{
@@ -44,9 +45,9 @@ namespace BPUtil.SimpleHttp
 		public const SslProtocols Tls13 = (SslProtocols)12288;
 		private readonly AllowedConnectionTypes allowedConnectionTypes;
 		/// <summary>
-		/// Read timeout for "keep-alive" connections, in seconds.  Clients are given this value minus one in the "Keep-Alive: timeout=N" header.
+		/// Read timeout for read attempts, in seconds.  Clients are given this value minus one in the "Keep-Alive: timeout=N" header.
 		/// </summary>
-		private const int keepaliveTimeSeconds = 5;
+		private const int readTimeoutSeconds = 5;
 
 		#region Fields and Properties
 		/// <summary>
@@ -55,9 +56,9 @@ namespace BPUtil.SimpleHttp
 		public TcpClient tcpClient { get; private set; }
 
 		/// <summary>
-		/// The HttpServer instance that accepted this request.
+		/// The HttpServerBase instance that accepted this request.
 		/// </summary>
-		public HttpServer srv { get; private set; }
+		public HttpServerBase srv { get; private set; }
 
 		/// <summary>
 		/// This stream is for reading and writing binary data.
@@ -358,10 +359,10 @@ namespace BPUtil.SimpleHttp
 		/// Constructs an HttpProcessor to handle an HTTP or HTTPS request from a client.
 		/// </summary>
 		/// <param name="client">TcpClient which is managing the client connection.</param>
-		/// <param name="srv">The HttpServer instance which accepted the client connection.</param>
+		/// <param name="srv">The HttpServerBase instance which accepted the client connection.</param>
 		/// <param name="certificateSelector"> An object responsible for delivering TLS server certificates upon demand. May be null only if [allowedConnectionTypes] does not include https.</param>
 		/// <param name="allowedConnectionTypes">Enumeration flags indicating which protocols are allowed to be used.</param>
-		public HttpProcessor(TcpClient client, HttpServer srv, ICertificateSelector certificateSelector, AllowedConnectionTypes allowedConnectionTypes)
+		public HttpProcessor(TcpClient client, HttpServerBase srv, ICertificateSelector certificateSelector, AllowedConnectionTypes allowedConnectionTypes)
 		{
 			if (allowedConnectionTypes.HasFlag(AllowedConnectionTypes.https) && certificateSelector == null)
 				throw new ArgumentException("HttpProcessor was instructed to accept https requests but was not provided a certificate selector.", "certificateSelector");
@@ -372,7 +373,7 @@ namespace BPUtil.SimpleHttp
 			this.allowedConnectionTypes = allowedConnectionTypes;
 		}
 		/// <summary>
-		/// Reads a line of text from a binary input stream.  The text ends when '\n' is encountered. '\r' characters are ignored, not included in the returned string.
+		/// Reads a line of text from a binary input stream.  The text ends when '\n' is encountered or the end of the stream is encountered.  If no data is available on the stream, returns null. '\r' characters are counted against <paramref name="maxLength"/> but not included in the returned string.
 		/// </summary>
 		/// <param name="inputStream">Input stream to read a line of text from.</param>
 		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
@@ -380,6 +381,7 @@ namespace BPUtil.SimpleHttp
 		/// <exception cref="HttpProcessorException">Throws if the line length reaches the limit before the line ends.</exception>
 		public static string streamReadLine(Stream inputStream, int maxLength = 32768)
 		{
+			int charsConsumed = 0;
 			int next_char;
 			bool endOfStream = false;
 			bool didRead = false;
@@ -393,27 +395,87 @@ namespace BPUtil.SimpleHttp
 					break;
 				};
 				didRead = true;
-				if (next_char == '\n') { break; }
-				if (next_char == '\r') { continue; }
-				if (data.Length >= maxLength)
+				if (next_char == '\n')
+					break;
+				charsConsumed++;
+				if (charsConsumed > maxLength)
 					throw new HttpProcessorException("413 Entity Too Large");
-				data.Append(Convert.ToChar(next_char));
+				if (next_char != '\r')
+					data.Append(Convert.ToChar(next_char));
 			}
 			if (endOfStream && !didRead)
 				return null;
 			return data.ToString();
 		}
+		/// <summary>
+		/// Reads a line of text from a binary input stream.  The text ends when '\n' is encountered or the end of the stream is encountered.  If no data is available on the stream, returns null. '\r' characters are counted against <paramref name="maxLength"/> but not included in the returned string.
+		/// </summary>
+		/// <param name="stream">Input stream to read a line of text from.</param>
+		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <returns></returns>
+		/// <exception cref="HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
+		public static async Task<string> streamReadLineAsync(UnreadableStream stream, int maxLength = 32768, CancellationToken cancellationToken = default)
+		{
+			StringBuilder sb = new StringBuilder();
+			byte[] buffer = ByteUtil.BufferGet();
+			try
+			{
+				int charsConsumed = 0;
+				int read = 1;
+				bool didRead = false;
+				while (read > 0)
+				{
+					using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(readTimeoutSeconds * 1000))
+					using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
+						read = await stream.ReadAsync(buffer, 0, buffer.Length, cts.Token).ConfigureAwait(false);
+					if (read > 0)
+					{
+						didRead = true;
+						for (int i = 0; i < read; i++)
+						{
+							if (buffer[i] == '\n')
+							{
+								i++;
+								stream.Unread(ByteUtil.SubArray(buffer, i, read - i));
+								return sb.ToString();
+							}
+							charsConsumed++;
+							if (charsConsumed > maxLength)
+								throw new HttpProcessorException("413 Entity Too Large");
+							if (buffer[i] != '\r')
+								sb.Append(Convert.ToChar(buffer[i]));
+						}
+					}
+				}
+				if (read == 0 && !didRead)
+					return null; // end of stream
+				return sb.ToString();
+			}
+			finally
+			{
+				ByteUtil.BufferRecycle(buffer);
+			}
+		}
 
 		/// <summary>
-		/// Processes the request.
+		/// Processes the request synchronously.
 		/// </summary>
 		public void Process()
 		{
-			srv.Notify_ConnectionOpen();
+			ProcessAsync().Wait();
+		}
+		/// <summary>
+		/// Processes the request asynchronously.
+		/// </summary>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		public async Task ProcessAsync(CancellationToken cancellationToken = default)
+		{
+			srv.Notify_ConnectionOpen(this);
 			try
 			{
-				tcpClient.ReceiveTimeout = 5000;
-				tcpClient.SendTimeout = 5000;
+				tcpClient.ReceiveTimeout = 5000; // Affects synchronous I/O only!
+				tcpClient.SendTimeout = 5000; // Affects synchronous I/O only!
 				tcpStream = tcpClient.GetStream();
 				if (allowedConnectionTypes.HasFlag(AllowedConnectionTypes.https))
 				{
@@ -424,17 +486,21 @@ namespace BPUtil.SimpleHttp
 						//   populate the hostName property of this HttpProcessor.
 						// Note it is possible that the client is not using TLS, in which case no certificate will be selected and the
 						//   request will be processed as plain HTTP.
-						if (TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, out string serverName, out bool isTlsAlpn01Validation))
+						TLS.TlsPeekData tlsData;
+						using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(4000))
+						using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
+							tlsData = await TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, cts.Token).ConfigureAwait(false);
+						if (tlsData != null)
 						{
 							this.secure_https = true;
-							hostName = serverName;
-							if (isTlsAlpn01Validation)
+							hostName = tlsData.ServerName;
+							if (tlsData.IsTlsAlpn01Validation)
 							{
 #if NET6_0
-								cert = certificateSelector.GetAcmeTls1Certificate(this, serverName).Result;
+								cert = await certificateSelector.GetAcmeTls1Certificate(this, tlsData.ServerName).ConfigureAwait(false);
 								if (cert == null)
 								{
-									SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (serverName == null ? "null" : ("\"" + serverName + "\"")) + ".");
+									SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ".");
 									return;
 								}
 								SslServerAuthenticationOptions sslOptions = new SslServerAuthenticationOptions();
@@ -450,10 +516,10 @@ namespace BPUtil.SimpleHttp
 #endif
 							}
 							else
-								cert = certificateSelector.GetCertificate(this, serverName).Result;
+								cert = await certificateSelector.GetCertificate(this, tlsData.ServerName).ConfigureAwait(false);
 							if (cert == null)
 							{
-								SimpleHttpLogger.LogVerbose("TLS negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (serverName == null ? "null" : ("\"" + serverName + "\"")) + ".");
+								SimpleHttpLogger.LogVerbose("TLS negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ".");
 								return;
 							}
 							TlsNegotiate(cert);
@@ -469,6 +535,7 @@ namespace BPUtil.SimpleHttp
 							cert = null;
 						}
 					}
+					catch (OperationCanceledException) { return; }
 					catch (ThreadAbortException) { throw; }
 					catch (SocketException) { throw; }
 					catch (Exception ex)
@@ -492,6 +559,7 @@ namespace BPUtil.SimpleHttp
 					}
 				}
 				this.base_uri_this_server = new Uri("http" + (this.secure_https ? "s" : "") + "://" + tcpClient.Client.LocalEndPoint.ToString(), UriKind.Absolute);
+				tcpStream = new UnreadableStream(tcpStream, false);
 				Stream originalTcpStream = tcpStream;
 				do
 				{
@@ -527,11 +595,11 @@ namespace BPUtil.SimpleHttp
 					outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
 					try
 					{
-						tcpClient.ReceiveTimeout = keepAliveRequestCount <= 1 ? 5000 : keepaliveTimeSeconds * 1000;
-						tcpClient.SendTimeout = 5000;
-						if (!parseRequest())
+						tcpClient.ReceiveTimeout = readTimeoutSeconds * 1000; // Affects synchronous I/O only!
+						tcpClient.SendTimeout = 5000; // Affects synchronous I/O only!
+						if (!await parseRequest((UnreadableStream)tcpStream, cancellationToken).ConfigureAwait(false))
 							return; // End of stream was encountered. Very common with "Connection: keep-alive" when another request does not arrive.
-						readHeaders(tcpStream, httpHeaders);
+						await readHeadersAsync((UnreadableStream)tcpStream, httpHeaders, cancellationToken).ConfigureAwait(false);
 						if (string.IsNullOrWhiteSpace(hostName))
 						{
 							hostName = GetHeaderValue("host");
@@ -600,13 +668,14 @@ namespace BPUtil.SimpleHttp
 						{
 							if (shouldLogRequestsToFile())
 								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, http_method, request_url.OriginalString, hostName);
-							handleRequest();
+							await handleRequest(cancellationToken).ConfigureAwait(false);
 						}
 						else
 						{
-							this.writeFailure("501 Not Implemented");
+							await this.writeFailureAsync("501 Not Implemented", cancellationToken: cancellationToken).ConfigureAwait(false);
 						}
 					}
+					catch (OperationCanceledException) { return; }
 					catch (ThreadAbortException) { throw; }
 					catch (Exception e)
 					{
@@ -615,7 +684,7 @@ namespace BPUtil.SimpleHttp
 							//if (keepAliveRequestCount <= 1) // Do not log if this is a kept-alive connection.
 							//	SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
 							//if (!responseWritten)
-							//	this.writeFailure("500 Internal Server Error", "An error occurred while processing this request."); // This response should probably fail because the client has disconnected.
+							//	await this.writeFailureAsync("500 Internal Server Error", "An error occurred while processing this request.", cancellationToken: cancellationToken).ConfigureAwait(false); // This response should probably fail because the client has disconnected.
 							return;
 						}
 						if (shouldLogRequestsToFile())
@@ -624,13 +693,13 @@ namespace BPUtil.SimpleHttp
 						{
 							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
 							if (!responseWritten)
-								this.writeFailure(e.Message);
+								await this.writeFailureAsync(e.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
 						}
 						else if (e.GetExceptionOfType<HttpProtocolException>() != null)
 						{
 							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
 							if (!responseWritten)
-								this.writeFailure("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
+								await this.writeFailureAsync("400 Bad Request", "The request cannot be fulfilled due to bad syntax.", cancellationToken: cancellationToken).ConfigureAwait(false);
 							return;
 						}
 						else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
@@ -660,36 +729,48 @@ namespace BPUtil.SimpleHttp
 						{
 							SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
 							if (!responseWritten)
-								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request.");
+								await this.writeFailureAsync("500 Internal Server Error", "An error occurred while processing this request.", cancellationToken: cancellationToken).ConfigureAwait(false);
 							return; // Close the connection.  The tcpStream still has an unknown amount of unread data before the next request.
 						}
 						else
 						{
 							SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
 							if (!responseWritten)
-								this.writeFailure("500 Internal Server Error", "An error occurred while processing this request.");
+								await this.writeFailureAsync("500 Internal Server Error", "An error occurred while processing this request.", cancellationToken: cancellationToken).ConfigureAwait(false);
 						}
 					}
 					finally
 					{
 						if (!responseWritten)
-							this.writeFailure();
+							await this.writeFailureAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
 					}
-					outputStream.Flush();
+					await outputStream.FlushAsync().ConfigureAwait(false);
 					if (tcpStream is WritableChunkedTransferEncodingStream)
 						(tcpStream as WritableChunkedTransferEncodingStream).Close();
-					tcpStream.Flush();
+					await tcpStream.FlushAsync().ConfigureAwait(false);
 					// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
 					try
 					{
-						outputStream.Dispose(); // Safe to dispose StreamWriter because it was created with the leaveOpen option.
+						// Safe to dispose StreamWriter because it was created with the leaveOpen option.
+#if NET6_0
+						await outputStream.DisposeAsync().ConfigureAwait(false);
+#else
+						outputStream.Dispose();
+#endif
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
 					try
 					{
+						// Safe to dispose GZipStream because it was created with the leaveOpen option.
 						if (tcpStream is GZipStream)
-							tcpStream.Dispose(); // Safe to dispose GZipStream because it was created with the leaveOpen option.
+						{
+#if NET6_0
+							await tcpStream.DisposeAsync().ConfigureAwait(false);
+#else
+							tcpStream.Dispose();
+#endif
+						}
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
@@ -699,6 +780,7 @@ namespace BPUtil.SimpleHttp
 				}
 				while (keepAlive && CheckIfStillConnected());
 			}
+			catch (OperationCanceledException) { return; }
 			catch (ThreadAbortException) { throw; }
 			catch (Exception ex)
 			{
@@ -707,10 +789,25 @@ namespace BPUtil.SimpleHttp
 			}
 			finally
 			{
-				srv.Notify_ConnectionClosed();
+				srv.Notify_ConnectionClosed(this);
 				try
 				{
-					tcpClient?.Close();
+					if (tcpStream != null)
+					{
+						// Several error cases above may leave the tcpStream object intact and undisposed.
+#if NET6_0
+						await tcpStream.DisposeAsync().ConfigureAwait(false);
+#else
+						tcpStream.Dispose();
+#endif
+						tcpStream = null;
+					}
+				}
+				catch (ThreadAbortException) { throw; }
+				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+				try
+				{
+					tcpClient.Close();
 				}
 				catch (ThreadAbortException) { throw; }
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
@@ -736,7 +833,7 @@ namespace BPUtil.SimpleHttp
 			sslServerOptions.ServerCertificateContext = tlsCertContexts.GetOrAdd(cert, CreateSslStreamCertificateContextFromCert);
 			sslServerOptions.EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
 			sslServerOptions.AllowRenegotiation = false; // Client-side renegotiation is viewed as insecure by the industry and is not available in TLS 1.3.
-			if (HttpServer.IsTlsCipherSuitesPolicySupported())
+			if (HttpServerBase.IsTlsCipherSuitesPolicySupported())
 			{
 				IEnumerable<TlsCipherSuite> suites = srv.GetAllowedCipherSuites(this);
 				if (suites != null)
@@ -810,10 +907,12 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Parses the first line of the http request to get the request method, url, and protocol version. Returns true if successful or false if we encountered the end of the stream.  May throw various exceptions.
 		/// </summary>
+		/// <param name="stream">Stream to read data from.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <exception cref="HttpProtocolException">Thrown if an HTTP protocol violation occurs.</exception>
-		private bool parseRequest()
+		private async Task<bool> parseRequest(UnreadableStream stream, CancellationToken cancellationToken = default)
 		{
-			string request = streamReadLine(tcpStream);
+			string request = await streamReadLineAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
 			if (request == null)
 				return false;
 			string[] tokens = request.Split(' ');
@@ -842,12 +941,13 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Parses the http headers
 		/// </summary>
-		/// <param name="tcpStream">Input stream.</param>
+		/// <param name="stream">Input stream.</param>
 		/// <param name="httpHeaders">Http header collection where parsed headers should be stored.</param>
-		internal static void readHeaders(Stream tcpStream, HttpHeaderCollection httpHeaders)
+		/// <param name="cancellationToken">Cancellation Token</param>
+		internal static async Task readHeadersAsync(UnreadableStream stream, HttpHeaderCollection httpHeaders, CancellationToken cancellationToken = default)
 		{
 			string line;
-			while ((line = streamReadLine(tcpStream)) != "")
+			while ((line = await streamReadLineAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false)) != "")
 			{
 				if (line == null)
 					throw new EndOfStreamException();
@@ -866,7 +966,7 @@ namespace BPUtil.SimpleHttp
 
 		internal static async Task<string> streamReadLineAsync(StreamReader reader, int maxLength = 32768)
 		{
-			string str = await reader.ReadLineAsync();
+			string str = await reader.ReadLineAsync().ConfigureAwait(false);
 			if (str.Length >= maxLength)
 				throw new HttpProcessorException("413 Entity Too Large");
 			return str; // Null if end of stream.
@@ -877,7 +977,8 @@ namespace BPUtil.SimpleHttp
 		/// <para>If the request has a body, this method provides it as <see cref="RequestBodyStream"/> which can be read only one time with no seeking.</para>
 		/// <para>Requests with a body must either specify a `Content-Length` or use `Transfer-Encoding: chunked`.</para>
 		/// </summary>
-		private void handleRequest(bool requestBodyRequired = false)
+		/// <param name="cancellationToken">Cancellation Token</param>
+		private async Task handleRequest(CancellationToken cancellationToken)
 		{
 			RequestBodyStream = null;
 			try
@@ -895,7 +996,7 @@ namespace BPUtil.SimpleHttp
 							if (content_len < 0)
 							{
 								SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " - Content-Length (" + content_len + ") is not valid.");
-								this.writeFailure("400 Bad Request", "Content-Length was not valid.");
+								await this.writeFailureAsync("400 Bad Request", "Content-Length was not valid.", cancellationToken: cancellationToken).ConfigureAwait(false);
 								return;
 							}
 							ContentLength = content_len;
@@ -923,7 +1024,7 @@ namespace BPUtil.SimpleHttp
 					{
 						if (this.http_method == "POST" || this.http_method == "PUT" || this.http_method == "PATCH")
 						{
-							this.writeFailure("411 Length Required", "This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
+							await this.writeFailureAsync("411 Length Required", "This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".", cancellationToken: cancellationToken).ConfigureAwait(false);
 							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "The request did not specify the length of its content via a method understood by this server.  This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
 							return;
 						}
@@ -933,7 +1034,7 @@ namespace BPUtil.SimpleHttp
 					{
 						if (RequestBodyStream == null)
 						{
-							this.writeFailure("411 Length Required", "This server requires requests with \"Content-Type: application/x-www-form-urlencoded\" to include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
+							await this.writeFailureAsync("411 Length Required", "This server requires requests with \"Content-Type: application/x-www-form-urlencoded\" to include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".", cancellationToken: cancellationToken).ConfigureAwait(false);
 							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "The request specified \"Content-Type: application/x-www-form-urlencoded\" but this server was unable to read the request body.");
 							return;
 						}
@@ -943,14 +1044,15 @@ namespace BPUtil.SimpleHttp
 							lengthLimitExceeded = ContentLength > MAX_FORM_SIZE;
 						if (!lengthLimitExceeded)
 						{
-							if (ByteUtil.ReadToEndWithMaxLength(RequestBodyStream, MAX_FORM_SIZE, out byte[] data))
+							ByteUtil.AsyncReadResult readResult = await ByteUtil.ReadToEndWithMaxLengthAsync(RequestBodyStream, MAX_FORM_SIZE, cancellationToken).ConfigureAwait(false);
+							if (readResult.EndOfStream)
 							{
-								string formDataRaw = ByteUtil.Utf8NoBOM.GetString(data);
+								string formDataRaw = ByteUtil.Utf8NoBOM.GetString(readResult.Data);
 
 								RawPostParams = ParseQueryStringArguments(formDataRaw, false, true, convertPlusToSpace: true);
 								PostParams = ParseQueryStringArguments(formDataRaw, false, convertPlusToSpace: true);
 
-								MemoryStream ms = new MemoryStream(data);
+								MemoryStream ms = new MemoryStream(readResult.Data);
 								RequestBodyStream = ms;
 							}
 							else
@@ -959,18 +1061,29 @@ namespace BPUtil.SimpleHttp
 						if (lengthLimitExceeded)
 						{
 							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE + " bytes.");
-							this.writeFailure("413 Request Entity Too Large", "Request Too Large");
+							await this.writeFailureAsync("413 Request Entity Too Large", "Request Too Large", cancellationToken: cancellationToken).ConfigureAwait(false);
 							return;
 						}
 					}
 				}
 
-				if (this.http_method == "GET")
-					srv.handleGETRequest(this);
-				else if (this.http_method == "POST")
-					srv.handlePOSTRequest(this);
+				if (srv is HttpServerAsync)
+				{
+					HttpServerAsync s = srv as HttpServerAsync;
+					await s.handleRequest(this, http_method, cancellationToken).ConfigureAwait(false);
+				}
+				else if (srv is HttpServer)
+				{
+					HttpServer s = srv as HttpServer;
+					if (this.http_method == "GET")
+						s.handleGETRequest(this);
+					else if (this.http_method == "POST")
+						s.handlePOSTRequest(this);
+					else
+						s.handleOtherRequest(this, http_method);
+				}
 				else
-					srv.handleOtherRequest(this, http_method);
+					throw new Exception("Unrecognized type of Http Server: " + srv.GetType().Name);
 			}
 			finally
 			{
@@ -980,18 +1093,26 @@ namespace BPUtil.SimpleHttp
 						|| (RequestBodyStream is Substream && (RequestBodyStream as Substream).EndOfStream)
 						|| (RequestBodyStream is ReadableChunkedTransferEncodingStream && (RequestBodyStream as ReadableChunkedTransferEncodingStream).EndOfStream))
 					{
+#if NET6_0
+						await RequestBodyStream.DisposeAsync().ConfigureAwait(false);
+#else
 						RequestBodyStream.Dispose();
+#endif
 						RequestBodyStream = null;
 					}
 					else
 					{
 						int bytesToRead = 125000;
-						bool endOfStream = ByteUtil.DiscardUntilEndOfStreamWithMaxLength(RequestBodyStream, bytesToRead, out long bytesDiscarded);
+						ByteUtil.AsyncDiscardResult discardResult = await ByteUtil.DiscardUntilEndOfStreamWithMaxLengthAsync(RequestBodyStream, bytesToRead, cancellationToken).ConfigureAwait(false);
+#if NET6_0
+						await RequestBodyStream.DisposeAsync().ConfigureAwait(false);
+#else
 						RequestBodyStream.Dispose();
+#endif
 						RequestBodyStream = null;
-						if (endOfStream)
+						if (discardResult.EndOfStream)
 						{
-							if (bytesDiscarded > 0)
+							if (discardResult.BytesDiscarded > 0)
 								SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Request body was not fully read by the server.  The remainder of the stream was discarded.");
 							// else // Nothing was discarded, meaning the server did read the entire request body.
 						}
@@ -1030,7 +1151,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Called automatically by writeSuccess method; flushes the existing output streams and wraps them in a gzipstream if gzip compression is to be used.
 		/// </summary>
-		private void EnableCompressionIfSet()
+		private async Task EnableCompressionIfSet()
 		{
 			if (!responseWritten)
 				return;
@@ -1040,8 +1161,8 @@ namespace BPUtil.SimpleHttp
 			{
 				if (tcpStream is GZipStream)
 					return;
-				outputStream.Flush();
-				tcpStream.Flush();
+				await outputStream.FlushAsync().ConfigureAwait(false);
+				await tcpStream.FlushAsync().ConfigureAwait(false);
 				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, true);
 				outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
 			}
@@ -1049,7 +1170,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Called automatically by writeSuccess method; flushes the existing output streams and wraps them in a ChunkedTransferEncodingStream which ensures that all future data written to tcpStream or outputStream will be have appropriate chunk headers and footers written.
 		/// </summary>
-		private void EnableTransferEncodingChunked()
+		private async Task EnableTransferEncodingChunked()
 		{
 			if (!responseWritten)
 				return;
@@ -1057,8 +1178,8 @@ namespace BPUtil.SimpleHttp
 				return;
 			if (this.http_method == "HEAD")
 				return; // No response should be written for "HEAD", therefore we should not wrap the output streams.
-			outputStream.Flush();
-			tcpStream.Flush();
+			await outputStream.FlushAsync().ConfigureAwait(false);
+			await tcpStream.FlushAsync().ConfigureAwait(false);
 			tcpStream = new WritableChunkedTransferEncodingStream(tcpStream);
 			outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
 		}
@@ -1081,7 +1202,7 @@ namespace BPUtil.SimpleHttp
 		}
 		#endregion
 		/// <summary>
-		/// Writes the response headers for a successful response.  Call this one time before writing your response, after you have determined that the request is valid.
+		/// Synchronously writes the response headers for a successful response.  Call this one time before writing your response, after you have determined that the request is valid.
 		/// </summary>
 		/// <param name="contentType">The MIME type of your response. If null or empty, it will not be written (unless provided in <paramref name="additionalHeaders"/>).</param>
 		/// <param name="contentLength"><para>
@@ -1093,6 +1214,22 @@ namespace BPUtil.SimpleHttp
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		public virtual void writeSuccess(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
 		{
+			writeSuccessAsync(contentType, contentLength, responseCode, additionalHeaders).Wait();
+		}
+		/// <summary>
+		/// Asynchronously writes the response headers for a successful response.  Call this one time before writing your response, after you have determined that the request is valid.
+		/// </summary>
+		/// <param name="contentType">The MIME type of your response. If null or empty, it will not be written (unless provided in <paramref name="additionalHeaders"/>).</param>
+		/// <param name="contentLength"><para>
+		/// (OPTIONAL) The length of your response, in bytes, if you know it. If you don't know it, provide -1, and if keep-alive is being used, then "Transfer-Encoding: chunked" will be used automatically on the output stream and you don't need to know anything about it.
+		/// </para>
+		/// <para>Some response codes do not allow a response body.  If a positive Content-Length is given with a response code that does not allow a response body, an exception will be thrown.  In such a case, it is optimal to use a negative value for Content-Length so the header will be omitted and no exception will be thrown.
+		/// </para></param>
+		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
+		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
+		/// <param name="cancellationToken">Cancellation Token.</param>
+		public virtual async Task writeSuccessAsync(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null, CancellationToken cancellationToken = default)
+		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
 
@@ -1100,7 +1237,7 @@ namespace BPUtil.SimpleHttp
 			if (responseStatusInt == null)
 				throw new ArgumentException("Response code was not provided correctly.", "responseCode");
 
-			bool allowResponseBody = HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusInt.Value);
+			bool allowResponseBody = HttpServerBase.HttpStatusCodeCanHaveResponseBody(responseStatusInt.Value);
 			if (!allowResponseBody)
 			{
 				if (contentLength > 0)
@@ -1108,60 +1245,74 @@ namespace BPUtil.SimpleHttp
 			}
 
 			responseWritten = true;
+			StringBuilder sb = new StringBuilder();
 			HashSet<string> reservedHeaderKeys = new HashSet<string>(new string[] { "Connection", "Keep-Alive" });
 
-			outputStream.WriteLineRN("HTTP/1.1 " + responseCode);
+			sb.AppendLineRN("HTTP/1.1 " + responseCode);
 			if (!string.IsNullOrEmpty(contentType))
-				WriteReservedHeader(reservedHeaderKeys, "Content-Type", contentType);
+				WriteReservedHeader(sb, reservedHeaderKeys, "Content-Type", contentType);
 			if (contentLength > -1)
-				WriteReservedHeader(reservedHeaderKeys, "Content-Length", contentLength.ToString());
+				WriteReservedHeader(sb, reservedHeaderKeys, "Content-Length", contentLength.ToString());
 			bool chunkedTransferEncoding = allowResponseBody && this.keepAliveRequested && contentLength < 0;
 			if (chunkedTransferEncoding)
-				WriteReservedHeader(reservedHeaderKeys, "Transfer-Encoding", "chunked");
+				WriteReservedHeader(sb, reservedHeaderKeys, "Transfer-Encoding", "chunked");
 			if (compressionType == CompressionType.GZip)
-				WriteReservedHeader(reservedHeaderKeys, "Content-Encoding", "gzip");
+				WriteReservedHeader(sb, reservedHeaderKeys, "Content-Encoding", "gzip");
 			string cookieStr = responseCookies.ToString();
 			if (!string.IsNullOrEmpty(cookieStr))
 			{
 				reservedHeaderKeys.Add("Set-Cookie");
-				outputStream.WriteLineRN(cookieStr);
+				sb.AppendLineRN(cookieStr);
 			}
 			if (additionalHeaders != null)
 				foreach (HttpHeader header in additionalHeaders)
 				{
 					if (reservedHeaderKeys.Contains(header.Key, true))
 						throw new ApplicationException("writeSuccess() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
-					outputStream.WriteLineRN(header.Key + ": " + header.Value);
+					sb.AppendLineRN(header.Key + ": " + header.Value);
 				}
 
 			this.keepAlive = this.keepAliveRequested && !this.ServerIsUnderHighLoad;
 			if (this.keepAlive)
 			{
-				outputStream.WriteLineRN("Connection: keep-alive");
-				outputStream.WriteLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
+				sb.AppendLineRN("Connection: keep-alive");
+				sb.AppendLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
 			}
 			else
-				outputStream.WriteLineRN("Connection: close");
-			outputStream.WriteLineRN("");
+				sb.AppendLineRN("Connection: close");
+			sb.AppendLineRN("");
+
+			await outputStream.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
 
 			tcpClient.NoDelay = true;
-			EnableCompressionIfSet();
+			await EnableCompressionIfSet().ConfigureAwait(false);
 			if (chunkedTransferEncoding)
-				EnableTransferEncodingChunked();
+				await EnableTransferEncodingChunked().ConfigureAwait(false);
 		}
-		private void WriteReservedHeader(HashSet<string> reservedHeaderKeys, string key, string value)
+		private void WriteReservedHeader(StringBuilder sb, HashSet<string> reservedHeaderKeys, string key, string value)
 		{
 			reservedHeaderKeys.Add(key);
-			outputStream.WriteLineRN(key + ": " + value);
+			sb.AppendLineRN(key + ": " + value);
 		}
 
 		/// <summary>
-		/// Writes a failure response header.  Call this one time to return an error response.
+		/// Synchronously writes a failure response header.  Call this one time to return an error response.
 		/// </summary>
 		/// <param name="code">(OPTIONAL) The http error code (including explanation entity).  For example: "404 Not Found" where 404 is the error code and "Not Found" is the explanation.</param>
 		/// <param name="description">(OPTIONAL) A description string to send after the headers as the response.  This is typically shown to the remote user in his browser.  If null, the code string is sent here.  If "", no response body is sent by this function, and you may or may not want to write your own.</param>
 		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
 		public virtual void writeFailure(string code = "404 Not Found", string description = null, HttpHeaderCollection additionalHeaders = null)
+		{
+			writeFailureAsync(code, description, additionalHeaders).Wait();
+		}
+		/// <summary>
+		/// Asynchronously writes a failure response header.  Call this one time to return an error response.
+		/// </summary>
+		/// <param name="code">(OPTIONAL) The http error code (including explanation entity).  For example: "404 Not Found" where 404 is the error code and "Not Found" is the explanation.</param>
+		/// <param name="description">(OPTIONAL) A description string to send after the headers as the response.  This is typically shown to the remote user in his browser.  If null, the code string is sent here.  If "", no response body is sent by this function, and you may or may not want to write your own.</param>
+		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
+		/// <param name="cancellationToken">Cancellation Token.</param>
+		public virtual async Task writeFailureAsync(string code = "404 Not Found", string description = null, HttpHeaderCollection additionalHeaders = null, CancellationToken cancellationToken = default)
 		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
@@ -1173,48 +1324,62 @@ namespace BPUtil.SimpleHttp
 			int contentLength = Utf8NoBOM.GetByteCount(description);
 
 			responseWritten = true;
+			StringBuilder sb = new StringBuilder();
 			HashSet<string> reservedHeaderKeys = new HashSet<string>();
 			reservedHeaderKeys.Add("Connection");
-			outputStream.WriteLineRN("HTTP/1.1 " + code);
-			WriteReservedHeader(reservedHeaderKeys, "Content-Type", "text/plain; charset=utf-8");
-			WriteReservedHeader(reservedHeaderKeys, "Content-Length", contentLength.ToString());
+			sb.AppendLineRN("HTTP/1.1 " + code);
+			WriteReservedHeader(sb, reservedHeaderKeys, "Content-Type", "text/plain; charset=utf-8");
+			WriteReservedHeader(sb, reservedHeaderKeys, "Content-Length", contentLength.ToString());
 			if (additionalHeaders != null)
 				foreach (HttpHeader header in additionalHeaders)
 				{
 					if (reservedHeaderKeys.Contains(header.Key, true))
 						throw new ApplicationException("writeFailure() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
-					outputStream.WriteLineRN(header.Key + ": " + header.Value);
+					sb.AppendLineRN(header.Key + ": " + header.Value);
 				}
 			this.keepAlive = this.keepAliveRequested && !this.ServerIsUnderHighLoad;
 			if (this.keepAlive)
 			{
-				outputStream.WriteLineRN("Connection: keep-alive");
-				outputStream.WriteLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
+				sb.AppendLineRN("Connection: keep-alive");
+				sb.AppendLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
 			}
 			else
-				outputStream.WriteLineRN("Connection: close");
-			outputStream.WriteLineRN("");
+				sb.AppendLineRN("Connection: close");
+			sb.AppendLineRN("");
 			if (description != "")
-				outputStream.Write(description);
+				sb.Append(description);
+			await outputStream.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
 		}
 
 		/// <summary>
-		/// Writes a redirect header instructing the remote user's browser to load the URL you specify.  Call this one time and do not write any other data to the response stream.
+		/// Synchronously writes a redirect header instructing the remote user's browser to load the URL you specify.  Call this one time and do not write any other data to the response stream.
 		/// </summary>
 		/// <param name="redirectToUrl">URL to redirect to.</param>
 		public virtual void writeRedirect(string redirectToUrl)
 		{
-			if (responseWritten)
-				throw new Exception("A response has already been written to this stream.");
-			responseWritten = true;
-			outputStream.WriteLineRN("HTTP/1.1 302 Found");
-			outputStream.WriteLineRN("Location: " + redirectToUrl);
-			outputStream.WriteLineRN("Connection: close");
-			outputStream.WriteLineRN("");
+			writeRedirectAsync(redirectToUrl).Wait();
 		}
 
 		/// <summary>
-		/// Writes a static file response with built-in caching support.
+		/// Asynchronously writes a redirect header instructing the remote user's browser to load the URL you specify.  Call this one time and do not write any other data to the response stream.
+		/// </summary>
+		/// <param name="redirectToUrl">URL to redirect to.</param>
+		/// <param name="cancellationToken">Cancellation Token.</param>
+		public virtual async Task writeRedirectAsync(string redirectToUrl, CancellationToken cancellationToken = default)
+		{
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
+			responseWritten = true;
+			StringBuilder sb = new StringBuilder();
+			sb.AppendLineRN("HTTP/1.1 302 Found");
+			sb.AppendLineRN("Location: " + redirectToUrl);
+			sb.AppendLineRN("Connection: close");
+			sb.AppendLineRN("");
+			await outputStream.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
+		}
+
+		/// <summary>
+		/// Synchronously writes a static file response with built-in caching support.
 		/// </summary>
 		/// <param name="filePath">Path to the file on disk.</param>
 		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
@@ -1227,19 +1392,44 @@ namespace BPUtil.SimpleHttp
 			writeStaticFile(new FileInfo(filePath), contentTypeOverride, canCache);
 		}
 		/// <summary>
-		/// Writes a static file response with built-in caching support.
+		/// Asynchronously writes a static file response with built-in caching support.
+		/// </summary>
+		/// <param name="filePath">Path to the file on disk.</param>
+		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
+		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
+		/// <param name="cancellationToken">Cancellation Token.</param>
+		public virtual async Task writeStaticFileAsync(string filePath, string contentTypeOverride = null, bool canCache = true, CancellationToken cancellationToken = default)
+		{
+			if (responseWritten)
+				throw new Exception("A response has already been written to this stream.");
+
+			await writeStaticFileAsync(new FileInfo(filePath), contentTypeOverride, canCache).ConfigureAwait(false);
+		}
+		/// <summary>
+		/// Synchronously writes a static file response with built-in caching support.
 		/// </summary>
 		/// <param name="fi">File on disk.</param>
 		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
 		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
 		public virtual void writeStaticFile(FileInfo fi, string contentTypeOverride = null, bool canCache = true)
 		{
+			writeStaticFileAsync(fi, contentTypeOverride, canCache).Wait();
+		}
+		/// <summary>
+		/// Asynchronously writes a static file response with built-in caching support.
+		/// </summary>
+		/// <param name="fi">File on disk.</param>
+		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
+		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
+		/// <param name="cancellationToken">Cancellation Token.</param>
+		public virtual async Task writeStaticFileAsync(FileInfo fi, string contentTypeOverride = null, bool canCache = true, CancellationToken cancellationToken = default)
+		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
 
 			if (!fi.Exists)
 			{
-				writeFailure("404 Not Found");
+				await writeFailureAsync("404 Not Found", cancellationToken: cancellationToken).ConfigureAwait(false);
 				return;
 			}
 
@@ -1248,7 +1438,7 @@ namespace BPUtil.SimpleHttp
 			HttpHeaderCollection headers = new HttpHeaderCollection();
 			headers["Content-Type"] = contentTypeOverride != null ? contentTypeOverride : Mime.GetMimeType(fi.Extension);
 			headers["Date"] = DateTime.UtcNow.ToString("R");
-			headers["ETag"] = MakeETag(fi);
+			headers["ETag"] = await MakeETag(fi).ConfigureAwait(false);
 			headers["Last-Modified"] = fi.GetLastWriteTimeUtcAndRepairIfBroken().ToString("R");
 			headers["Age"] = "0";
 			if (canCache && srv.CanCacheFileExtension(fi.Extension))
@@ -1273,15 +1463,15 @@ namespace BPUtil.SimpleHttp
 			}
 			if (cacheHit)
 			{
-				writeSuccess(null, -1, "304 Not Modified", headers);
+				await writeSuccessAsync(null, -1, "304 Not Modified", headers, cancellationToken).ConfigureAwait(false);
 			}
 			else
 			{
-				writeSuccess(null, fi.Length, additionalHeaders: headers);
-				outputStream.Flush();
+				await writeSuccessAsync(null, fi.Length, additionalHeaders: headers, cancellationToken: cancellationToken).ConfigureAwait(false);
+				await outputStream.FlushAsync().ConfigureAwait(false);
 				using (FileStream fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-					fs.CopyTo(tcpStream);
-				tcpStream.Flush();
+					await fs.CopyToAsync(tcpStream, 81920, cancellationToken).ConfigureAwait(false);
+				await tcpStream.FlushAsync().ConfigureAwait(false);
 			}
 		}
 
@@ -1289,8 +1479,9 @@ namespace BPUtil.SimpleHttp
 		/// Creates an ETag for the given file, which is a string that is expected to be the same when the file content is the same, and different when the file content is different.  If an error occurs, this method will throw an exception, not return null.
 		/// </summary>
 		/// <param name="fi">FileInfo representing the file for which an ETag should be generated.  It is required that this file exists and is readable.</param>
+		/// <param name="cancellationToken">Cancellation Token.</param>
 		/// <returns></returns>
-		private string MakeETag(FileInfo fi)
+		private async Task<string> MakeETag(FileInfo fi, CancellationToken cancellationToken = default)
 		{
 			const long oneMillion = 1000000;
 			// Use SHA1 hash. It is faster than MD5 or xxHash.
@@ -1329,7 +1520,11 @@ namespace BPUtil.SimpleHttp
 						// ETag structure: Hash of [file content]
 						stream = fs;
 					}
-					byte[] hash = sha.ComputeHash(stream);
+#if NET6_0
+					byte[] hash = await sha.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
+#else
+					byte[] hash = await Task.Run(() => sha.ComputeHash(stream), cancellationToken).ConfigureAwait(false);
+#endif
 					return Base64UrlMod.ToBase64UrlMod(hash);
 				}
 			}
@@ -1340,14 +1535,25 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public virtual void writeWebSocketUpgrade()
 		{
+			writeWebSocketUpgradeAsync().Wait();
+		}
+
+		/// <summary>
+		/// Writes response headers to finish the WebSocket handshake with the client. No extensions are supported (such as compression) at this time.
+		/// </summary>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		public virtual async Task writeWebSocketUpgradeAsync(CancellationToken cancellationToken = default)
+		{
 			if (responseWritten)
 				throw new Exception("A response has already been written to this stream.");
 			responseWritten = true;
-			outputStream.WriteLineRN("HTTP/1.1 101 Switching Protocols");
-			outputStream.WriteLineRN("Upgrade: websocket");
-			outputStream.WriteLineRN("Connection: Upgrade");
-			outputStream.WriteLineRN("Sec-WebSocket-Accept: " + WebSockets.WebSocket.CreateSecWebSocketAcceptValue(this.GetHeaderValue("sec-websocket-key")));
-			outputStream.WriteLineRN("");
+			StringBuilder sb = new StringBuilder();
+			sb.AppendLineRN("HTTP/1.1 101 Switching Protocols");
+			sb.AppendLineRN("Upgrade: websocket");
+			sb.AppendLineRN("Connection: Upgrade");
+			sb.AppendLineRN("Sec-WebSocket-Accept: " + WebSockets.WebSocket.CreateSecWebSocketAcceptValue(this.GetHeaderValue("sec-websocket-key")));
+			sb.AppendLineRN("");
+			await outputStream.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -1361,6 +1567,18 @@ namespace BPUtil.SimpleHttp
 		{
 			writeFullResponseBytes(Utf8NoBOM.GetBytes(body), contentType, responseCode, additionalHeaders);
 		}
+		/// <summary>
+		/// Writes the specified response with the Content-Length header set appropriately.
+		/// </summary>
+		/// <param name="body">Data to send in the response. This string will be encoded as UTF8.</param>
+		/// <param name="contentType">Content-Type header value. e.g. "text/html; charset=utf-8"</param>
+		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
+		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		public virtual async Task writeFullResponseUTF8Async(string body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null, CancellationToken cancellationToken = default)
+		{
+			await writeFullResponseBytesAsync(Utf8NoBOM.GetBytes(body), contentType, responseCode, additionalHeaders, cancellationToken).ConfigureAwait(false);
+		}
 
 		/// <summary>
 		/// Writes the specified response with the Content-Length header set appropriately.
@@ -1372,8 +1590,23 @@ namespace BPUtil.SimpleHttp
 		public virtual void writeFullResponseBytes(byte[] body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
 		{
 			writeSuccess(contentType, body.Length, responseCode, additionalHeaders);
-			this.outputStream.Flush();
-			this.tcpStream.Write(body, 0, body.Length);
+			outputStream.Flush();
+			tcpStream.Write(body, 0, body.Length);
+		}
+
+		/// <summary>
+		/// Writes the specified response with the Content-Length header set appropriately.
+		/// </summary>
+		/// <param name="body">Data to send in the response.</param>
+		/// <param name="contentType">Content-Type header value. e.g. "application/octet-stream"</param>
+		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
+		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		public virtual async Task writeFullResponseBytesAsync(byte[] body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null, CancellationToken cancellationToken = default)
+		{
+			await writeSuccessAsync(contentType, body.Length, responseCode, additionalHeaders, cancellationToken).ConfigureAwait(false);
+			await outputStream.FlushAsync().ConfigureAwait(false);
+			await tcpStream.WriteAsync(body, 0, body.Length, cancellationToken).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -1509,7 +1742,7 @@ namespace BPUtil.SimpleHttp
 			Uri newUri = new Uri(newUrl);
 			if (string.IsNullOrWhiteSpace(host))
 				host = newUri.DnsSafeHost;
-			IPAddress ip = DnsHelper.GetHostAddressAsync(newUri.DnsSafeHost).Result;
+			IPAddress ip = DnsHelper.GetHostAddressAsync(newUri.DnsSafeHost).GetAwaiter().GetResult();
 
 			using (TcpClient proxyClient = new TcpClient(ip.AddressFamily))
 			{
@@ -1639,7 +1872,7 @@ namespace BPUtil.SimpleHttp
 		public async Task ProxyToAsync(string newUrl, Client.ProxyOptions options = null)
 		{
 			options?.bet?.Start("Entering ProxyToAsync");
-			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), options);
+			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), options).ConfigureAwait(false);
 			options?.bet?.Stop();
 		}
 		#endregion
@@ -2038,8 +2271,10 @@ namespace BPUtil.SimpleHttp
 			public HttpRequestBodyNotReadException(string message, Exception innerException) : base(message, innerException) { }
 		}
 	}
-
-	public abstract class HttpServer : IDisposable
+	/// <summary>
+	/// Base class that provides comment Http Web Server functionality.
+	/// </summary>
+	public abstract class HttpServerBase : IDisposable
 	{
 		/// <summary>
 		/// Defines a local socket binding for HttpServer.
@@ -2118,7 +2353,7 @@ namespace BPUtil.SimpleHttp
 			/// </summary>
 			public Binding Binding { get; private set; }
 			private TcpListener tcpListener = null;
-			private HttpServer Server;
+			private HttpServerBase Server;
 			private CancellationTokenSource cts;
 			private CancellationToken cancellationToken;
 			private volatile bool didCallRun = false;
@@ -2127,7 +2362,7 @@ namespace BPUtil.SimpleHttp
 			/// </summary>
 			/// <param name="server">Server which owns this ListenerData.</param>
 			/// <param name="binding">Local service binding which this ListenerData will use.</param>
-			public ListenerData(HttpServer server, Binding binding)
+			public ListenerData(HttpServerBase server, Binding binding)
 			{
 				this.Server = server;
 				this.Binding = binding;
@@ -2169,13 +2404,13 @@ namespace BPUtil.SimpleHttp
 										addressInUseCooldown = CountdownStopwatch.StartNew(TimeSpan.FromSeconds(60));
 									}
 									StopListening();
-									await Task.Delay(1000, cancellationToken);
+									await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
 								}
 								else
 								{
 									SimpleHttpLogger.Log(ex, ToString() + " - Unable to bind TcpListener due to error.");
 									StopListening();
-									await Task.Delay(10000, cancellationToken);
+									await Task.Delay(10000, cancellationToken).ConfigureAwait(false);
 								}
 								continue;
 							}
@@ -2211,7 +2446,7 @@ namespace BPUtil.SimpleHttp
 #endif
 										if (Server.IsServerTooBusyToProcessNewConnection(s))
 										{
-											_ = DismissTcpClientWithHttp503(s);
+											_ = DismissTcpClientWithHttp503(s, cancellationToken).ConfigureAwait(false);
 										}
 										else
 										{
@@ -2224,7 +2459,10 @@ namespace BPUtil.SimpleHttp
 											if (rbuf != null)
 												s.ReceiveBufferSize = rbuf.Value;
 											IProcessor processor = Server.MakeClientProcessor(s, Server, Server.certificateSelector, Binding.AllowedConnectionTypes);
-											Server.pool.Enqueue(processor.Process);
+											if (Server is HttpServer)
+												((HttpServer)Server).pool.Enqueue(processor.Process);
+											else
+												_ = processor.ProcessAsync(cancellationToken).ConfigureAwait(false);
 										}
 									}
 									catch (OperationCanceledException)
@@ -2249,7 +2487,7 @@ namespace BPUtil.SimpleHttp
 							{
 								SimpleHttpLogger.Log(ex, ToString() + " - Restarting due to an error.");
 								StopListening();
-								await Task.Delay(1000, cancellationToken);
+								await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
 							}
 						}
 					}
@@ -2262,14 +2500,14 @@ namespace BPUtil.SimpleHttp
 						if (didAnnounceStart)
 							Server.SocketLog("Stopped " + ToString());
 					}
-				});
+				}, cancellationToken).ConfigureAwait(false);
 			}
 			private static byte[] http503ResponseData = ByteUtil.Utf8NoBOM.GetBytes("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\nServer too busy");
-			private static async Task DismissTcpClientWithHttp503(TcpClient s)
+			private static async Task DismissTcpClientWithHttp503(TcpClient s, CancellationToken cancellationToken = default)
 			{
 				try
 				{
-					await s.GetStream().WriteAsync(http503ResponseData, 0, http503ResponseData.Length);
+					await s.GetStream().WriteAsync(http503ResponseData, 0, http503ResponseData.Length, cancellationToken).ConfigureAwait(false);
 				}
 				finally
 				{
@@ -2336,10 +2574,6 @@ namespace BPUtil.SimpleHttp
 		}
 
 		/// <summary>
-		/// The thread pool to use for processing client connections.
-		/// </summary>
-		public SimpleThreadPool pool = new SimpleThreadPool("SimpleHttp.HttpServer", 6, 48, 5000);
-		/// <summary>
 		/// List of ListenerData instances responsible for asynchronously accepting TCP clients.
 		/// </summary>
 		private List<ListenerData> listeners = new List<ListenerData>();
@@ -2371,17 +2605,19 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Increments the <see cref="CurrentNumberOfOpenConnections"/> counter in a thread-safe manner.
 		/// </summary>
-		internal void Notify_ConnectionOpen()
+		internal void Notify_ConnectionOpen(HttpProcessor p)
 		{
 			Interlocked.Increment(ref _totalConnectionsServed);
 			Interlocked.Increment(ref _currentNumberOfOpenConnections);
+			Logger.Info("CurrentNumberOfOpenConnections++: " + CurrentNumberOfOpenConnections + ", " + p.tcpClient.Client.RemoteEndPoint.ToString());
 		}
 		/// <summary>
 		/// Decrements the <see cref="CurrentNumberOfOpenConnections"/> counter in a thread-safe manner.
 		/// </summary>
-		internal void Notify_ConnectionClosed()
+		internal void Notify_ConnectionClosed(HttpProcessor p)
 		{
 			Interlocked.Decrement(ref _currentNumberOfOpenConnections);
+			Logger.Info("CurrentNumberOfOpenConnections--: " + CurrentNumberOfOpenConnections + ", " + p.tcpClient.Client.RemoteEndPoint.ToString());
 		}
 		/// <summary>
 		/// Increments the <see cref="TotalRequestsServed"/> counter in a thread-safe manner.
@@ -2448,7 +2684,7 @@ namespace BPUtil.SimpleHttp
 		/// 
 		/// </summary>
 		/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an https-compatible endpoint was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
-		public HttpServer(ICertificateSelector certificateSelector = null)
+		public HttpServerBase(ICertificateSelector certificateSelector = null)
 		{
 			this.certificateSelector = certificateSelector;
 			if (this.certificateSelector == null)
@@ -2494,7 +2730,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="certSelector">An instance of a type deriving from ICertificateSelector, such as <see cref="SimpleCertificateSelector"/> or <see cref="ServerNameCertificateSelector"/>.</param>
 		/// <param name="allowedConnectionTypes">Indicates whether the connection should support HTTP, HTTPS, or both.</param>
 		/// <returns></returns>
-		public virtual IProcessor MakeClientProcessor(TcpClient s, HttpServer srv, ICertificateSelector certSelector, AllowedConnectionTypes allowedConnectionTypes)
+		public virtual IProcessor MakeClientProcessor(TcpClient s, HttpServerBase srv, ICertificateSelector certSelector, AllowedConnectionTypes allowedConnectionTypes)
 		{
 			return new HttpProcessor(s, srv, certSelector, allowedConnectionTypes);
 		}
@@ -2612,13 +2848,13 @@ namespace BPUtil.SimpleHttp
 			if (httpsPort > 65535 || httpsPort < -1) httpsPort = -1;
 			List<Binding> bindings = new List<Binding>();
 			if (httpPort != -1 && httpPort == httpsPort)
-				bindings.Add(new HttpServer.Binding(AllowedConnectionTypes.httpAndHttps, new IPEndPoint(IPAddress.Any, httpPort)));
+				bindings.Add(new HttpServerBase.Binding(AllowedConnectionTypes.httpAndHttps, new IPEndPoint(IPAddress.Any, httpPort)));
 			else
 			{
 				if (httpPort != -1)
-					bindings.Add(new HttpServer.Binding(AllowedConnectionTypes.http, new IPEndPoint(IPAddress.Any, httpPort)));
+					bindings.Add(new HttpServerBase.Binding(AllowedConnectionTypes.http, new IPEndPoint(IPAddress.Any, httpPort)));
 				if (httpsPort != -1)
-					bindings.Add(new HttpServer.Binding(AllowedConnectionTypes.https, new IPEndPoint(IPAddress.Any, httpsPort)));
+					bindings.Add(new HttpServerBase.Binding(AllowedConnectionTypes.https, new IPEndPoint(IPAddress.Any, httpsPort)));
 			}
 			SetBindings(bindings.ToArray());
 		}
@@ -2682,7 +2918,7 @@ namespace BPUtil.SimpleHttp
 			// Start new listeners
 			foreach (ListenerData listener in toStart)
 			{
-				_ = listener.Run();
+				_ = listener.Run().ConfigureAwait(false);
 			}
 		}
 		internal void SocketLog(string str)
@@ -2696,7 +2932,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Stops listening for connections.
 		/// </summary>
-		public void Stop()
+		public virtual void Stop()
 		{
 			if (stopRequested)
 				return;
@@ -2708,7 +2944,6 @@ namespace BPUtil.SimpleHttp
 				NetworkChange.NetworkAddressChanged -= NetworkChange_NetworkAddressChanged;
 			}
 			catch (Exception ex) { SimpleHttpLogger.Log(ex); }
-			try { pool.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 
 			lock (listeners)
 			{
@@ -2733,32 +2968,6 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 
-		/// <summary>
-		/// Handles an Http GET request.
-		/// </summary>
-		/// <param name="p">The HttpProcessor handling the request.</param>
-		public abstract void handleGETRequest(HttpProcessor p);
-		/// <summary>
-		/// Handles an Http POST request.
-		/// </summary>
-		/// <param name="p">The HttpProcessor handling the request.</param>
-		public abstract void handlePOSTRequest(HttpProcessor p);
-		/// <summary>
-		/// Handles requests using less common Http verbs such as "HEAD" or "PUT". See <see cref="HttpMethods"/>.
-		/// </summary>
-		/// <param name="method">The HTTP method string, e.g. "HEAD" or "PUT". See <see cref="HttpMethods"/>.</param>
-		/// <param name="p">The HttpProcessor handling the request.</param>
-		public virtual void handleOtherRequest(HttpProcessor p, string method)
-		{
-			if (method == HttpMethods.HEAD)
-			{
-				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
-				additionalHeaders.Add("Allow", "GET");
-				p.writeFailure("405 Method Not Allowed", additionalHeaders: additionalHeaders);
-			}
-			else
-				p.writeFailure("501 Not Implemented");
-		}
 		/// <summary>
 		/// This is called when the server is stopping.  Perform any cleanup work here.
 		/// </summary>
@@ -2810,7 +3019,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public virtual bool IsServerUnderHighLoad()
 		{
-			return CurrentNumberOfOpenConnections > Math.Max(0, pool.MaxThreads / 2);
+			return CurrentNumberOfOpenConnections > Math.Max(0, MaxConnections / 2);
 		}
 		/// <summary>
 		/// Each incoming connection to the server is passed to this method.  If the method returns true, an HTTP "503 Service Unavailable" response will be written and the connection will not be processed by an <see cref="HttpProcessor"/>.
@@ -2819,7 +3028,7 @@ namespace BPUtil.SimpleHttp
 		/// <returns>True if the connection should be dismissed with an HTTP 503 response.</returns>
 		protected virtual bool IsServerTooBusyToProcessNewConnection(TcpClient tcpClient)
 		{
-			return pool.QueuedActionCount > pool.MaxThreads.Clamp(24, 256);
+			return CurrentNumberOfOpenConnections >= MaxConnections;
 		}
 
 #if NET6_0
@@ -2833,356 +3042,98 @@ namespace BPUtil.SimpleHttp
 			return null;
 		}
 #endif
-	}
-	#region Helper Classes
-	/// <summary>
-	/// <para>HTTP request methods</para>
-	/// <para>This static class defines all the methods from https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods on 2023-06-27, but SimpleHttpServer only fully supports GET and POST.</para>
-	/// <para>HTTP defines a set of request methods to indicate the desired action to be performed for a given resource. Although they can also be nouns, these request methods are sometimes referred to as HTTP verbs. Each of them implements a different semantic, but some common features are shared by a group of them: e.g. a request method can be safe, idempotent, or cacheable.</para>
-	/// </summary>
-	public static class HttpMethods
-	{
 		/// <summary>
-		/// The GET method requests a representation of the specified resource. Requests using GET should only retrieve data.
+		/// Gets or sets maximum number of connections that should be allowed simultaneously.
 		/// </summary>
-		public const string GET = "GET";
-		/// <summary>
-		/// The HEAD method asks for a response identical to a GET request, but without the response body.
-		/// </summary>
-		public const string HEAD = "HEAD";
-		/// <summary>
-		/// The POST method submits an entity to the specified resource, often causing a change in state or side effects on the server.
-		/// </summary>
-		public const string POST = "POST";
-		/// <summary>
-		/// The PUT method replaces all current representations of the target resource with the request payload.
-		/// </summary>
-		public const string PUT = "PUT";
-		/// <summary>
-		/// The DELETE method deletes the specified resource.
-		/// </summary>
-		public const string DELETE = "DELETE";
-		/// <summary>
-		/// The CONNECT method establishes a tunnel to the server identified by the target resource.
-		/// </summary>
-		public const string CONNECT = "CONNECT";
-		/// <summary>
-		/// The OPTIONS method describes the communication options for the target resource.
-		/// </summary>
-		public const string OPTIONS = "OPTIONS";
-		/// <summary>
-		/// The TRACE method performs a message loop-back test along the path to the target resource.
-		/// </summary>
-		public const string TRACE = "TRACE";
-		/// <summary>
-		/// The PATCH method applies partial modifications to a resource.
-		/// </summary>
-		public const string PATCH = "PATCH";
-		/// <summary>
-		/// Static HashSet containing all valid HTTP request method strings.
-		/// </summary>
-		private static HashSet<string> validMethods = GetValidMethods();
-		/// <summary>
-		/// Returns a HashSet containing all valid HTTP request method strings.
-		/// </summary>
-		/// <returns></returns>
-		private static HashSet<string> GetValidMethods()
-		{
-			return new HashSet<string>(new string[] { GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH });
-		}
-		/// <summary>
-		/// Returns true if the given HTTP method (a.k.a. verb) is recognized as one that is valid.
-		/// </summary>
-		/// <param name="method"></param>
-		/// <returns></returns>
-		public static bool IsValid(string method)
-		{
-			return validMethods.Contains(method);
-		}
-	}
-	class SimpleHttpServerThreadArgs
-	{
-		public int port;
-		public AllowedConnectionTypes allowedConnectionTypes;
-		public Action<int> SetActualPort;
-		public Action<TcpListener> SetListenerField;
-
-		public SimpleHttpServerThreadArgs(int port, AllowedConnectionTypes allowedConnectionTypes, Action<int> setActualPort, Action<TcpListener> setListenerField)
-		{
-			this.port = port;
-			this.allowedConnectionTypes = allowedConnectionTypes;
-			SetActualPort = setActualPort;
-			SetListenerField = setListenerField;
-		}
-	}
-	[Flags]
-	public enum AllowedConnectionTypes
-	{
-		http = 0b1,
-		https = 0b10,
-		httpAndHttps = http | https
-	}
-	public enum CompressionType
-	{
-		None,
-		GZip
-	}
-	public class Cookie
-	{
-		public string name;
-		public string value;
-		public TimeSpan expire;
-
-		public Cookie(string name, string value, TimeSpan expire)
-		{
-			this.name = name;
-			this.value = value;
-			this.expire = expire;
-		}
-	}
-	public class Cookies : IEnumerable<Cookie>
-	{
-		SortedList<string, Cookie> cookieCollection = new SortedList<string, Cookie>();
-		/// <summary>
-		/// Adds or updates a cookie with the specified name and value.  The cookie is set to expire immediately at the end of the browsing session.
-		/// </summary>
-		/// <param name="name">The cookie's name.</param>
-		/// <param name="value">The cookie's value.</param>
-		public void Add(string name, string value)
-		{
-			Add(name, value, TimeSpan.Zero);
-		}
-		/// <summary>
-		/// Adds or updates a cookie with the specified name, value, and lifespan.
-		/// </summary>
-		/// <param name="name">The cookie's name.</param>
-		/// <param name="value">The cookie's value.</param>
-		/// <param name="expireTime">The amount of time before the cookie should expire.</param>
-		public void Add(string name, string value, TimeSpan expireTime)
-		{
-			if (name == null)
-				return;
-			cookieCollection[name.ToLower()] = new Cookie(name, value, expireTime);
-		}
-		/// <summary>
-		/// Gets the cookie with the specified name.  If the cookie is not found, null is returned;
-		/// </summary>
-		/// <param name="name">The name of the cookie.</param>
-		/// <returns></returns>
-		public Cookie Get(string name)
-		{
-			Cookie cookie;
-			if (!cookieCollection.TryGetValue(name.ToLower(), out cookie))
-				cookie = null;
-			return cookie;
-		}
-		/// <summary>
-		/// Gets the value of the cookie with the specified name.  If the cookie is not found, an empty string is returned;
-		/// </summary>
-		/// <param name="name">The name of the cookie.</param>
-		/// <returns></returns>
-		public string GetValue(string name)
-		{
-			Cookie cookie = Get(name);
-			if (cookie == null)
-				return "";
-			return cookie.value;
-		}
-		/// <summary>
-		/// Deletes the cookie with the specified name, returning true if the cookie was removed, false if it did not exist or was not removed.
-		/// </summary>
-		/// <param name="name">The name of the cookie.</param>
-		public bool Remove(string name)
-		{
-			if (name != null)
-				return cookieCollection.Remove(name.ToLower());
-			return false;
-		}
-		/// <summary>
-		/// Returns a string of "Set-Cookie: ..." headers (one for each cookie in the collection) separated by "\r\n".  There is no leading or trailing "\r\n".
-		/// </summary>
-		/// <returns>A string of "Set-Cookie: ..." headers (one for each cookie in the collection) separated by "\r\n".  There is no leading or trailing "\r\n".</returns>
-		public override string ToString()
-		{
-			List<string> cookiesStr = new List<string>();
-			foreach (Cookie cookie in cookieCollection.Values)
-				cookiesStr.Add("Set-Cookie: " + cookie.name + "=" + cookie.value + (cookie.expire == TimeSpan.Zero ? "" : "; Max-Age=" + (long)cookie.expire.TotalSeconds) + "; Path=/");
-			return string.Join("\r\n", cookiesStr);
-		}
-		/// <summary>
-		/// Returns a Cookies instance populated by parsing the specified string.  The string should be the value of the "Cookie" header that was received from the remote client.  If the string is null or empty, an empty cookies collection is returned.
-		/// </summary>
-		/// <param name="str">The value of the "Cookie" header sent by the remote client.</param>
-		/// <returns></returns>
-		public static Cookies FromString(string str)
-		{
-			Cookies cookies = new Cookies();
-			if (str == null)
-				return cookies;
-			str = Uri.UnescapeDataString(str);
-			string[] parts = str.Split(';');
-			for (int i = 0; i < parts.Length; i++)
-			{
-				int idxEquals = parts[i].IndexOf('=');
-				if (idxEquals < 1)
-					continue;
-				string name = parts[i].Substring(0, idxEquals).Trim();
-				string value = parts[i].Substring(idxEquals + 1).Trim();
-				cookies.Add(name, value);
-			}
-			return cookies;
-		}
-
-		#region IEnumerable<Cookie> Members
-
-		IEnumerator<Cookie> IEnumerable<Cookie>.GetEnumerator()
-		{
-			return cookieCollection.Values.GetEnumerator();
-		}
-
-		#endregion
-
-		#region IEnumerable Members
-
-		IEnumerator IEnumerable.GetEnumerator()
-		{
-			return cookieCollection.Values.GetEnumerator();
-		}
-
-		#endregion
-	}
-	public static class Extensions
-	{
-		/// <summary>
-		/// Returns the date and time formatted for insertion as the expiration date in a "Set-Cookie" header.
-		/// </summary>
-		/// <param name="time">This DateTime instance.</param>
-		/// <returns></returns>
-		public static string ToCookieTime(this DateTime time)
-		{
-			return time.ToString("dd MMM yyyy hh:mm:ss GMT");
-		}
-		/// <summary>
-		/// Writes text, followed by the "\r\n" line terminator, regardless of which platform this program is run on.
-		/// </summary>
-		/// <param name="sw">This TextWriter.</param>
-		/// <param name="line">Text content of the line.</param>
-		public static void WriteLineRN(this TextWriter sw, string line)
-		{
-			sw.Write(line + "\r\n");
-		}
-		/// <summary>
-		/// Writes text, followed by the "\r\n" line terminator, regardless of which platform this program is run on.
-		/// </summary>
-		/// <param name="sw">This TextWriter.</param>
-		/// <param name="line">Text content of the line.</param>
-		public static Task WriteLineRNAsync(this TextWriter sw, string line)
-		{
-			return sw.WriteAsync(line + "\r\n");
-		}
-#if NET6_0
-		/// <summary>
-		/// Writes text, followed by the "\r\n" line terminator, regardless of which platform this program is run on.
-		/// </summary>
-		/// <param name="sw">This TextWriter.</param>
-		/// <param name="line">Text content of the line.</param>
-		/// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
-		public static Task WriteLineRNAsync(this TextWriter sw, string line, CancellationToken cancellationToken)
-		{
-			return sw.WriteAsync((line + "\r\n").AsMemory(), cancellationToken);
-		}
-#endif
+		public virtual int MaxConnections { get; set; }
 	}
 	/// <summary>
-	/// A class which handles error logging by the http server.  It allows you to (optionally) register an ILogger instance to use for logging.
+	/// Base class for Http Web Servers that use a classic synchronous API with a thread pool for request handling.
 	/// </summary>
-	public static class SimpleHttpLogger
+	public abstract class HttpServer : HttpServerBase
 	{
-		private static ILogger logger = null;
-		private static bool logVerbose = false;
 		/// <summary>
-		/// (OPTIONAL) Keeps a static reference to the specified ILogger and uses it for http server error logging.  Only one logger can be registered at a time; attempting to register a second logger simply replaces the first one.
+		/// The thread pool to use for processing client connections.
 		/// </summary>
-		/// <param name="loggerToRegister">The logger that should be used when an error message needs logged.  If null, logging will be disabled.</param>
-		/// <param name="logVerboseMessages">If true, additional error reporting will be enabled.  These errors include things that can occur frequently during normal operation, so it may be spammy.</param>
-		public static void RegisterLogger(ILogger loggerToRegister, bool logVerboseMessages = false)
+		public SimpleThreadPool pool = new SimpleThreadPool("SimpleHttp.HttpServer", 6, 48, 5000);
+		/// <summary>
+		/// Gets or sets maximum number of connections that should be allowed simultaneously.
+		/// </summary>
+		public override int MaxConnections
 		{
-			logger = loggerToRegister;
-			logVerbose = logVerboseMessages;
+			get
+			{
+				return pool.MaxThreads;
+			}
+			set
+			{
+				pool.MaxThreads = value;
+			}
 		}
 		/// <summary>
-		/// Unregisters the currently registered logger (if any) by calling RegisterLogger(null);
+		/// Constructs a new HttpServer.
 		/// </summary>
-		public static void UnregisterLogger()
+		/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an https-compatible endpoint was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
+		public HttpServer(ICertificateSelector certificateSelector = null) : base(certificateSelector) { }
+		/// <summary>
+		/// Handles an Http GET request.
+		/// </summary>
+		/// <param name="p">The HttpProcessor handling the request.</param>
+		public abstract void handleGETRequest(HttpProcessor p);
+		/// <summary>
+		/// Handles an Http POST request.
+		/// </summary>
+		/// <param name="p">The HttpProcessor handling the request.</param>
+		public abstract void handlePOSTRequest(HttpProcessor p);
+		/// <summary>
+		/// Handles requests using less common Http verbs such as "HEAD" or "PUT". See <see cref="HttpMethods"/>.
+		/// </summary>
+		/// <param name="p">The HttpProcessor handling the request.</param>
+		/// <param name="method">The HTTP method string, e.g. "HEAD" or "PUT". See <see cref="HttpMethods"/>.</param>
+		public virtual void handleOtherRequest(HttpProcessor p, string method)
 		{
-			RegisterLogger(null);
-		}
-		internal static void Log(Exception ex, string additionalInformation = "")
-		{
-			try
+			if (method == HttpMethods.HEAD)
 			{
-				if (logger != null)
-					logger.Log(ex, additionalInformation);
+				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
+				additionalHeaders.Add("Allow", "GET");
+				p.writeFailure("405 Method Not Allowed", additionalHeaders: additionalHeaders);
 			}
-			catch (ThreadAbortException) { throw; }
-			catch { }
+			else
+				p.writeFailure("501 Not Implemented");
 		}
-		internal static void Log(string str)
+		/// <summary>
+		/// Each incoming connection to the server is passed to this method.  If the method returns true, an HTTP "503 Service Unavailable" response will be written and the connection will not be processed by an <see cref="HttpProcessor"/>.
+		/// </summary>
+		/// <param name="tcpClient">The new connection from a client.</param>
+		/// <returns>True if the connection should be dismissed with an HTTP 503 response.</returns>
+		protected override bool IsServerTooBusyToProcessNewConnection(TcpClient tcpClient)
 		{
-			try
-			{
-				if (logger != null)
-					logger.Log(str);
-			}
-			catch (ThreadAbortException) { throw; }
-			catch { }
+			return pool.QueuedActionCount > pool.MaxThreads.Clamp(24, 256);
 		}
+		public override void Stop()
+		{
+			try { pool.Stop(); } catch (Exception ex) { SimpleHttpLogger.Log(ex); }
 
-		internal static void LogVerbose(Exception ex, string additionalInformation = "")
-		{
-			if (logVerbose)
-				Log(ex, additionalInformation);
-		}
-
-		internal static void LogVerbose(string str)
-		{
-			if (logVerbose)
-				Log(str);
-		}
-		internal static void LogRequest(DateTime time, string remoteHost, string requestMethod, string requestedUrl, string hostName)
-		{
-			LogVerbose(remoteHost + "\t-> " + hostName + "\t" + requestMethod + "\t" + requestedUrl);
-			if (logger != null)
-				try
-				{
-					logger.LogRequest(time, time.ToString("yyyy-MM-dd hh:mm:ss tt") + ":\t" + remoteHost + "\t" + requestMethod + "\t" + requestedUrl);
-				}
-				catch (ThreadAbortException) { throw; }
-				catch { }
+			base.Stop();
 		}
 	}
 	/// <summary>
-	/// An interface which handles logging of exceptions and strings.
+	/// Base class for Http Web Servers that use an async API.
 	/// </summary>
-	public interface ILogger
+	public abstract class HttpServerAsync : HttpServerBase
 	{
 		/// <summary>
-		/// Log an exception, possibly with additional information provided to assist with debugging.
+		/// Constructs a new HttpServerAsync.
 		/// </summary>
-		/// <param name="ex">An exception that was caught.</param>
-		/// <param name="additionalInformation">Additional information about the exception.</param>
-		void Log(Exception ex, string additionalInformation = "");
+		/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an https-compatible endpoint was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
+		public HttpServerAsync(ICertificateSelector certificateSelector = null) : base(certificateSelector) { }
 		/// <summary>
-		/// Log a string.
+		/// Asynchronously handles an HTTP request.
 		/// </summary>
-		/// <param name="str">A string to log.</param>
-		void Log(string str);
-		/// <summary>
-		/// Log a request that was made to the server.
-		/// </summary>
-		/// <param name="time">The time of the request, from which the log file name will be chosen.</param>
-		/// <param name="line">The string to log, including a timestamp and all information desired. This string should not contain line breaks.</param>
-		void LogRequest(DateTime time, string line);
+		/// <param name="p">The HttpProcessor handling the request.</param>
+		/// <param name="method">The HTTP method string, e.g. "GET", "POST", HEAD", "PUT", etc. See <see cref="HttpMethods"/>.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <returns></returns>
+		public abstract Task handleRequest(HttpProcessor p, string method, CancellationToken cancellationToken = default);
 	}
-	#endregion
 }

@@ -64,7 +64,7 @@ namespace UnitTests
 
 			ms.Seek(0, SeekOrigin.Begin);
 			chunkReader = new ReadableChunkedTransferEncodingStream(ms);
-			actual = ByteUtil.ReadToEndAsync(chunkReader).Result;
+			actual = ByteUtil.ReadToEndAsync(chunkReader).GetAwaiter().GetResult();
 			CollectionAssert.AreEqual(expected, actual);
 		}
 
@@ -113,7 +113,7 @@ namespace UnitTests
 			}
 			ms.Seek(0, SeekOrigin.Begin);
 			ReadableChunkedTransferEncodingStream chunkReader = new ReadableChunkedTransferEncodingStream(ms);
-			byte[] actual = ByteUtil.ReadToEndAsync(chunkReader).Result;
+			byte[] actual = ByteUtil.ReadToEndAsync(chunkReader).GetAwaiter().GetResult();
 
 			CollectionAssert.AreEqual(expected, actual);
 		}

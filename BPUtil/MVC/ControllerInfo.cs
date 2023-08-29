@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using BPUtil.SimpleHttp;
 
@@ -38,8 +39,9 @@ namespace BPUtil.MVC
 		/// Calls the method specified by the request context's ActionName. Tries to map arguments from the URL to parameters defined on the method.
 		/// </summary>
 		/// <param name="context">The request context.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <returns></returns>
-		public ActionResult CallMethod(RequestContext context)
+		public async Task<ActionResult> CallMethod(RequestContext context, CancellationToken cancellationToken = default)
 		{
 			if (!methodMap.TryGetValue(context.ActionName.ToUpper(), out MethodInfo methodInfo))
 			{
@@ -49,10 +51,11 @@ namespace BPUtil.MVC
 			}
 			Controller controller = (Controller)Activator.CreateInstance(ControllerType);
 			controller.Context = context;
+			controller.CancellationToken = cancellationToken;
 			ActionResult result = null;
 			controller.OnAuthorization(ref result);
 			if (result == null)
-				result = CallActionMethod(controller, methodInfo);
+				result = await CallActionMethod(controller, methodInfo).ConfigureAwait(false);
 			controller.PreprocessResult(result);
 			return result;
 		}
@@ -62,7 +65,7 @@ namespace BPUtil.MVC
 		/// <param name="controller">A controller instance.</param>
 		/// <param name="mi">Metadata about the method that is to be called.</param>
 		/// <returns></returns>
-		private ActionResult CallActionMethod(Controller controller, MethodInfo mi)
+		private async Task<ActionResult> CallActionMethod(Controller controller, MethodInfo mi)
 		{
 			ParameterInfo[] parameters = mi.GetParameters();
 			object[] converted;
@@ -74,7 +77,15 @@ namespace BPUtil.MVC
 			{
 				throw new ClientException("Error processing arguments for method " + controller.GetType().FullName + "." + mi.Name + "(" + string.Join(", ", parameters.Select(p => p.ParameterType.Name)) + ")", ex);
 			}
-			return (ActionResult)mi.Invoke(controller, converted);
+			if (mi.ReturnType == typeof(Task<ActionResult>))
+			{
+				Task<ActionResult> resultTask = (Task<ActionResult>)mi.Invoke(controller, converted);
+				return await resultTask.ConfigureAwait(false);
+			}
+			else
+			{
+				return await Task.Run(() => (ActionResult)mi.Invoke(controller, converted), controller.CancellationToken).ConfigureAwait(false);
+			}
 		}
 		/// <summary>
 		/// Converts the specified input arguments to the formats demanded by required parameters.
@@ -152,13 +163,17 @@ namespace BPUtil.MVC
 		}
 
 		/// <summary>
-		/// Returns true if the specified method is public, not static, and has a return value that can be cast to <see cref="ActionResult"/>.
+		/// Returns true if the specified method is public, not static, and has a return value that can be cast to <see cref="ActionResult"/> or <see cref="Task"/>&lt;<see cref="ActionResult"/>&gt;.
 		/// </summary>
 		/// <param name="mi">Metadata about the method.</param>
 		/// <returns></returns>
 		private bool IsActionMethod(MethodInfo mi)
 		{
-			return mi.IsPublic && !mi.IsStatic && typeof(ActionResult).IsAssignableFrom(mi.ReturnType);
+			if (mi.IsPublic && !mi.IsStatic)
+			{
+				return typeof(ActionResult).IsAssignableFrom(mi.ReturnType) || typeof(Task<ActionResult>).IsAssignableFrom(mi.ReturnType);
+			}
+			return false;
 		}
 	}
 }

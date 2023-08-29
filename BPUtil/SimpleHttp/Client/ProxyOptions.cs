@@ -86,6 +86,11 @@ namespace BPUtil.SimpleHttp.Client
 		/// </summary>
 		public string[] proxyHeaderTrustedIpRanges;
 		/// <summary>
+		/// Cancellation Token.
+		/// </summary>
+		public CancellationToken cancellationToken = default;
+
+		/// <summary>
 		/// Raises the BeforeRequestHeadersSent event.
 		/// </summary>
 		/// <param name="sender">Reference to the object which is raising the event.</param>

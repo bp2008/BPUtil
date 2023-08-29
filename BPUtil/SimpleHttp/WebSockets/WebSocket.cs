@@ -397,7 +397,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 				return false;
 			if (p.GetHeaderValue("Upgrade") != "websocket")
 				return false;
-			if (p.GetHeaderValue("Connection") != "Upgrade")
+			string[] connectionHeaderValues = p.GetHeaderValue("connection")?
+				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(s => s.Trim())
+				.ToArray();
+			if (connectionHeaderValues == null || !connectionHeaderValues.Contains("Upgrade"))
 				return false;
 			if (string.IsNullOrWhiteSpace(p.GetHeaderValue("Sec-WebSocket-Key")))
 				return false;

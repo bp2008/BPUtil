@@ -19,7 +19,7 @@ namespace BPUtil.SimpleHttp
 	{
 		int vitePort;
 		string workingDirectory;
-		object viteStartLock = new object();
+		SemaphoreSlim viteStartLock = new SemaphoreSlim(1);
 		bool hasTriedRecovery = false;
 		string viteHost = IPAddress.IPv6Loopback.ToString();
 
@@ -31,15 +31,25 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Attempts to proxy the connection to Vite, starting Vite dev server if necessary.
 		/// </summary>
-		/// <param name="p"></param>
+		/// <param name="p">HttpProcessor</param>
 		public void Proxy(HttpProcessor p)
 		{
-			Exception ex = TryProxy(p);
+			ProxyAsync(p).Wait();
+		}
+		/// <summary>
+		/// Attempts to proxy the connection to Vite, starting Vite dev server if necessary.
+		/// </summary>
+		/// <param name="p">HttpProcessor</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		public async Task ProxyAsync(HttpProcessor p, CancellationToken cancellationToken = default)
+		{
+			Exception ex = await TryProxy(p).ConfigureAwait(false);
 			if (ex == null)
 				return;
 			if (!hasTriedRecovery)
 			{
-				lock (viteStartLock)
+				await viteStartLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+				try
 				{
 					if (!hasTriedRecovery)
 					{
@@ -56,11 +66,11 @@ namespace BPUtil.SimpleHttp
 									{
 										// At the time of this writing, it seems that early requests proxied to Vite's web server can fail because Vite says to use Connection: keep-alive, but does not provide a recognized way to know when the response is finished.
 										// As a workaround, we sleep a little after starting the Vite web server.
-										Thread.Sleep(500);
+										await Task.Delay(500, cancellationToken).ConfigureAwait(false);
 										break;
 									}
 									else
-										Thread.Sleep(100);
+										await Task.Delay(100, cancellationToken).ConfigureAwait(false);
 								}
 							}
 						}
@@ -70,17 +80,21 @@ namespace BPUtil.SimpleHttp
 						Console.WriteLine(TestTcpPortOpen(vitePort) ? "Vite dev server is now running" : "Vite dev server could not be started");
 					}
 				}
+				finally
+				{
+					viteStartLock.Release();
+				}
 			}
 			if (!p.responseWritten)
-				ex = TryProxy(p);
+				ex = await TryProxy(p).ConfigureAwait(false);
 			if (ex == null)
 				return;
 			if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
 				Logger.Debug(ex, "Failed to proxy \"" + p.request_url.PathAndQuery + "\" to Vite dev server.");
 			if (!p.responseWritten)
-				p.writeFailure("504 Gateway Timeout");
+				await p.writeFailureAsync("504 Gateway Timeout", cancellationToken: cancellationToken).ConfigureAwait(false);
 		}
-		private Exception TryProxy(HttpProcessor p)
+		private async Task<Exception> TryProxy(HttpProcessor p, CancellationToken cancellationToken = default)
 		{
 			try
 			{
@@ -88,12 +102,13 @@ namespace BPUtil.SimpleHttp
 				builder.Scheme = "http";
 				builder.Host = IPAddress.IPv6Loopback.ToString();
 				builder.Port = vitePort;
-				p.ProxyToAsync(builder.Uri.ToString(), new ProxyOptions()
+				await p.ProxyToAsync(builder.Uri.ToString(), new ProxyOptions()
 				{
 					allowGatewayTimeoutResponse = false,
 					allowConnectionKeepalive = true,
 					networkTimeoutMs = 5000,
-				}).Wait();
+					cancellationToken = cancellationToken
+				}).ConfigureAwait(false);
 				return null;
 			}
 			catch (Exception ex) { return ex; }

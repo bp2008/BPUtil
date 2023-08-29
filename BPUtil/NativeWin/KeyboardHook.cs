@@ -193,7 +193,7 @@ namespace BPUtil.NativeWin
 							{
 								ThrowOnBackground(ex);
 							}
-						});
+						}).ConfigureAwait(false);
 					}
 				}
 			}
@@ -216,7 +216,7 @@ namespace BPUtil.NativeWin
 					Error.Invoke(this, ex);
 				}
 				catch { }
-			});
+			}).ConfigureAwait(false);
 		}
 
 		[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]

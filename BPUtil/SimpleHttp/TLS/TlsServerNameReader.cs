@@ -5,9 +5,35 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace BPUtil.SimpleHttp.TLS
 {
+	/// <summary>
+	/// Data from peeking at the beginning of the TLS negotiation.
+	/// </summary>
+	public class TlsPeekData
+	{
+		/// <summary>
+		/// The server name from the TLS Server Name extension. Null if unavailable.
+		/// </summary>
+		public readonly string ServerName;
+		/// <summary>
+		/// True if the client requested protocol `acme-tls/1` via ALPN. This is part of ACME validation.
+		/// </summary>
+		public readonly bool IsTlsAlpn01Validation;
+		/// <summary>
+		/// Constructs a new TlsPeekData.
+		/// </summary>
+		/// <param name="serverName">The server name from the TLS Server Name extension. Null if unavailable.</param>
+		/// <param name="isTlsAlpn01Validation">True if the client requested protocol `acme-tls/1` via ALPN. This is part of ACME validation.</param>
+		public TlsPeekData(string serverName, bool isTlsAlpn01Validation)
+		{
+			ServerName = serverName;
+			IsTlsAlpn01Validation = isTlsAlpn01Validation;
+		}
+	}
 	/// <summary>
 	/// Uses BPUtil's very limited TLS implementation to read the TLS Client Hello in order to get the name of the server. Based on: https://tls13.xargs.org/
 	/// </summary>
@@ -27,7 +53,7 @@ namespace BPUtil.SimpleHttp.TLS
 		{
 			clientUsedTls = true;
 
-			UnreadableStream unread = new UnreadableStream(tcpStream);
+			UnreadableStream unread = new UnreadableStream(tcpStream, false);
 
 			FragmentStream readerOfClientHello = new FragmentStream(() =>
 			{
@@ -64,20 +90,26 @@ namespace BPUtil.SimpleHttp.TLS
 		}
 		/// <summary>
 		/// <para>Determines if the socket contains an unread TLS Client Hello, and loads the server name provided by the client via TLS Server Name Indication.</para>
-		/// <para>Returns true if the client is requesting TLS, false otherwise. This method only peeks at the network stream and does not remove any bytes from it.</para>
-		/// <para>The server name will be null if the client did not provide it via TLS Server Name Indication.</para>
+		/// <para>This method only peeks at the network stream and does not remove any bytes from it.</para>
+		/// <para>Returns an object containing the information learned from peeking at the TLS Client Hello message.  Null if this was not recognized as a TLS request.</para>
 		/// </summary>
 		/// <param name="socket">The network socket.</param>
-		/// <param name="serverName">The server name as indicated by the TLS Server Name Indication extension.  The server name will be null if the client did not provide it.</param>
-		/// <param name="isTlsAlpn01Validation">True if the client requested protocol `acme-tls/1` via ALPN. This is part of ACME validation.</param>
+		/// <param name="cancellationToken">Cancellation token to allow cancelling the asynchronous request.</param>
 		/// <returns></returns>
-		public static bool TryGetTlsClientHelloServerNames(Socket socket, out string serverName, out bool isTlsAlpn01Validation)
+		public static async Task<TlsPeekData> TryGetTlsClientHelloServerNames(Socket socket, CancellationToken cancellationToken = default)
 		{
 			// Create a buffer to hold the data
 			byte[] buffer = new byte[10];
 
+			cancellationToken.ThrowIfCancellationRequested();
+
 			// Peek at the data in the socket without removing it
+#if NET6_0
+			int bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.Peek, cancellationToken).ConfigureAwait(false);
+#else
 			int bytesRead = socket.Receive(buffer, 0, buffer.Length, SocketFlags.Peek);
+#endif
+			cancellationToken.ThrowIfCancellationRequested();
 
 			// Check if the data is a TLS "Client Hello"
 			if (buffer[0] == 0x16 && buffer[1] == 0x03 && buffer[5] == 0x01)
@@ -85,7 +117,12 @@ namespace BPUtil.SimpleHttp.TLS
 				// Load the entire "Client Hello" into the buffer
 				int length = (buffer[3] << 8) + buffer[4] + 5;
 				buffer = new byte[length];
+#if NET6_0
+				bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.Peek, cancellationToken).ConfigureAwait(false); ;
+#else
 				bytesRead = socket.Receive(buffer, 0, buffer.Length, SocketFlags.Peek);
+				await TaskHelper.CompletedTask.ConfigureAwait(false);
+#endif
 
 				using (MemoryStream ms = new MemoryStream(buffer))
 				{
@@ -107,15 +144,11 @@ namespace BPUtil.SimpleHttp.TLS
 					if (firstHandshakeMessage.ClientUsedTLS && firstHandshakeMessage.msg_type == HandshakeType.client_hello)
 					{
 						ClientHello clientHello = firstHandshakeMessage.body as ClientHello;
-						serverName = clientHello.serverName;
-						isTlsAlpn01Validation = clientHello.isTlsAlpn01Validation;
-						return true;
+						return new TlsPeekData(clientHello.serverName, clientHello.isTlsAlpn01Validation);
 					}
 					else
 					{
-						serverName = null;
-						isTlsAlpn01Validation = false;
-						return false;
+						return null;
 					}
 
 					// Broken implementation from Bing chat:
@@ -168,9 +201,7 @@ namespace BPUtil.SimpleHttp.TLS
 			}
 			else
 			{
-				serverName = null;
-				isTlsAlpn01Validation = false;
-				return false;
+				return null;
 			}
 		}
 	}
