@@ -76,7 +76,7 @@ namespace BPUtil
 		public static async Task<T> RunBlockingCodeSafely<T>(Func<T> action, CancellationToken cancellationToken = default)
 		{
 			Exception actionException = null;
-			SemaphoreSlim waitForFinish = new SemaphoreSlim(0);
+			SemaphoreSlim waitForFinish = new SemaphoreSlim(0, 1);
 #pragma warning disable IDE0034 // Simplify 'default' expression (VS 2017 requires the un-simplified syntax)
 			T result = default(T);
 #pragma warning restore IDE0034 // Simplify 'default' expression
@@ -96,7 +96,7 @@ namespace BPUtil
 					waitForFinish.Release();
 				}
 			});
-			await waitForFinish.WaitAsync(cancellationToken);
+			await waitForFinish.WaitAsync(cancellationToken).ConfigureAwait(false);
 			actionException?.Rethrow();
 			return result;
 		}
