@@ -84,7 +84,7 @@ namespace BPUtil.MVC
 			}
 			else
 			{
-				return await Task.Run(() => (ActionResult)mi.Invoke(controller, converted), controller.CancellationToken).ConfigureAwait(false);
+				return await TaskHelper.RunBlockingCodeSafely(() => (ActionResult)mi.Invoke(controller, converted), controller.CancellationToken).ConfigureAwait(false);
 			}
 		}
 		/// <summary>

@@ -2609,7 +2609,6 @@ namespace BPUtil.SimpleHttp
 		{
 			Interlocked.Increment(ref _totalConnectionsServed);
 			Interlocked.Increment(ref _currentNumberOfOpenConnections);
-			Logger.Info("CurrentNumberOfOpenConnections++: " + CurrentNumberOfOpenConnections + ", " + p.tcpClient.Client.RemoteEndPoint.ToString());
 		}
 		/// <summary>
 		/// Decrements the <see cref="CurrentNumberOfOpenConnections"/> counter in a thread-safe manner.
@@ -2617,7 +2616,6 @@ namespace BPUtil.SimpleHttp
 		internal void Notify_ConnectionClosed(HttpProcessor p)
 		{
 			Interlocked.Decrement(ref _currentNumberOfOpenConnections);
-			Logger.Info("CurrentNumberOfOpenConnections--: " + CurrentNumberOfOpenConnections + ", " + p.tcpClient.Client.RemoteEndPoint.ToString());
 		}
 		/// <summary>
 		/// Increments the <see cref="TotalRequestsServed"/> counter in a thread-safe manner.
