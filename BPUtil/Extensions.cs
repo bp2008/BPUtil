@@ -340,7 +340,7 @@ namespace BPUtil
 		/// Returns a Substream that represents the next <paramref name="length"/> bytes of this stream from its current position.
 		/// </summary>
 		/// <param name="stream">The underlying stream.</param>
-		/// <param name="length">The number of bytes of the underlying stream which can be read via this Substream.</param>
+		/// <param name="length">The number of bytes of the underlying stream which can be read or written via this Substream.</param>
 		/// <returns></returns>
 		public static Substream Substream(this Stream stream, long length)
 		{

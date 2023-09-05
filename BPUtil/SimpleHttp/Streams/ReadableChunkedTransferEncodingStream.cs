@@ -93,7 +93,7 @@ namespace BPUtil.SimpleHttp
 
 		private long ReadChunkSizeLine()
 		{
-			string chunkSizeLine = HttpProcessor.streamReadLine(_stream);
+			string chunkSizeLine = ByteUtil.HttpStreamReadLine(_stream);
 			if (chunkSizeLine == null)
 				throw new EndOfStreamException("The end of the stream was encountered when attempting to read the next chunk header.");
 
@@ -102,7 +102,7 @@ namespace BPUtil.SimpleHttp
 		}
 		private void ReadChunkTrailer()
 		{
-			string trailerLine = HttpProcessor.streamReadLine(_stream);
+			string trailerLine = ByteUtil.HttpStreamReadLine(_stream);
 			if (trailerLine != "")
 				throw new InvalidDataException();
 		}
@@ -147,7 +147,7 @@ namespace BPUtil.SimpleHttp
 
 		private async Task<long> ReadChunkSizeLineAsync(CancellationToken cancellationToken)
 		{
-			string chunkSizeLine = await HttpProcessor.streamReadLineAsync(_stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+			string chunkSizeLine = await ByteUtil.HttpStreamReadLineAsync(_stream, HttpProcessor.readTimeoutSeconds * 1000, cancellationToken: cancellationToken).ConfigureAwait(false);
 			if (chunkSizeLine == null)
 				throw new EndOfStreamException("The end of the stream was encountered when attempting to read the next chunk header.");
 
@@ -156,7 +156,7 @@ namespace BPUtil.SimpleHttp
 		}
 		private async Task ReadChunkTrailerAsync(CancellationToken cancellationToken)
 		{
-			string trailerLine = await HttpProcessor.streamReadLineAsync(_stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+			string trailerLine = await ByteUtil.HttpStreamReadLineAsync(_stream, HttpProcessor.readTimeoutSeconds * 1000, cancellationToken: cancellationToken).ConfigureAwait(false);
 			if (trailerLine != "")
 				throw new InvalidDataException();
 		}

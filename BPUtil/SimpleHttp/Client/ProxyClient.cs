@@ -177,7 +177,7 @@ namespace BPUtil.SimpleHttp.Client
 			if (Origin != origin)
 				throw new ApplicationException("This ProxyClient is bound to a different web origin than the requested Uri.");
 
-			if (p.responseWritten)
+			if (p.Response.ResponseHeaderWritten)
 				throw new ApplicationException("This ProxyClient is unable to complete the current request because a response has already been written to the client making this request.");
 
 			if (options == null)
@@ -196,7 +196,7 @@ namespace BPUtil.SimpleHttp.Client
 				host = uri.DnsSafeHost;
 
 			p.tcpClient.NoDelay = true;
-			p.tcpClient.SendTimeout = p.tcpClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(1000, 60000);
+			int networkTimeoutMs = options.networkTimeoutMs.Clamp(1000, 60000);
 
 			///////////////////////////
 			// PHASE 1: ANALYZE REQUEST //
@@ -209,33 +209,11 @@ namespace BPUtil.SimpleHttp.Client
 			});
 
 			// Figure out the Connection header
-			bool ourClientWantsConnectionClose = p.http_protocol_versionstring == "HTTP/1.0";
-			bool ourClientWantsConnectionKeepAlive = !ourClientWantsConnectionClose;
 			bool ourClientWantsConnectionUpgrade = false;
-			string incomingConnectionHeader = p.GetHeaderValue("connection");
-			string[] incomingConnectionHeaderValues = incomingConnectionHeader?
-				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-				.Select(s => s.Trim())
-				.ToArray();
-			if (incomingConnectionHeaderValues != null)
+			if (p.Request.ConnectionHeaderValues != null)
 			{
-				if (incomingConnectionHeaderValues.Contains("close", true))
-				{
-					ourClientWantsConnectionClose = true;
-					ourClientWantsConnectionKeepAlive = false;
-				}
-				else if (incomingConnectionHeaderValues.Contains("keep-alive", true))
-				{
-					ourClientWantsConnectionClose = false;
-					ourClientWantsConnectionKeepAlive = true;
-				}
-				if (incomingConnectionHeaderValues.Contains("upgrade", true))
+				if (p.Request.ConnectionHeaderValues.Contains("upgrade", true))
 					ourClientWantsConnectionUpgrade = true;
-			}
-			if (!ourClientWantsConnectionClose && !ourClientWantsConnectionKeepAlive && !ourClientWantsConnectionUpgrade)
-			{
-				await p.writeFullResponseUTF8Async("Connection header had unrecognized value.", "text/plain; charset=UTF-8", "400 Bad Request", cancellationToken: options.cancellationToken).ConfigureAwait(false);
-				return new ProxyResult(ProxyResultErrorCode.Error, "Connection header had unrecognized value: " + incomingConnectionHeader, false, false);
 			}
 
 			string requestHeader_Connection;
@@ -249,7 +227,7 @@ namespace BPUtil.SimpleHttp.Client
 					requestHeader_Connection = "close";
 			}
 
-			bool ourClientWantsWebsocket = ourClientWantsConnectionUpgrade && "websocket".IEquals(p.GetHeaderValue("upgrade"));
+			bool ourClientWantsWebsocket = ourClientWantsConnectionUpgrade && "websocket".IEquals(p.Request.Headers.Get("Upgrade"));
 
 			string requestHeader_Upgrade = ourClientWantsWebsocket ? "websocket" : null;
 
@@ -269,21 +247,19 @@ namespace BPUtil.SimpleHttp.Client
 				{
 					if (options.allowGatewayTimeoutResponse)
 					{
-						await p.writeFullResponseUTF8Async("", "text/plain; charset=utf-8", "504 Gateway Timeout", cancellationToken: options.cancellationToken).ConfigureAwait(false);
+						p.Response.FullResponseUTF8("", "text/plain; charset=utf-8", "504 Gateway Timeout");
 						return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
 					}
 					ex.Rethrow();
 				}
 				catch (TLSNegotiationFailedException ex)
 				{
-					await p.writeFullResponseUTF8Async("", "text/plain; charset=utf-8", "502 Bad Gateway", cancellationToken: options.cancellationToken).ConfigureAwait(false);
+					p.Response.FullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
 					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, ex.ToHierarchicalString(), false, false);
 				}
 			}
 			else
 				options.log.AppendLine("Reusing old connection");
-
-			proxyClient.SendTimeout = proxyClient.ReceiveTimeout = options.networkTimeoutMs.Clamp(1000, 60000);
 
 			// Connection to remote server is now established and ready for data transfer.
 			///////////////////////////
@@ -293,7 +269,7 @@ namespace BPUtil.SimpleHttp.Client
 			proxyTiming?.Start("Send Request");
 			options.bet?.Start("Send Request");
 			StringBuilder sbRequestText = new StringBuilder();
-			string requestLine = p.http_method + ' ' + uri.PathAndQuery + ' ' + p.http_protocol_versionstring;
+			string requestLine = p.Request.HttpMethod + ' ' + p.Request.Url.PathAndQuery + ' ' + p.Request.HttpProtocolVersionString;
 			sbRequestText.AppendLineRN(requestLine);
 			// After the first line comes the request headers.
 			string outgoingHostHeader = host;
@@ -303,13 +279,14 @@ namespace BPUtil.SimpleHttp.Client
 			sbRequestText.AppendLineRN("Connection: " + requestHeader_Connection);
 			if (requestHeader_Upgrade != null)
 				sbRequestText.AppendLineRN("Upgrade: " + requestHeader_Upgrade);
-			if (p.RequestBodyStream is ReadableChunkedTransferEncodingStream)
+			bool sendRequestChunked = p.Request.RequestBodyStream is ReadableChunkedTransferEncodingStream;
+			if (sendRequestChunked)
 				sbRequestText.AppendLineRN("Transfer-Encoding: chunked");
 			ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
 
-			options.RaiseBeforeRequestHeadersSent(this, p.httpHeaders);
+			options.RaiseBeforeRequestHeadersSent(this, p.Request.Headers);
 
-			foreach (HttpHeader header in p.httpHeaders)
+			foreach (HttpHeader header in p.Request.Headers)
 			{
 				if (!doNotProxyHeaders.Contains(header.Key, true))
 					sbRequestText.AppendLineRN(header.Key + ": " + header.Value);
@@ -331,8 +308,17 @@ namespace BPUtil.SimpleHttp.Client
 				ex.Rethrow();
 			}
 			// Write the original request body if there was one.
-			if (p.RequestBodyStream != null)
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.RequestBodyStream, proxyStream, snoopy, options.cancellationToken).ConfigureAwait(false);
+			if (p.Request.RequestBodyStream != null)
+			{
+				Stream streamToWrite = proxyStream;
+				if (sendRequestChunked)
+					streamToWrite = new WritableChunkedTransferEncodingStream(proxyStream);
+
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.Request.RequestBodyStream, streamToWrite, snoopy, options.cancellationToken).ConfigureAwait(false);
+
+				if (sendRequestChunked)
+					await ((WritableChunkedTransferEncodingStream)streamToWrite).CloseAsync(options.cancellationToken).ConfigureAwait(false);
+			}
 
 			proxyStream.Flush();
 
@@ -344,15 +330,14 @@ namespace BPUtil.SimpleHttp.Client
 			options.bet?.Start("Read Response Headers");
 			HttpResponseStatusLine responseStatusLine = null;
 			HttpHeaderCollection proxyHttpHeaders = new HttpHeaderCollection();
-			int responseStatusCodeInt = 0;
 			try
 			{
-				string statusLineStr = await HttpProcessor.streamReadLineAsync(proxyStream, cancellationToken: options.cancellationToken).ConfigureAwait(false);
-				if (statusLineStr == null)
+				List<string> responseHeaderLines = await SimpleHttpRequest.ReadHttpHeaderSectionAsync(proxyStream, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+				if (responseHeaderLines == null || responseHeaderLines.Count == 0)
 					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
 				try
 				{
-					responseStatusLine = new HttpResponseStatusLine(statusLineStr);
+					responseStatusLine = new HttpResponseStatusLine(responseHeaderLines[0]);
 				}
 				catch (Exception ex)
 				{
@@ -364,16 +349,8 @@ namespace BPUtil.SimpleHttp.Client
 					throw new ApplicationException(message, ex);
 				}
 
-				int? responseStatusCodeIntNullable = NumberUtil.FirstInt(responseStatusLine.StatusCode);
-				if (responseStatusCodeIntNullable == null)
-				{
-					options.log.AppendLine("ERROR: ProxyClient encountered invalid response status line: " + responseStatusLine.OriginalStatusLine);
-					return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyClient encountered invalid response status line: " + responseStatusLine.OriginalStatusLine, false, false);
-				}
-				responseStatusCodeInt = responseStatusCodeIntNullable.Value;
-
-				// Read response headers from remote server
-				await HttpProcessor.readHeadersAsync(proxyStream, proxyHttpHeaders, options.cancellationToken).ConfigureAwait(false);
+				// Parse response headers from remote server
+				SimpleHttpRequest.ParseHeaders(proxyHttpHeaders, responseHeaderLines);
 			}
 			catch (HttpProcessor.EndOfStreamException ex)
 			{
@@ -411,7 +388,7 @@ namespace BPUtil.SimpleHttp.Client
 				.Select(s => s.Trim())
 				.ToArray();
 
-			if (p.http_method == "HEAD")
+			if (p.Request.HttpMethod == "HEAD")
 				decision = ProxyResponseDecision.NoBody;
 			else if (proxyConnectionHeaderValues.Contains("upgrade", true) && proxyHttpHeaders.TryGetValue("Upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
 			{
@@ -422,7 +399,7 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				remoteServerWantsKeepalive = proxyConnectionHeaderValues.Contains("keep-alive");
 
-				if (!HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusCodeInt))
+				if (!HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusLine.StatusCodeInt))
 					decision = ProxyResponseDecision.NoBody;
 				else if (proxyHttpHeaders.TryGetValue("Content-Length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
 				{
@@ -470,13 +447,13 @@ namespace BPUtil.SimpleHttp.Client
 			// Rewrite redirect location to point at this server
 			if (proxyHttpHeaders.ContainsKey("Location"))
 			{
-				if (!string.IsNullOrWhiteSpace(p.hostName)
+				if (!string.IsNullOrWhiteSpace(p.HostName)
 					&& Uri.TryCreate(proxyHttpHeaders["Location"], UriKind.Absolute, out Uri redirectUri)
 					&& redirectUri.Host.IEquals(host))
 				{
 					UriBuilder uriBuilder = new UriBuilder(redirectUri);
 					uriBuilder.Scheme = p.secure_https ? "https" : "http";
-					uriBuilder.Host = p.hostName;
+					uriBuilder.Host = p.HostName;
 					uriBuilder.Port = ((IPEndPoint)p.tcpClient.Client.LocalEndPoint).Port;
 					proxyHttpHeaders["Location"] = uriBuilder.Uri.ToString();
 				}
@@ -488,7 +465,7 @@ namespace BPUtil.SimpleHttp.Client
 			responseStatusLine.Version = "1.1"; // We do not speak HTTP 1.0, but the server we talked to might.
 			options.bet?.Start("Proxy Write Response: " + decision);
 			Stream outgoingStream = p.tcpStream;
-			p.responseWritten = true;
+			p.Response.ResponseHeaderWritten = true;
 			StringBuilder sbResponseText = new StringBuilder();
 			sbResponseText.AppendLineRN(responseStatusLine.ToString());
 
@@ -497,27 +474,19 @@ namespace BPUtil.SimpleHttp.Client
 			string responseConnectionHeader;
 			if (decision == ProxyResponseDecision.Websocket)
 				responseConnectionHeader = "upgrade";
-			else if (ourClientWantsConnectionClose)
+			else if (p.Response.KeepaliveTimeSeconds == 0)
 				responseConnectionHeader = "close";
 			else
-			{
-				if (!p.ServerIsUnderHighLoad)
-				{
-					responseConnectionHeader = "keep-alive";
-					p.keepAlive = true;
-				}
-				else
-					responseConnectionHeader = "close";
-			}
+				responseConnectionHeader = "keep-alive";
 			sbResponseText.AppendLineRN("Connection: " + responseConnectionHeader);
-			if (p.keepAlive)
-				sbResponseText.AppendLineRN("Keep-Alive: timeout=" + ((options.networkTimeoutMs.Clamp(1000, 60000) / 1000) - 1).Clamp(1, 60));
+			if (responseConnectionHeader == "keep-alive")
+				sbResponseText.AppendLineRN("Keep-Alive: timeout=" + (p.Response.KeepaliveTimeSeconds - 1).Clamp(1, 60));
 
 			if (decision == ProxyResponseDecision.Websocket)
 				sbResponseText.AppendLineRN("Upgrade: websocket");
 			else
 			{
-				if (p.keepAlive)
+				if (responseConnectionHeader == "keep-alive")
 				{
 					if (decision != ProxyResponseDecision.ContentLength && decision != ProxyResponseDecision.NoBody)
 					{
@@ -614,7 +583,7 @@ namespace BPUtil.SimpleHttp.Client
 				}
 				expireTimer = CountdownStopwatch.StartNew(TimeSpan.FromSeconds(seconds));
 			}
-			lastRequestDetails = p.TrueRemoteIPAddress + " -> " + p.hostName + " " + requestLine;
+			lastRequestDetails = p.TrueRemoteIPAddress + " -> " + p.HostName + " " + requestLine;
 			return new ProxyResult(ProxyResultErrorCode.Success, null, remoteServerWantsKeepalive && options.allowConnectionKeepalive && !p.ServerIsUnderHighLoad, false);
 		}
 		/// <summary>
@@ -664,7 +633,7 @@ namespace BPUtil.SimpleHttp.Client
 						if (options.acceptAnyCert)
 							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
 						pStream = new System.Net.Security.SslStream(pStream, false, certCallback, null);
-						((System.Net.Security.SslStream)pStream).AuthenticateAsClient(host, null, HttpProcessor.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
+						((System.Net.Security.SslStream)pStream).AuthenticateAsClient(host, null, TLS.TlsNegotiate.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
 					}
 				}
 				catch (Exception ex)
@@ -699,29 +668,29 @@ namespace BPUtil.SimpleHttp.Client
 			switch (options.xForwardedFor)
 			{
 				case ProxyHeaderBehavior.Drop:
-					p.httpHeaders.Remove(XFF);
+					p.Request.Headers.Remove(XFF);
 					break;
 				case ProxyHeaderBehavior.Create:
-					p.httpHeaders[XFF] = p.TrueRemoteIPAddress.ToString();
+					p.Request.Headers[XFF] = p.TrueRemoteIPAddress.ToString();
 					break;
 				case ProxyHeaderBehavior.CombineUnsafe:
-					p.httpHeaders.Add(XFF, p.TrueRemoteIPAddress.ToString());
+					p.Request.Headers.Add(XFF, p.TrueRemoteIPAddress.ToString());
 					break;
 				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
 					if (IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders.Add(XFF, p.TrueRemoteIPAddress.ToString());
+						p.Request.Headers.Add(XFF, p.TrueRemoteIPAddress.ToString());
 					else
-						p.httpHeaders[XFF] = p.TrueRemoteIPAddress.ToString();
+						p.Request.Headers[XFF] = p.TrueRemoteIPAddress.ToString();
 					break;
 				case ProxyHeaderBehavior.PassthroughUnsafe:
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders.Remove(XFF);
+						p.Request.Headers.Remove(XFF);
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseCreate:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders[XFF] = p.TrueRemoteIPAddress.ToString();
+						p.Request.Headers[XFF] = p.TrueRemoteIPAddress.ToString();
 					break;
 				default:
 					throw new Exception("Unhandled options.xForwardedFor: " + options.xForwardedFor);
@@ -731,22 +700,22 @@ namespace BPUtil.SimpleHttp.Client
 			switch (options.xForwardedProto)
 			{
 				case ProxyHeaderBehavior.Drop:
-					p.httpHeaders.Remove(XFP);
+					p.Request.Headers.Remove(XFP);
 					break;
 				case ProxyHeaderBehavior.Create:
 				case ProxyHeaderBehavior.CombineUnsafe:
 				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
-					p.httpHeaders[XFP] = p.secure_https ? "https" : "http";
+					p.Request.Headers[XFP] = p.secure_https ? "https" : "http";
 					break;
 				case ProxyHeaderBehavior.PassthroughUnsafe:
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders.Remove(XFP);
+						p.Request.Headers.Remove(XFP);
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseCreate:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders[XFP] = p.secure_https ? "https" : "http";
+						p.Request.Headers[XFP] = p.secure_https ? "https" : "http";
 					break;
 				default:
 					throw new Exception("Unhandled options.xForwardedProto: " + options.xForwardedProto);
@@ -756,22 +725,22 @@ namespace BPUtil.SimpleHttp.Client
 			switch (options.xForwardedHost)
 			{
 				case ProxyHeaderBehavior.Drop:
-					p.httpHeaders.Remove(XFH);
+					p.Request.Headers.Remove(XFH);
 					break;
 				case ProxyHeaderBehavior.Create:
 				case ProxyHeaderBehavior.CombineUnsafe:
 				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
-					p.httpHeaders.Set(XFH, p.httpHeaders.Get("Host") ?? "undefined");
+					p.Request.Headers.Set(XFH, p.Request.Headers.Get("Host") ?? "undefined");
 					break;
 				case ProxyHeaderBehavior.PassthroughUnsafe:
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders.Remove(XFH);
+						p.Request.Headers.Remove(XFH);
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseCreate:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders.Set(XFH, p.httpHeaders.Get("Host") ?? "undefined");
+						p.Request.Headers.Set(XFH, p.Request.Headers.Get("Host") ?? "undefined");
 					break;
 				default:
 					throw new Exception("Unhandled options.xForwardedHost: " + options.xForwardedHost);
@@ -781,22 +750,22 @@ namespace BPUtil.SimpleHttp.Client
 			switch (options.xRealIp)
 			{
 				case ProxyHeaderBehavior.Drop:
-					p.httpHeaders.Remove(XRI);
+					p.Request.Headers.Remove(XRI);
 					break;
 				case ProxyHeaderBehavior.Create:
 				case ProxyHeaderBehavior.CombineUnsafe:
 				case ProxyHeaderBehavior.CombineIfTrustedElseCreate:
-					p.httpHeaders[XRI] = p.TrueRemoteIPAddress.ToString();
+					p.Request.Headers[XRI] = p.TrueRemoteIPAddress.ToString();
 					break;
 				case ProxyHeaderBehavior.PassthroughUnsafe:
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseDrop:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders.Remove(XRI);
+						p.Request.Headers.Remove(XRI);
 					break;
 				case ProxyHeaderBehavior.PassthroughIfTrustedElseCreate:
 					if (!IPAddressRange.WhitelistCheck(p.TrueRemoteIPAddress, options.proxyHeaderTrustedIpRanges))
-						p.httpHeaders[XRI] = p.TrueRemoteIPAddress.ToString();
+						p.Request.Headers[XRI] = p.TrueRemoteIPAddress.ToString();
 					break;
 				default:
 					throw new Exception("Unhandled options.xRealIp: " + options.xRealIp);
@@ -1041,6 +1010,10 @@ namespace BPUtil.SimpleHttp.Client
 			/// </summary>
 			public string StatusCode;
 			/// <summary>
+			/// Status code, e.g. 200 or 404.
+			/// </summary>
+			public int StatusCodeInt;
+			/// <summary>
 			/// Status text, e.g. "OK" or "Not Found".
 			/// </summary>
 			public string StatusText;
@@ -1070,6 +1043,10 @@ namespace BPUtil.SimpleHttp.Client
 				else
 					throw new ArgumentException("Invalid HTTP response status line does begin with \"HTTP/\": " + line);
 				StatusCode = parts[1];
+				if (int.TryParse(StatusCode, out int statusCodeInt))
+					StatusCodeInt = statusCodeInt;
+				else
+					throw new ArgumentException("Invalid HTTP response status line does not contain integer status code: " + line);
 				StatusText = string.Join(" ", parts.Skip(2));
 			}
 			/// <summary>

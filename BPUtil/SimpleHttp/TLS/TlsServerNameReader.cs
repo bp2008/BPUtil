@@ -94,114 +94,122 @@ namespace BPUtil.SimpleHttp.TLS
 		/// <para>Returns an object containing the information learned from peeking at the TLS Client Hello message.  Null if this was not recognized as a TLS request.</para>
 		/// </summary>
 		/// <param name="socket">The network socket.</param>
-		/// <param name="cancellationToken">Cancellation token to allow cancelling the asynchronous request.</param>
 		/// <returns></returns>
-		public static async Task<TlsPeekData> TryGetTlsClientHelloServerNames(Socket socket, CancellationToken cancellationToken = default)
+		public static TlsPeekData TryGetTlsClientHelloServerNames(Socket socket)
 		{
 			// Create a buffer to hold the data
 			byte[] buffer = new byte[10];
 
-			cancellationToken.ThrowIfCancellationRequested();
-
 			// Peek at the data in the socket without removing it
-#if NET6_0
-			int bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.Peek, cancellationToken).ConfigureAwait(false);
-#else
+			// Wait until the socket has the data available and then use a normal blocking Receive method (which won't block).
+			if (!TaskHelper.WaitUntilSync(() => socket.Available >= 10, 5000))
+				throw new OperationCanceledException("Timed out waiting for the client to send data on the socket.");
 			int bytesRead = socket.Receive(buffer, 0, buffer.Length, SocketFlags.Peek);
-#endif
-			cancellationToken.ThrowIfCancellationRequested();
 
 			// Check if the data is a TLS "Client Hello"
 			if (buffer[0] == 0x16 && buffer[1] == 0x03 && buffer[5] == 0x01)
 			{
 				// Load the entire "Client Hello" into the buffer
 				int length = (buffer[3] << 8) + buffer[4] + 5;
-				buffer = new byte[length];
-#if NET6_0
-				bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.Peek, cancellationToken).ConfigureAwait(false); ;
-#else
-				bytesRead = socket.Receive(buffer, 0, buffer.Length, SocketFlags.Peek);
-				await TaskHelper.CompletedTask.ConfigureAwait(false);
-#endif
-
-				using (MemoryStream ms = new MemoryStream(buffer))
+				if (socket.ReceiveBufferSize < length)
 				{
-					FragmentStream readerOfClientHello = new FragmentStream(() =>
-					{
-						TLSPlaintext fragment = new TLSPlaintext(ms);
-						if (fragment.isTlsHandshake)
-						{
-							if (fragment.type != ContentType.handshake)
-								throw new Exception("TLS protocol error: Fragment began with byte " + (byte)fragment.type + ". Expected " + (byte)ContentType.handshake);
-							if (!fragment.version.IsSupported())
-								throw new Exception("Unsupported TLS protocol version: " + fragment.version);
-						}
-						return fragment;
-					});
-
-					HandshakeMessage firstHandshakeMessage = new HandshakeMessage(new BasicDataStream(readerOfClientHello));
-
-					if (firstHandshakeMessage.ClientUsedTLS && firstHandshakeMessage.msg_type == HandshakeType.client_hello)
-					{
-						ClientHello clientHello = firstHandshakeMessage.body as ClientHello;
-						return new TlsPeekData(clientHello.serverName, clientHello.isTlsAlpn01Validation);
-					}
-					else
-					{
-						return null;
-					}
-
-					// Broken implementation from Bing chat:
-					//// Find the start of the extensions
-					//int extensionsStart = 43 + buffer[43];
-					//if (extensionsStart + 2 < bytesRead)
-					//{
-					//	// Get the length of the extensions
-					//	int extensionsLength = (buffer[extensionsStart] << 8) + buffer[extensionsStart + 1];
-					//	int extensionsEnd = extensionsStart + 2 + extensionsLength;
-
-					//	// Loop through the extensions
-					//	int i = extensionsStart + 2;
-					//	while (i + 4 <= extensionsEnd)
-					//	{
-					//		// Get the type and length of the extension
-					//		int type = (buffer[i] << 8) + buffer[i + 1];
-					//		int extLength = (buffer[i + 2] << 8) + buffer[i + 3];
-
-					//		// Check if this is the Server Name Indication extension
-					//		if (type == 0x00 && i + 9 <= extensionsEnd)
-					//		{
-					//			// Get the length of the server name list
-					//			int listLength = (buffer[i + 7] << 8) + buffer[i + 8];
-
-					//			// Loop through the server name list
-					//			int j = i + 9;
-					//			while (j + 3 <= i + extLength)
-					//			{
-					//				// Get the type and length of the server name
-					//				int nameType = buffer[j];
-					//				int nameLength = (buffer[j + 1] << 8) + buffer[j + 2];
-
-					//				// Check if this is a DNS hostname
-					//				if (nameType == 0x00 && j + nameLength <= i + extLength)
-					//				{
-					//					// Get the server name
-					//					serverName = System.Text.Encoding.ASCII.GetString(buffer, j + 3, nameLength);
-					//					return true;
-					//				}
-
-					//				j += nameLength;
-					//			}
-					//		}
-
-					//		i += extLength;
-					//	}
-					//}
+					SimpleHttpLogger.LogVerbose("Increasing socket.ReceiveBufferSize from " + socket.ReceiveBufferSize + " to " + length + " to read full TLS Client Hello at once.");
+					socket.ReceiveBufferSize = length;
+				}
+				buffer = length <= ByteUtil.BufferSize ? ByteUtil.BufferGet() : new byte[length];
+				try
+				{
+					if (!TaskHelper.WaitUntilSync(() => socket.Available >= length, 2000))
+						throw new OperationCanceledException("Timed out waiting for the client to send the full TLS Client Hello message.");
+					bytesRead = socket.Receive(buffer, 0, length, SocketFlags.Peek);
+					return GetTlsPeekData(buffer, length);
+				}
+				finally
+				{
+					if (buffer.Length == ByteUtil.BufferSize)
+						ByteUtil.BufferRecycle(buffer);
 				}
 			}
 			else
 			{
 				return null;
+			}
+		}
+		/// <summary>
+		/// <para>Determines if the socket contains an unread TLS Client Hello, and loads the server name provided by the client via TLS Server Name Indication.</para>
+		/// <para>This method only peeks at the network stream and does not remove any bytes from it.</para>
+		/// <para>Returns an object containing the information learned from peeking at the TLS Client Hello message.  Null if this was not recognized as a TLS request.</para>
+		/// </summary>
+		/// <param name="socket">The network socket.</param>
+		/// <param name="cancellationToken">Cancellation token to allow cancelling the asynchronous request.</param>
+		/// <returns></returns>
+		public static async Task<TlsPeekData> TryGetTlsClientHelloServerNamesAsync(Socket socket, CancellationToken cancellationToken = default)
+		{
+			// Create a buffer to hold the data
+			byte[] buffer = new byte[10];
+
+			// Peek at the data in the socket without removing it
+			// Wait until the socket has the data available and then use a normal blocking Receive method (which won't block).
+			await TaskHelper.WaitUntilAsync(() => socket.Available >= 10, 5000, null, cancellationToken).ConfigureAwait(false);
+			int bytesRead = socket.Receive(buffer, 0, buffer.Length, SocketFlags.Peek);
+
+			// Check if the data is a TLS "Client Hello"
+			if (buffer[0] == 0x16 && buffer[1] == 0x03 && buffer[5] == 0x01)
+			{
+				// Load the entire "Client Hello" into the buffer
+				int length = (buffer[3] << 8) + buffer[4] + 5;
+				if (socket.ReceiveBufferSize < length)
+				{
+					SimpleHttpLogger.LogVerbose("Increasing socket.ReceiveBufferSize from " + socket.ReceiveBufferSize + " to " + length + " to read full TLS Client Hello at once.");
+					socket.ReceiveBufferSize = length;
+				}
+				buffer = length <= ByteUtil.BufferSize ? ByteUtil.BufferGet() : new byte[length];
+				try
+				{
+					await TaskHelper.WaitUntilAsync(() => socket.Available >= length, 2000, null, cancellationToken).ConfigureAwait(false);
+					bytesRead = socket.Receive(buffer, 0, length, SocketFlags.Peek);
+					return GetTlsPeekData(buffer, length);
+				}
+				finally
+				{
+					if (buffer.Length == ByteUtil.BufferSize)
+						ByteUtil.BufferRecycle(buffer);
+				}
+			}
+			else
+			{
+				return null;
+			}
+		}
+
+		private static TlsPeekData GetTlsPeekData(byte[] buffer, int length)
+		{
+			using (MemoryStream ms = new MemoryStream(buffer, 0, length))
+			{
+				FragmentStream readerOfClientHello = new FragmentStream(() =>
+				{
+					TLSPlaintext fragment = new TLSPlaintext(ms);
+					if (fragment.isTlsHandshake)
+					{
+						if (fragment.type != ContentType.handshake)
+							throw new Exception("TLS protocol error: Fragment began with byte " + (byte)fragment.type + ". Expected " + (byte)ContentType.handshake);
+						if (!fragment.version.IsSupported())
+							throw new Exception("Unsupported TLS protocol version: " + fragment.version);
+					}
+					return fragment;
+				});
+
+				HandshakeMessage firstHandshakeMessage = new HandshakeMessage(new BasicDataStream(readerOfClientHello));
+
+				if (firstHandshakeMessage.ClientUsedTLS && firstHandshakeMessage.msg_type == HandshakeType.client_hello)
+				{
+					ClientHello clientHello = firstHandshakeMessage.body as ClientHello;
+					return new TlsPeekData(clientHello.serverName, clientHello.isTlsAlpn01Validation);
+				}
+				else
+				{
+					return null;
+				}
 			}
 		}
 	}

@@ -236,7 +236,10 @@ namespace BPUtil
 			return result;
 		}
 		#region byte[] Buffer Pooling
-		private const int BufferSize = 81920;
+		/// <summary>
+		/// The size of the buffers, in bytes, that are returned from <see cref="BufferGet"/> and accepted by <see cref="BufferRecycle(byte[])"/>.
+		/// </summary>
+		public const int BufferSize = 81920;
 		/// <summary>
 		/// A pool which provides byte arrays with length of <see cref="BufferSize"/>.
 		/// </summary>
@@ -301,7 +304,7 @@ namespace BPUtil
 		/// <summary>
 		/// Contains the result of an async read operation.
 		/// </summary>
-		public class AsyncReadResult
+		public class ReadToEndResult
 		{
 			/// <summary>
 			/// True if the end of the stream is reached.
@@ -312,24 +315,25 @@ namespace BPUtil
 			/// </summary>
 			public byte[] Data;
 			/// <summary>
-			/// Constructs a new AsyncReadResult.
+			/// Constructs a new ReadResult.
 			/// </summary>
 			/// <param name="endOfStream">True if the end of the stream is reached.</param>
 			/// <param name="data">The bytes that were read, or null if the max length was exceeded.</param>
-			public AsyncReadResult(bool endOfStream, byte[] data)
+			public ReadToEndResult(bool endOfStream, byte[] data)
 			{
 				EndOfStream = endOfStream;
 				Data = data;
 			}
 		}
 		/// <summary>
-		/// Reads all bytes until the end of the stream, then returns true.  The read data is placed in an output argument byte array.  If maxLength is exceeded while reading, the read data is unavailable and the method returns false.
+		/// Reads all bytes until the end of the stream.  The read data is placed in an output argument byte array.  If maxLength is exceeded while reading, the read data is unavailable and the method returns false.
 		/// </summary>
 		/// <param name="stream">The stream to read data from.</param>
 		/// <param name="maxLength">Maximium number of bytes to read before aborting.</param>
+		/// <param name="timeoutMilliseconds">If greater than 0, the operation will time out if no progress is made for this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
-		/// <returns>An object indicating the result of the operation.</returns>
-		public static async Task<AsyncReadResult> ReadToEndWithMaxLengthAsync(Stream stream, int maxLength, CancellationToken cancellationToken = default)
+		/// <returns>An object containing the result of the operation.</returns>
+		public static async Task<ReadToEndResult> ReadToEndWithMaxLengthAsync(Stream stream, int maxLength, int timeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			if (stream == null)
 				throw new ArgumentNullException(nameof(stream));
@@ -339,12 +343,9 @@ namespace BPUtil
 			if (stream is MemoryStream && (stream as MemoryStream).Position == 0)
 			{
 				if (stream.Length > maxLength)
-					return new AsyncReadResult(false, null);
+					return new ReadToEndResult(false, null);
 				else
-				{
-					byte[] data = ((MemoryStream)stream).ToArray();
-					return new AsyncReadResult(true, data);
-				}
+					return new ReadToEndResult(true, ((MemoryStream)stream).ToArray());
 			}
 			using (MemoryStream memoryStream = new MemoryStream())
 			{
@@ -355,15 +356,14 @@ namespace BPUtil
 					int read = 1;
 					while (read > 0 && totalRead <= maxLength)
 					{
-						read = await stream.ReadAsync(buf, 0, buf.Length, cancellationToken).ConfigureAwait(false);
+						read = await ReadAsyncWithTimeout(stream, buf, 0, buf.Length, timeoutMilliseconds, cancellationToken).ConfigureAwait(false);
 						if (read > 0)
 							memoryStream.Write(buf, 0, read);
 						totalRead += read;
 					}
 					if (totalRead > maxLength)
-						return new AsyncReadResult(false, null);
-					byte[] data = memoryStream.ToArray();
-					return new AsyncReadResult(true, data);
+						return new ReadToEndResult(false, null);
+					return new ReadToEndResult(true, memoryStream.ToArray());
 				}
 				finally
 				{
@@ -372,29 +372,24 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Reads all bytes until the end of the stream, then returns true.  The read data is placed in an output argument byte array.  If maxLength is exceeded while reading, the read data is unavailable and the method returns false.
+		/// Reads all bytes until the end of the stream.  The read data is placed in an output argument byte array.  If maxLength is exceeded while reading, the read data is unavailable and the method returns false.
 		/// </summary>
 		/// <param name="stream">The stream to read data from.</param>
 		/// <param name="maxLength">Maximium number of bytes to read before aborting.</param>
-		/// <param name="data">(Output) Byte array containing the read data, only if its length is maxLength or less.</param>
-		/// <returns>True if data was read successfully within the <paramref name="maxLength"/> limit.</returns>
-		public static bool ReadToEndWithMaxLength(Stream stream, int maxLength, out byte[] data)
+		/// <returns>An object containing the result of the operation.</returns>
+		public static ReadToEndResult ReadToEndWithMaxLength(Stream stream, int maxLength)
 		{
 			if (stream == null)
 				throw new ArgumentNullException(nameof(stream));
 			if (maxLength < 0)
 				throw new ArgumentOutOfRangeException(nameof(maxLength));
 
-			data = null;
 			if (stream is MemoryStream && (stream as MemoryStream).Position == 0)
 			{
 				if (stream.Length > maxLength)
-					return false;
+					return new ReadToEndResult(false, null);
 				else
-				{
-					data = ((MemoryStream)stream).ToArray();
-					return true;
-				}
+					return new ReadToEndResult(true, ((MemoryStream)stream).ToArray());
 			}
 			using (MemoryStream memoryStream = new MemoryStream())
 			{
@@ -411,9 +406,8 @@ namespace BPUtil
 						totalRead += read;
 					}
 					if (totalRead > maxLength)
-						return false;
-					data = memoryStream.ToArray();
-					return true;
+						return new ReadToEndResult(false, null);
+					return new ReadToEndResult(true, memoryStream.ToArray());
 				}
 				finally
 				{
@@ -449,7 +443,7 @@ namespace BPUtil
 		/// <summary>
 		/// Contains the result of an async discard operation.
 		/// </summary>
-		public class AsyncDiscardResult
+		public class DiscardToEndResult
 		{
 			/// <summary>
 			/// True if the end of the stream is reached.
@@ -464,7 +458,7 @@ namespace BPUtil
 			/// </summary>
 			/// <param name="endOfStream">True if the end of the stream is reached.</param>
 			/// <param name="bytesDiscarded">The number of bytes that were read.</param>
-			public AsyncDiscardResult(bool endOfStream, long bytesDiscarded)
+			public DiscardToEndResult(bool endOfStream, long bytesDiscarded)
 			{
 				EndOfStream = endOfStream;
 				BytesDiscarded = bytesDiscarded;
@@ -475,9 +469,10 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="stream">The stream to read data from.</param>
 		/// <param name="maxLength">If more than this many bytes are read, the method will return false without continuing to the end of the stream.</param>
+		/// <param name="timeoutMilliseconds">If greater than 0, the operation will time out if no progress is made for this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <returns>An object indicating the result of the operation.</returns>
-		public static async Task<AsyncDiscardResult> DiscardUntilEndOfStreamWithMaxLengthAsync(Stream stream, long maxLength, CancellationToken cancellationToken = default)
+		public static async Task<DiscardToEndResult> DiscardUntilEndOfStreamWithMaxLengthAsync(Stream stream, long maxLength, int timeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			if (stream == null)
 				throw new ArgumentNullException(nameof(stream));
@@ -487,7 +482,7 @@ namespace BPUtil
 			if (stream.CanSeek)
 			{
 				stream.Seek(0, SeekOrigin.End);
-				return new AsyncDiscardResult(true, 0);
+				return new DiscardToEndResult(true, 0);
 			}
 			byte[] buf = BufferGet();
 			try
@@ -496,30 +491,25 @@ namespace BPUtil
 				int read = 1;
 				while (read > 0 && bytesDiscarded < maxLength)
 				{
-					int toRead = (int)Math.Min(buf.Length, maxLength - bytesDiscarded);
-					read = await stream.ReadAsync(buf, 0, toRead, cancellationToken).ConfigureAwait(false);
+					int toRead = (int)Math.Min(buf.Length, (maxLength + 1) - bytesDiscarded);
+					read = await ReadAsyncWithTimeout(stream, buf, 0, toRead, timeoutMilliseconds, cancellationToken).ConfigureAwait(false);
 					bytesDiscarded += read;
 				}
-				if (read != 0)
-				{
-					read = await stream.ReadAsync(buf, 0, 1, cancellationToken).ConfigureAwait(false);
-					bytesDiscarded += read;
-				}
-				return new AsyncDiscardResult(read == 0, bytesDiscarded);
+				return new DiscardToEndResult(read == 0, bytesDiscarded);
 			}
 			finally
 			{
 				BufferRecycle(buf);
 			}
 		}
+
 		/// <summary>
-		/// Reads data from the stream in 81920-byte chunks until the end of stream is reached.  The data is discarded as soon as it is read. If the stream supports seeking, it is simply seeked to the end.  Returns true if the end of the stream is reached.
+		/// Reads data from the stream in 81920-byte chunks until the end of stream is reached.  The data is discarded as soon as it is read. If the stream supports seeking, it is simply seeked to the end.
 		/// </summary>
 		/// <param name="stream">The stream to read data from.</param>
 		/// <param name="maxLength">If more than this many bytes are read, the method will return false without continuing to the end of the stream.</param>
-		/// <param name="bytesDiscarded">(Output) The number of bytes that were read.</param>
-		/// <returns>True if the end of the stream is reached.</returns>
-		public static bool DiscardUntilEndOfStreamWithMaxLength(Stream stream, long maxLength, out long bytesDiscarded)
+		/// <returns>An object indicating the result of the operation.</returns>
+		public static DiscardToEndResult DiscardUntilEndOfStreamWithMaxLength(Stream stream, long maxLength)
 		{
 			if (stream == null)
 				throw new ArgumentNullException(nameof(stream));
@@ -528,31 +518,148 @@ namespace BPUtil
 
 			if (stream.CanSeek)
 			{
-				bytesDiscarded = 0;
 				stream.Seek(0, SeekOrigin.End);
-				return true;
+				return new DiscardToEndResult(true, 0);
 			}
 			byte[] buf = BufferGet();
 			try
 			{
-				bytesDiscarded = 0;
+				long bytesDiscarded = 0;
 				int read = 1;
 				while (read > 0 && bytesDiscarded < maxLength)
 				{
-					int toRead = (int)Math.Min(buf.Length, maxLength - bytesDiscarded);
+					int toRead = (int)Math.Min(buf.Length, (maxLength + 1) - bytesDiscarded);
 					read = stream.Read(buf, 0, toRead);
 					bytesDiscarded += read;
 				}
-				if (read != 0)
-				{
-					read = stream.Read(buf, 0, 1);
-					bytesDiscarded += read;
-				}
-				return read == 0;
+				return new DiscardToEndResult(read == 0, bytesDiscarded);
 			}
 			finally
 			{
 				BufferRecycle(buf);
+			}
+		}
+		/// <summary>
+		/// Reads a line of text from a binary input stream.  The text ends when '\n' is encountered or the end of the stream is encountered.  If End of Stream is reached without reading anything, returns null. '\r' characters are counted against <paramref name="maxLength"/> but not included in the returned string.
+		/// </summary>
+		/// <param name="inputStream">Input stream to read a line of text from.</param>
+		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
+		/// <returns>A line of text read from a binary input stream</returns>
+		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">Throws if the line length reaches the limit before the line ends.</exception>
+		public static string HttpStreamReadLine(Stream inputStream, int maxLength = 32768)
+		{
+			int charsConsumed = 0;
+			int next_char;
+			bool endOfStream = false;
+			bool didRead = false;
+			StringBuilder data = new StringBuilder();
+			while (true)
+			{
+				next_char = inputStream.ReadByte();
+				if (next_char == -1)
+				{
+					endOfStream = true;
+					break;
+				};
+				didRead = true;
+				if (next_char == '\n')
+					break;
+				charsConsumed++;
+				if (charsConsumed > maxLength)
+					throw new SimpleHttp.HttpProcessor.HttpProcessorException("413 Entity Too Large");
+				if (next_char != '\r')
+					data.Append(Convert.ToChar(next_char));
+			}
+			if (endOfStream && !didRead)
+				return null;
+			return data.ToString();
+		}
+		/// <summary>
+		/// Asynchronously reads a line of text from a binary input stream.  The text ends when '\n' is encountered or the end of the stream is encountered.  If End of Stream is reached without reading anything, returns null. '\r' characters are counted against <paramref name="maxLength"/> but not included in the returned string.
+		/// </summary>
+		/// <param name="stream">Input stream to read a line of text from.</param>
+		/// <param name="timeoutMilliseconds">If greater than 0, the operation will time out if no progress is made for this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
+		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <returns></returns>
+		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
+		/// <exception cref="OperationCanceledException">If the timeout is exceeded during any ReadAsync operation.</exception>
+		public static async Task<string> HttpStreamReadLineAsync(UnreadableStream stream, int timeoutMilliseconds, int maxLength = 32768, CancellationToken cancellationToken = default)
+		{
+			StringBuilder sb = new StringBuilder();
+			byte[] buffer = ByteUtil.BufferGet();
+			try
+			{
+				int charsConsumed = 0;
+				int read = 1;
+				bool didRead = false;
+				while (read > 0)
+				{
+					read = await ReadAsyncWithTimeout(stream, buffer, 0, buffer.Length, timeoutMilliseconds, cancellationToken).ConfigureAwait(false);
+					if (read > 0)
+					{
+						didRead = true;
+						for (int i = 0; i < read; i++)
+						{
+							if (buffer[i] == '\n')
+							{
+								i++;
+								stream.Unread(ByteUtil.SubArray(buffer, i, read - i));
+								return sb.ToString();
+							}
+							charsConsumed++;
+							if (charsConsumed > maxLength)
+								throw new SimpleHttp.HttpProcessor.HttpProcessorException("413 Entity Too Large");
+							if (buffer[i] != '\r')
+								sb.Append(Convert.ToChar(buffer[i]));
+						}
+					}
+				}
+				if (read == 0 && !didRead)
+					return null; // end of stream
+				return sb.ToString();
+			}
+			finally
+			{
+				ByteUtil.BufferRecycle(buffer);
+			}
+		}
+		/// <summary>
+		/// Asynchronously reads a line of text from the stream, then throws HttpProcessorException if the line turned out to be longer than maxLength.
+		/// </summary>
+		/// <param name="reader">StreamReader to read from.</param>
+		/// <param name="maxLength">Maximum line length.</param>
+		/// <returns></returns>
+		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
+		public static async Task<string> HttpStreamReadLineAsync(StreamReader reader, int maxLength = 32768)
+		{
+			string str = await reader.ReadLineAsync().ConfigureAwait(false);
+			if (str.Length >= maxLength)
+				throw new SimpleHttp.HttpProcessor.HttpProcessorException("413 Entity Too Large");
+			return str; // Null if end of stream.
+		}
+		/// <summary>
+		/// Returns a Task that reads data from the given stream into a buffer with a timeout.  You should await the task.
+		/// </summary>
+		/// <param name="stream">Stream to read data from.</param>
+		/// <param name="buffer">Buffer to read data into.</param>
+		/// <param name="offset">Offset into the buffer where data should begin to be written.</param>
+		/// <param name="length">Number of bytes to attempt to read.</param>
+		/// <param name="timeoutMilliseconds">If greater than 0, the operation will be cancelled if it does not complete within this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
+		/// <param name="cancellationToken">Cancellation Token.  A time-based cancellation token will be linked with this one such that the operation is canceled if the given token is canceled or if the time-based token is canceled because time ran out.</param>
+		/// <returns></returns>
+		/// <exception cref="OperationCanceledException">If the timeout is exceeded during the ReadAsync operation.</exception>
+		public static Task<int> ReadAsyncWithTimeout(Stream stream, byte[] buffer, int offset, int length, int timeoutMilliseconds, CancellationToken cancellationToken = default)
+		{
+			if (timeoutMilliseconds <= 0)
+			{
+				return stream.ReadAsync(buffer, offset, length, cancellationToken);
+			}
+			else
+			{
+				using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(timeoutMilliseconds))
+				using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
+					return stream.ReadAsync(buffer, offset, length, cts.Token);
 			}
 		}
 		#endregion

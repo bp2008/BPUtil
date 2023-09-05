@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Security.AccessControl;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BPUtil
@@ -172,6 +173,39 @@ namespace BPUtil
 			while (di != null && di.Name != ancestorDirectoryName)
 				di = di.Parent;
 			return di?.FullName;
+		}
+		/// <summary>
+		/// Asynchronously opens a text file, reads all text in the file with the specified encoding, and then closes the file.
+		/// </summary>
+		/// <param name="path">The file to open for reading.</param>
+		/// <param name="encoding">The encoding applied to the contents of the file.</param>
+		/// <param name="cancellationToken">The token to monitor for cancellation requests. The default value is <see cref="System.Threading.CancellationToken.None"/>.</param>
+		/// <returns>A task that represents the asynchronous read operation, which wraps the string containing all text in the file.</returns>
+		public static Task<string> ReadAllTextAsync(string path, Encoding encoding, CancellationToken cancellationToken = default)
+		{
+#if NET6_0
+			return File.ReadAllTextAsync(path, encoding, cancellationToken);
+#else
+			using (StreamReader sr = new StreamReader(path, encoding))
+				return sr.ReadToEndAsync();
+#endif
+		}
+		/// <summary>
+		/// Asynchronously creates a new file, writes the specified string to the file using the specified encoding, and then closes the file. If the target file already exists, it is overwritten.
+		/// </summary>
+		/// <param name="path">The file to write to.</param>
+		/// <param name="contents">The string to write to the file.</param>
+		/// <param name="encoding">The encoding to apply to the string.</param>
+		/// <param name="cancellationToken">The token to monitor for cancellation requests. The default value is <see cref="System.Threading.CancellationToken.None"/>.</param>
+		/// <returns>A task that represents the asynchronous write operation.</returns>
+		public static Task WriteAllTextAsync(string path, string contents, Encoding encoding, CancellationToken cancellationToken = default)
+		{
+#if NET6_0
+			return File.WriteAllTextAsync(path, contents, encoding, cancellationToken);
+#else
+			using (StreamWriter sw = new StreamWriter(path, false, encoding))
+				return sw.WriteAsync(contents);
+#endif
 		}
 	}
 }

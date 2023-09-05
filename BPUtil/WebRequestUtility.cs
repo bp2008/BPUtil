@@ -212,9 +212,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public BpWebResponse GET(string url, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			Task<BpWebResponse> task = GETAsync(url, headers, earlyTerminationBytes, fileDownloadPath);
-			task.Wait();
-			return task.GetAwaiter().GetResult();
+			return Task.Run(() => GETAsync(url, headers, earlyTerminationBytes, fileDownloadPath)).GetAwaiter().GetResult();
 		}
 		/// <summary>
 		/// Performs an HTTP GET request.
@@ -251,9 +249,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public BpWebResponse POST(string url, string[] keysAndValues, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			Task<BpWebResponse> task = POSTAsync(url, keysAndValues, headers, earlyTerminationBytes, fileDownloadPath);
-			task.Wait();
-			return task.GetAwaiter().GetResult();
+			return Task.Run(() => POSTAsync(url, keysAndValues, headers, earlyTerminationBytes, fileDownloadPath)).GetAwaiter().GetResult();
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending key and value strings to the server using the content type "application/x-www-form-urlencoded".
@@ -299,9 +295,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public BpWebResponse POST(string url, byte[] postBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			Task<BpWebResponse> task = POSTAsync(url, postBody, contentType, headers, earlyTerminationBytes, fileDownloadPath);
-			task.Wait();
-			return task.GetAwaiter().GetResult();
+			return Task.Run(() => POSTAsync(url, postBody, contentType, headers, earlyTerminationBytes, fileDownloadPath)).GetAwaiter().GetResult();
 		}
 		/// <summary>
 		/// Performs an HTTP POST request, sending the specified body content.
@@ -355,9 +349,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public BpWebResponse PUT(string url, byte[] putBody, string contentType, string[] headers = null, int earlyTerminationBytes = int.MaxValue, string fileDownloadPath = null)
 		{
-			Task<BpWebResponse> task = PUTAsync(url, putBody, contentType, headers, earlyTerminationBytes, fileDownloadPath);
-			task.Wait();
-			return task.GetAwaiter().GetResult();
+			return Task.Run(() => PUTAsync(url, putBody, contentType, headers, earlyTerminationBytes, fileDownloadPath)).GetAwaiter().GetResult();
 		}
 		/// <summary>
 		/// Sends the request and retrieves the response.

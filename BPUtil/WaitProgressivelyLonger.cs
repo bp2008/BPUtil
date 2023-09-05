@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace BPUtil
 {
@@ -69,10 +70,20 @@ namespace BPUtil
 		{
 			return new WaitProgressivelyLonger(maxSleepTimeMs, 0, startSleepTimeMs) { sleepTimeModifierMultiplier = sleepTimeModifierMultiplier };
 		}
-
+		/// <summary>
+		/// Sleeps the current thread for the duration of the next interval: Thread.Sleep(GetNextTimeout());
+		/// </summary>
 		public void Wait()
 		{
 			Thread.Sleep(GetNextTimeout());
+		}
+		/// <summary>
+		/// Returns a task that completes after the next time interval: Task.Delay(GetNextTimeout(), cancellationToken)
+		/// </summary>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		public Task WaitAsync(CancellationToken cancellationToken = default)
+		{
+			return Task.Delay(GetNextTimeout(), cancellationToken);
 		}
 
 		/// <summary>

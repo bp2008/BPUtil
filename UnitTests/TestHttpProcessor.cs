@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,24 +13,26 @@ namespace UnitTests
 	[TestClass]
 	public class TestHttpProcessor
 	{
-		private static void SetUri(HttpProcessor p, Uri uri)
+		private static SimpleHttpRequest CreateHttpRequest(string url)
 		{
-			PrivateAccessor.SetReadOnlyPropertyValue(p, "request_url", uri);
-			PrivateAccessor.SetReadOnlyPropertyValue(p, "requestedPage", uri.AbsolutePath.StartsWith("/") ? uri.AbsolutePath.Substring(1) : uri.AbsolutePath);
+			Uri uri = new Uri(url);
+			string request = "GET " + uri.ToString() + " HTTP/1.1\r\nConnection: close\r\n\r\n";
+			byte[] requestBytes = ByteUtil.Utf8NoBOM.GetBytes(request);
+			MemoryStream ms = new MemoryStream(requestBytes);
+			return SimpleHttpRequest.FromStream(new Uri(uri.GetLeftPart(UriPartial.Authority)), ms);
 		}
 		private static void TestConfiguration(string uriBefore, string requestedPageBefore, string appPath, string uriAfter, string requestedPageAfter)
 		{
-			HttpProcessor p = new HttpProcessor(null, null, null, AllowedConnectionTypes.http);
+			SimpleHttpRequest Request = CreateHttpRequest(uriBefore);
 			Uri a = new Uri(uriBefore);
-			SetUri(p, a);
-			Assert.AreEqual(a, p.request_url);
-			Assert.AreEqual(requestedPageBefore, p.requestedPage);
+			Assert.AreEqual(a, Request.Url);
+			Assert.AreEqual(requestedPageBefore, Request.Page);
 
-			p.RemoveAppPath(appPath);
+			Request.RemoveAppPath(appPath);
 
 			Uri b = new Uri(uriAfter);
-			Assert.AreEqual(b, p.request_url);
-			Assert.AreEqual(requestedPageAfter, p.requestedPage);
+			Assert.AreEqual(b, Request.Url);
+			Assert.AreEqual(requestedPageAfter, Request.Page);
 		}
 		[TestMethod]
 		public void TestRemoveAppPath()

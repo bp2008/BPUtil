@@ -32,6 +32,17 @@ namespace BPUtil.SimpleHttp
 			if (!streamEnded)
 				WriteFinalChunk();
 		}
+		/// <summary>
+		/// Asynchronously writes the final chunk if that hasn't been done already.  The underlying stream is not closed.  You should discontinue use of the WritableChunkedTransferEncodingStream after calling this.
+		/// </summary>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		public Task CloseAsync(CancellationToken cancellationToken = default)
+		{
+			if (!streamEnded)
+				return WriteFinalChunkAsync(cancellationToken);
+			else
+				return TaskHelper.CompletedTask;
+		}
 
 		/// <inheritdoc />
 		public override bool CanRead => _stream.CanRead;
@@ -62,6 +73,11 @@ namespace BPUtil.SimpleHttp
 		public override int Read(byte[] buffer, int offset, int count)
 		{
 			return _stream.Read(buffer, offset, count);
+		}
+		/// <inheritdoc />
+		public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+		{
+			return _stream.ReadAsync(buffer, offset, count, cancellationToken);
 		}
 		/// <inheritdoc />
 		public override long Seek(long offset, SeekOrigin origin)
@@ -115,21 +131,21 @@ namespace BPUtil.SimpleHttp
 			if (streamEnded)
 				throw new ApplicationException("WritableChunkedTransferEncodingStream.WriteFinalChunk() is not allowed to be called after WriteTrailingChunk() or WriteFinalChunkAsync() is called.");
 			streamEnded = true;
-			WriteChunkHeader(0);
-			WriteChunkTrailer();
+			byte[] bytes = Encoding.ASCII.GetBytes("0\r\n\r\n");
+			_stream.Write(bytes, 0, bytes.Length);
 		}
 
 		/// <summary>
 		/// Asynchronously writes an empty chunk to the stream, indicating that the HTTP response is completed.  You should discontinue use of the WritableChunkedTransferEncodingStream after calling this.
 		/// </summary>
 		/// <param name="cancellationToken">A CancellationToken which can be used to cancel the operation.</param>
-		internal async Task WriteFinalChunkAsync(CancellationToken cancellationToken)
+		internal Task WriteFinalChunkAsync(CancellationToken cancellationToken)
 		{
 			if (streamEnded)
 				throw new ApplicationException("WritableChunkedTransferEncodingStream.WriteFinalChunkAsync() is not allowed to be called after WriteTrailingChunk() or WriteTrailingChunkAsync() is called.");
 			streamEnded = true;
-			await WriteChunkHeaderAsync(0, cancellationToken).ConfigureAwait(false);
-			await WriteChunkTrailerAsync(cancellationToken).ConfigureAwait(false);
+			byte[] bytes = Encoding.ASCII.GetBytes("0\r\n\r\n");
+			return _stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken);
 		}
 
 		private void WriteChunkHeader(int count)

@@ -6,7 +6,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
@@ -39,125 +38,46 @@ namespace BPUtil.SimpleHttp
 	public class HttpProcessor : IProcessor
 	{
 		public static UTF8Encoding Utf8NoBOM = new UTF8Encoding(false);
-		/// <summary>
-		/// SslProtocols typed Tls13 that is available in earlier versions of .NET Framework.
-		/// </summary>
-		public const SslProtocols Tls13 = (SslProtocols)12288;
-		private readonly AllowedConnectionTypes allowedConnectionTypes;
+		internal readonly AllowedConnectionTypes allowedConnectionTypes;
 		/// <summary>
 		/// Read timeout for read attempts, in seconds.  Clients are given this value minus one in the "Keep-Alive: timeout=N" header.
 		/// </summary>
-		private const int readTimeoutSeconds = 5;
+		internal const byte readTimeoutSeconds = 5;
 
 		#region Fields and Properties
 		/// <summary>
+		/// True if this HttpProcessor is using async/await. False if using classic blocking/synchronous APIs.
+		/// </summary>
+		internal bool IsAsync { get; private set; }
+		/// <summary>
+		/// The Http Request currently being processed.
+		/// </summary>
+		public SimpleHttpRequest Request { get; private set; }
+
+		/// <summary>
+		/// The Http Response that will be sent.
+		/// </summary>
+		public SimpleHttpResponse Response { get; private set; }
+
+		/// <summary>
 		/// The underlying tcpClient which handles the network connection.
 		/// </summary>
-		public TcpClient tcpClient { get; private set; }
+		internal TcpClient tcpClient { get; private set; }
 
 		/// <summary>
 		/// The HttpServerBase instance that accepted this request.
 		/// </summary>
-		public HttpServerBase srv { get; private set; }
+		internal HttpServerBase srv { get; private set; }
 
 		/// <summary>
-		/// This stream is for reading and writing binary data.
-		/// 
-		/// Be careful to flush [tcpStream] or [outputStream] before switching between them!!
-		/// 
-		/// This stream is typically one of: NetworkStream, GzipStream, WritableChunkedTransferEncodingStream.
+		/// This stream is for reading and writing binary data.  It is for internal use by BPUtil.
 		/// </summary>
-		public Stream tcpStream { get; private set; }
+		internal Stream tcpStream { get; set; }
 
-		/// <summary>
-		/// This stream is for writing text data.
-		/// Be careful to flush [tcpStream] or [outputStream] before switching between them!!
-		/// </summary>
-		public StreamWriter outputStream { get; private set; }
-
-		/// <summary>
-		/// Be careful to flush each output stream before using a different one!!
-		/// 
-		/// This stream is for writing binary data.
-		/// </summary>
-		[Obsolete("This property is deprecated and may be removed in a future version of BPUtil. Use tcpStream instead.")]
-		public Stream rawOutputStream { get { return tcpStream; } }
-
-		/// <summary>
-		/// The cookies sent by the remote client.
-		/// </summary>
-		public Cookies requestCookies { get; private set; }
-
-		/// <summary>
-		/// The cookies to send to the remote client.
-		/// </summary>
-		public Cookies responseCookies { get; private set; } = new Cookies();
-
-		/// <summary>
-		/// The Http method used.  i.e. "POST" or "GET"
-		/// </summary>
-		public string http_method { get; private set; }
 		/// <summary>
 		/// The base Uri for this server, containing its host name and port.
 		/// </summary>
-		public Uri base_uri_this_server { get; private set; }
-		/// <summary>
-		/// The requested url.
-		/// </summary>
-		public Uri request_url { get; private set; }
-		/// <summary>
-		/// The protocol version string sent by the client.  e.g. "HTTP/1.1"
-		/// </summary>
-		public string http_protocol_versionstring { get; private set; }
-		/// <summary>
-		/// <para>The path to and name of the requested page, not including the first '/'.</para>
-		/// <para>For example, if the URL was "/articles/science/moon.html?date=2011-10-21", requestedPage would be "articles/science/moon.html".</para>
-		/// <para>URL-encoded characters remain url-encoded. E.g. "File%20Name.jpg".</para>
-		/// </summary>
-		public string requestedPage { get; private set; }
-		/// <summary>
-		/// A map of HTTP header names and values. Header names are all normalized to standard capitalization, and header names are treated as case-insensitive.
-		/// </summary>
-		public HttpHeaderCollection httpHeaders { get; private set; } = new HttpHeaderCollection();
-
-		/// <summary>
-		/// A SortedList mapping lower-case keys to values of parameters.  This list is populated if and only if the request was a POST request with mimetype "application/x-www-form-urlencoded".
-		/// </summary>
-		public SortedList<string, string> PostParams { get; private set; } = new SortedList<string, string>();
-		/// <summary>
-		/// A SortedList mapping keys to values of parameters.  No character case conversion is applied in this list.  This list is populated if and only if the request was a POST request with mimetype "application/x-www-form-urlencoded".
-		/// </summary>
-		public SortedList<string, string> RawPostParams { get; private set; } = new SortedList<string, string>();
-		/// <summary>
-		/// A SortedList mapping lower-case keys to values of parameters.  This list is populated parameters that were appended to the url (the query string).  e.g. if the url is "mypage.html?arg1=value1&amp;arg2=value2", then there will be two parameters ("arg1" with value "value1" and "arg2" with value "value2")
-		/// </summary>
-		public SortedList<string, string> QueryString { get; private set; } = new SortedList<string, string>();
-		/// <summary>
-		/// A SortedList mapping keys to values of parameters.  No character case conversion is applied in this list.  This list is populated parameters that were appended to the url (the query string).  e.g. if the url is "mypage.html?arg1=value1&amp;arg2=value2", then there will be two parameters ("arg1" with value "value1" and "arg2" with value "value2")
-		/// </summary>
-		public SortedList<string, string> RawQueryString { get; private set; } = new SortedList<string, string>();
-
-		/// <summary>
-		/// If not null, the specified number is the value of the Content-Length header.
-		/// </summary>
-		public long? ContentLength { get; private set; } = null;
-
-		/// <summary>
-		/// A flag that is set when writeSuccess(), writeFailure(), or writeRedirect() is called.
-		/// </summary>
-		public bool responseWritten = false;
-
-		/// <summary>
-		/// True if a "Connection: keep-alive;" header was received from the client.
-		/// </summary>
-		public bool keepAliveRequested { get; private set; }
-
-		/// <summary>
-		/// <para>True if a "Connection: keep-alive" header was sent to the client.</para>
-		/// <para>This flag is reset to false at the start of each request.</para>
-		/// <para>If true at the end of a request, the server will attempt to read another request from this connection.</para>
-		/// </summary>
-		public bool keepAlive { get; internal set; } = false;
+		public Uri base_uri_this_server { get; internal set; }
 
 		/// <summary>
 		/// <para>Gets true if the HTTP server is believed to be under high load conditions.</para>
@@ -314,45 +234,31 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Gets the true remote IP address of the client, directly from the TcpClient's socket, without regard for HTTP headers from proxy servers. If the address is somehow unavailable, an exception will be thrown.
 		/// </summary>
-		public IPAddress TrueRemoteIPAddress
-		{
-			get
-			{
-				return ((IPEndPoint)tcpClient.Client.RemoteEndPoint).Address;
-			}
-		}
+		public IPAddress TrueRemoteIPAddress => RemoteEndPoint.Address;
 		#endregion
 
 		/// <summary>
 		/// If true, the connection is secured with TLS.
 		/// </summary>
-		public bool secure_https { get; private set; }
+		public bool secure_https { get; internal set; }
+
 		/// <summary>
 		/// An object responsible for delivering TLS server certificates upon demand.
 		/// </summary>
-		private ICertificateSelector certificateSelector;
-		/// <summary>
-		/// The type of compression that will be used for the response stream.
-		/// </summary>
-		public CompressionType compressionType { get; private set; } = CompressionType.None;
-
-		/// <summary>
-		/// <para>Gets the Stream containing the request body.</para>
-		/// <para>IMPORTANT: By default, this stream does not support seeking or length querying (it can only be read to the end one time!).  If you require the ability to seek or read multiple times, you must call <see cref="GetRequestBodyMemoryStream"/> at least one time BEFORE reading from RequestBodyStream.</para>
-		/// <para>It will begin positioned at the beginning of the request body and end at the end of the request body.</para>
-		/// <para>For requests that did not provide a body, this will be null.</para>
-		/// </summary>
-		public Stream RequestBodyStream { get; private set; }
-
-		/// <summary>
-		/// The number of requests that have been read by the current TCP connection.
-		/// </summary>
-		public long keepAliveRequestCount { get; private set; } = 0;
+		internal ICertificateSelector certificateSelector;
 
 		/// <summary>
 		/// The hostname that was requested by the client.  This is populated from TLS Server Name Indication if available, otherwise from the Host header.  Null if not provided in either place.
 		/// </summary>
-		public string hostName { get; private set; }
+		public string HostName { get; internal set; }
+		/// <summary>
+		/// Gets the remote endpoint.
+		/// </summary>
+		public IPEndPoint RemoteEndPoint => (IPEndPoint)tcpClient.Client.RemoteEndPoint;
+		/// <summary>
+		/// Gets the local endpoint.
+		/// </summary>
+		public IPEndPoint LocalEndPoint => (IPEndPoint)tcpClient.Client.LocalEndPoint;
 		#endregion
 
 		/// <summary>
@@ -372,416 +278,56 @@ namespace BPUtil.SimpleHttp
 			this.srv = srv;
 			this.allowedConnectionTypes = allowedConnectionTypes;
 		}
-		/// <summary>
-		/// Reads a line of text from a binary input stream.  The text ends when '\n' is encountered or the end of the stream is encountered.  If no data is available on the stream, returns null. '\r' characters are counted against <paramref name="maxLength"/> but not included in the returned string.
-		/// </summary>
-		/// <param name="inputStream">Input stream to read a line of text from.</param>
-		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
-		/// <returns>A line of text read from a binary input stream</returns>
-		/// <exception cref="HttpProcessorException">Throws if the line length reaches the limit before the line ends.</exception>
-		public static string streamReadLine(Stream inputStream, int maxLength = 32768)
-		{
-			int charsConsumed = 0;
-			int next_char;
-			bool endOfStream = false;
-			bool didRead = false;
-			StringBuilder data = new StringBuilder();
-			while (true)
-			{
-				next_char = inputStream.ReadByte();
-				if (next_char == -1)
-				{
-					endOfStream = true;
-					break;
-				};
-				didRead = true;
-				if (next_char == '\n')
-					break;
-				charsConsumed++;
-				if (charsConsumed > maxLength)
-					throw new HttpProcessorException("413 Entity Too Large");
-				if (next_char != '\r')
-					data.Append(Convert.ToChar(next_char));
-			}
-			if (endOfStream && !didRead)
-				return null;
-			return data.ToString();
-		}
-		/// <summary>
-		/// Reads a line of text from a binary input stream.  The text ends when '\n' is encountered or the end of the stream is encountered.  If no data is available on the stream, returns null. '\r' characters are counted against <paramref name="maxLength"/> but not included in the returned string.
-		/// </summary>
-		/// <param name="stream">Input stream to read a line of text from.</param>
-		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
-		/// <param name="cancellationToken">Cancellation Token</param>
-		/// <returns></returns>
-		/// <exception cref="HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
-		public static async Task<string> streamReadLineAsync(UnreadableStream stream, int maxLength = 32768, CancellationToken cancellationToken = default)
-		{
-			StringBuilder sb = new StringBuilder();
-			byte[] buffer = ByteUtil.BufferGet();
-			try
-			{
-				int charsConsumed = 0;
-				int read = 1;
-				bool didRead = false;
-				while (read > 0)
-				{
-					using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(readTimeoutSeconds * 1000))
-					using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
-						read = await stream.ReadAsync(buffer, 0, buffer.Length, cts.Token).ConfigureAwait(false);
-					if (read > 0)
-					{
-						didRead = true;
-						for (int i = 0; i < read; i++)
-						{
-							if (buffer[i] == '\n')
-							{
-								i++;
-								stream.Unread(ByteUtil.SubArray(buffer, i, read - i));
-								return sb.ToString();
-							}
-							charsConsumed++;
-							if (charsConsumed > maxLength)
-								throw new HttpProcessorException("413 Entity Too Large");
-							if (buffer[i] != '\r')
-								sb.Append(Convert.ToChar(buffer[i]));
-						}
-					}
-				}
-				if (read == 0 && !didRead)
-					return null; // end of stream
-				return sb.ToString();
-			}
-			finally
-			{
-				ByteUtil.BufferRecycle(buffer);
-			}
-		}
 
 		/// <summary>
 		/// Processes the request synchronously.
 		/// </summary>
 		public void Process()
 		{
-			ProcessAsync().Wait();
-		}
-		/// <summary>
-		/// Processes the request asynchronously.
-		/// </summary>
-		/// <param name="cancellationToken">Cancellation Token</param>
-		public async Task ProcessAsync(CancellationToken cancellationToken = default)
-		{
-			srv.Notify_ConnectionOpen(this);
 			try
 			{
-				tcpClient.ReceiveTimeout = 5000; // Affects synchronous I/O only!
-				tcpClient.SendTimeout = 5000; // Affects synchronous I/O only!
-				tcpStream = tcpClient.GetStream();
-				if (allowedConnectionTypes.HasFlag(AllowedConnectionTypes.https))
-				{
-					X509Certificate cert = null;
-					try
-					{
-						// Read the TLS Client Hello message to get the server name so we can select the correct certificate and
-						//   populate the hostName property of this HttpProcessor.
-						// Note it is possible that the client is not using TLS, in which case no certificate will be selected and the
-						//   request will be processed as plain HTTP.
-						TLS.TlsPeekData tlsData;
-						using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(4000))
-						using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
-							tlsData = await TLS.TlsServerNameReader.TryGetTlsClientHelloServerNames(tcpClient.Client, cts.Token).ConfigureAwait(false);
-						if (tlsData != null)
-						{
-							this.secure_https = true;
-							hostName = tlsData.ServerName;
-							if (tlsData.IsTlsAlpn01Validation)
-							{
-#if NET6_0
-								cert = await certificateSelector.GetAcmeTls1Certificate(this, tlsData.ServerName).ConfigureAwait(false);
-								if (cert == null)
-								{
-									SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ".");
-									return;
-								}
-								SslServerAuthenticationOptions sslOptions = new SslServerAuthenticationOptions();
-								sslOptions.ApplicationProtocols = new List<SslApplicationProtocol> { new SslApplicationProtocol("acme-tls/1") };
-								sslOptions.ServerCertificate = cert;
-								tcpStream = new SslStream(tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
-								((SslStream)tcpStream).AuthenticateAsServer(sslOptions);
-								SimpleHttpLogger.LogVerbose("\"acme-tls/1\" client connected using SslProtocol." + (tcpStream as SslStream).SslProtocol);
-								return; // This connection is not allowed to be used for data transmission after TLS negotiation is complete.
-#else
-								SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the current .NET version does not support the \"acme-tls/1\" protocol.");
-								return;
-#endif
-							}
-							else
-								cert = await certificateSelector.GetCertificate(this, tlsData.ServerName).ConfigureAwait(false);
-							if (cert == null)
-							{
-								SimpleHttpLogger.LogVerbose("TLS negotiation failed because the certificate selector [" + certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ".");
-								return;
-							}
-							TlsNegotiate(cert);
-							SimpleHttpLogger.LogVerbose("Client connected using SslProtocol." + (tcpStream as SslStream).SslProtocol);
-						}
-						else
-						{
-							if (!allowedConnectionTypes.HasFlag(AllowedConnectionTypes.http))
-							{
-								SimpleHttpLogger.LogVerbose("Client " + this.RemoteIPAddressStr + " requested plain HTTP from an IP endpoint (" + tcpClient.Client.LocalEndPoint.ToString() + ") that is not configured to support plain HTTP.");
-								return;
-							}
-							cert = null;
-						}
-					}
-					catch (OperationCanceledException) { return; }
-					catch (ThreadAbortException) { throw; }
-					catch (SocketException) { throw; }
-					catch (Exception ex)
-					{
-						if (ex is AuthenticationException)
-						{
-							AuthenticationException aex = (AuthenticationException)ex;
-							if (ex.InnerException is Win32Exception)
-							{
-								Win32Exception wex = (Win32Exception)ex.InnerException;
-								if (wex.NativeErrorCode == unchecked((int)0x80090327))
-								{
-									// Happens unpredictably to some certificates when used with some clients.
-									SimpleHttpLogger.LogVerbose("SslStream.AuthenticateAsServer --> An unknown error occurred while processing the certificate.");
-									return;
-								}
-							}
-						}
-						SimpleHttpLogger.LogVerbose(ex);
-						return;
-					}
-				}
-				this.base_uri_this_server = new Uri("http" + (this.secure_https ? "s" : "") + "://" + tcpClient.Client.LocalEndPoint.ToString(), UriKind.Absolute);
-				tcpStream = new UnreadableStream(tcpStream, false);
-				Stream originalTcpStream = tcpStream;
+				CommonRequestPreprocessing(true);
+
+				if (!TLS.TlsNegotiate.NegotiateSync(this))
+					return;
+
 				do
 				{
-					if (keepAlive)
-					{
-						keepAlive = false;
-						responseCookies = new Cookies();
-						httpHeaders.Clear();
-						PostParams.Clear();
-						RawPostParams.Clear();
-						QueryString.Clear();
-						RawQueryString.Clear();
-						http_method = "";
-						responseWritten = false;
-						keepAliveRequested = false;
-						compressionType = CompressionType.None;
-						ContentLength = null;
-						RequestBodyStream = null;
-					}
-					keepAliveRequestCount++;
-					tcpStream = originalTcpStream;
-					// While the server is under low load, a larger buffer is allowed for better write performance.
-					if (this.ServerIsUnderHighLoad)
-						tcpClient.SendBufferSize = 8192;
-					else
-						tcpClient.SendBufferSize = 65536;
-					//int inputStreamThrottlingRuleset = 1;
-					//int outputStreamThrottlingRuleset = 0;
-					//if (IsLanConnection)
-					//	inputStreamThrottlingRuleset = outputStreamThrottlingRuleset = 2;
-					//inputStream =  new GlobalThrottledStream(tcpStream, inputStreamThrottlingRuleset, RemoteIPAddressInt);
-					//rawOutputStream = new GlobalThrottledStream(tcpStream, outputStreamThrottlingRuleset, RemoteIPAddressInt);
-					outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
+					RecycleConnection();
 					try
 					{
-						tcpClient.ReceiveTimeout = readTimeoutSeconds * 1000; // Affects synchronous I/O only!
-						tcpClient.SendTimeout = 5000; // Affects synchronous I/O only!
-						if (!await parseRequest((UnreadableStream)tcpStream, cancellationToken).ConfigureAwait(false))
-							return; // End of stream was encountered. Very common with "Connection: keep-alive" when another request does not arrive.
-						await readHeadersAsync((UnreadableStream)tcpStream, httpHeaders, cancellationToken).ConfigureAwait(false);
-						if (string.IsNullOrWhiteSpace(hostName))
+						Request = SimpleHttpRequest.FromStream(base_uri_this_server, tcpStream);
+						try
 						{
-							hostName = GetHeaderValue("host");
-							if (hostName != null)
-							{
-								string portSuffix = ":" + ((IPEndPoint)tcpClient.Client.LocalEndPoint).Port;
-								if (hostName.EndsWith(portSuffix))
-									hostName = hostName.Substring(0, hostName.Length - portSuffix.Length);
-							}
-						}
-						if (string.IsNullOrWhiteSpace(hostName))
-							hostName = null;
+							Response = new SimpleHttpResponse(this);
 
-						string[] connectionHeaderValues = GetHeaderValue("connection")?
-							.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-							.Select(s => s.Trim())
-							.ToArray();
-						keepAliveRequested = http_protocol_versionstring == "HTTP/1.1";
-						if (connectionHeaderValues != null)
-						{
-							if (connectionHeaderValues.Contains("keep-alive", true))
-								keepAliveRequested = true;
-							if (connectionHeaderValues.Contains("close", true))
-								keepAliveRequested = false;
-						}
+							CommonRequestProcessing();
 
-
-						IPAddress originalRemoteIp = RemoteIPAddress;
-						if (srv.XRealIPHeader)
-						{
-							string headerValue = GetHeaderValue("x-real-ip");
-							if (!string.IsNullOrWhiteSpace(headerValue))
-							{
-								if (srv.IsTrustedProxyServer(this, originalRemoteIp))
-								{
-									headerValue = headerValue.Trim();
-									if (IPAddress.TryParse(headerValue, out IPAddress addr))
-										remoteIpAddress = addr;
-								}
-							}
+							HttpServer s = srv as HttpServer;
+							if (Request.HttpMethod == "GET")
+								s.handleGETRequest(this);
+							else if (Request.HttpMethod == "POST")
+								s.handlePOSTRequest(this);
+							else
+								s.handleOtherRequest(this, Request.HttpMethod);
 						}
-						if (srv.XForwardedForHeader)
+						finally
 						{
-							string headerValue = GetHeaderValue("x-forwarded-for");
-							if (!string.IsNullOrWhiteSpace(headerValue))
-							{
-								if (srv.IsTrustedProxyServer(this, originalRemoteIp))
-								{
-									// Because we trust the source of the header, we must trust that they validated the chain of IP addresses all the way back to the root.
-									// Therefore we should get the leftmost address; this is the true client IP.
-									headerValue = headerValue.Split(',').FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
-									if (headerValue != null)
-									{
-										headerValue = headerValue.Trim();
-										if (IPAddress.TryParse(headerValue, out IPAddress addr))
-											remoteIpAddress = addr;
-									}
-								}
-							}
-						}
-						RawQueryString = ParseQueryStringArguments(this.request_url.Query, preserveKeyCharacterCase: true);
-						QueryString = ParseQueryStringArguments(this.request_url.Query);
-						requestCookies = Cookies.FromString(GetHeaderValue("Cookie", ""));
-
-						if (HttpMethods.IsValid(http_method))
-						{
-							if (shouldLogRequestsToFile())
-								SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, http_method, request_url.OriginalString, hostName);
-							await handleRequest(cancellationToken).ConfigureAwait(false);
-						}
-						else
-						{
-							await this.writeFailureAsync("501 Not Implemented", cancellationToken: cancellationToken).ConfigureAwait(false);
+							Request.CleanupSync();
 						}
 					}
 					catch (OperationCanceledException) { return; }
-					catch (ThreadAbortException) { throw; }
 					catch (Exception e)
 					{
-						if (IsOrdinaryDisconnectException(e))
-						{
-							//if (keepAliveRequestCount <= 1) // Do not log if this is a kept-alive connection.
-							//	SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
-							//if (!responseWritten)
-							//	await this.writeFailureAsync("500 Internal Server Error", "An error occurred while processing this request.", cancellationToken: cancellationToken).ConfigureAwait(false); // This response should probably fail because the client has disconnected.
+						if (HandleCommonExceptionScenarios(e))
 							return;
-						}
-						if (shouldLogRequestsToFile())
-							SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, http_method + ":FAIL", request_url?.OriginalString, hostName);
-						if (e.GetExceptionOfType<HttpProcessorException>() != null)
-						{
-							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
-							if (!responseWritten)
-								await this.writeFailureAsync(e.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
-						}
-						else if (e.GetExceptionOfType<HttpProtocolException>() != null)
-						{
-							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
-							if (!responseWritten)
-								await this.writeFailureAsync("400 Bad Request", "The request cannot be fulfilled due to bad syntax.", cancellationToken: cancellationToken).ConfigureAwait(false);
-							return;
-						}
-						else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
-						{
-							// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
-							/*
-		System.IO.IOException: The decryption operation failed, see inner exception.
-		Inner Exception:
-		{
-		Interop+OpenSsl+SslException: Decrypt failed with OpenSSL error - SSL_ERROR_SSL.
-		Inner Exception:
-		{
-		Interop+Crypto+OpenSslCryptographicException: error:0A000119:SSL routines::decryption failed or bad record mac
-		}
-		at Interop.OpenSsl.Decrypt(SafeSslHandle context, Span`1 buffer, SslErrorCode& errorCode)
-		at System.Net.Security.SslStreamPal.DecryptMessage(SafeDeleteSslContext securityContext, Span`1 buffer, Int32& offset, Int32& count)
-		}
-		at System.Net.Security.SslStream.ReadAsyncInternal[TIOAdapter](TIOAdapter adapter, Memory`1 buffer)
-		at System.Net.Security.SslStream.Read(Byte[] buffer, Int32 offset, Int32 count)
-		at System.Net.Security.SslStream.ReadByte()
-							 */
-							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
-							this.responseWritten = true;
-							return;
-						}
-						else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)
-						{
-							SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
-							if (!responseWritten)
-								await this.writeFailureAsync("500 Internal Server Error", "An error occurred while processing this request.", cancellationToken: cancellationToken).ConfigureAwait(false);
-							return; // Close the connection.  The tcpStream still has an unknown amount of unread data before the next request.
-						}
-						else
-						{
-							SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
-							if (!responseWritten)
-								await this.writeFailureAsync("500 Internal Server Error", "An error occurred while processing this request.", cancellationToken: cancellationToken).ConfigureAwait(false);
-						}
 					}
-					finally
-					{
-						if (!responseWritten)
-							await this.writeFailureAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-					}
-					await outputStream.FlushAsync().ConfigureAwait(false);
-					if (tcpStream is WritableChunkedTransferEncodingStream)
-						(tcpStream as WritableChunkedTransferEncodingStream).Close();
-					await tcpStream.FlushAsync().ConfigureAwait(false);
-					// For some reason, GZip compression only works if we dispose streams here, not in the finally block.
-					try
-					{
-						// Safe to dispose StreamWriter because it was created with the leaveOpen option.
-#if NET6_0
-						await outputStream.DisposeAsync().ConfigureAwait(false);
-#else
-						outputStream.Dispose();
-#endif
-					}
-					catch (ThreadAbortException) { throw; }
-					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
-					try
-					{
-						// Safe to dispose GZipStream because it was created with the leaveOpen option.
-						if (tcpStream is GZipStream)
-						{
-#if NET6_0
-							await tcpStream.DisposeAsync().ConfigureAwait(false);
-#else
-							tcpStream.Dispose();
-#endif
-						}
-					}
-					catch (ThreadAbortException) { throw; }
-					catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
-					outputStream = null;
-					tcpStream = null;
+					Response.FinishSync();
 					srv.Notify_RequestHandled();
 				}
-				while (keepAlive && CheckIfStillConnected());
+				while (Response.KeepaliveTimeSeconds > 0);
 			}
 			catch (OperationCanceledException) { return; }
-			catch (ThreadAbortException) { throw; }
 			catch (Exception ex)
 			{
 				if (!IsOrdinaryDisconnectException(ex))
@@ -789,12 +335,74 @@ namespace BPUtil.SimpleHttp
 			}
 			finally
 			{
-				srv.Notify_ConnectionClosed(this);
+				try
+				{
+					tcpStream?.Dispose();
+					tcpStream = null;
+				}
+				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+				FinalConnectionCleanup();
+			}
+		}
+
+		/// <summary>
+		/// Processes the request asynchronously.
+		/// </summary>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		public async Task ProcessAsync(CancellationToken cancellationToken = default)
+		{
+			try
+			{
+				CommonRequestPreprocessing(true);
+
+				if (!await TLS.TlsNegotiate.NegotiateAsync(this, cancellationToken).ConfigureAwait(false))
+					return;
+
+				tcpStream = new UnreadableStream(tcpStream, false);
+
+				do
+				{
+					RecycleConnection();
+					try
+					{
+						Request = await SimpleHttpRequest.FromStreamAsync(base_uri_this_server, (UnreadableStream)tcpStream, readTimeoutSeconds * 1000, cancellationToken).ConfigureAwait(false);
+						try
+						{
+							Response = new SimpleHttpResponse(this);
+
+							CommonRequestProcessing();
+
+							HttpServerAsync s = srv as HttpServerAsync;
+							await s.handleRequest(this, Request.HttpMethod, cancellationToken).ConfigureAwait(false);
+						}
+						finally
+						{
+							await Request.CleanupAsync(readTimeoutSeconds * 1000, cancellationToken).ConfigureAwait(false);
+						}
+					}
+					catch (OperationCanceledException) { return; }
+					catch (Exception e)
+					{
+						if (HandleCommonExceptionScenarios(e))
+							return;
+					}
+					await Response.FinishAsync(cancellationToken).ConfigureAwait(false);
+					srv.Notify_RequestHandled();
+				}
+				while (Response.KeepaliveTimeSeconds > 0);
+			}
+			catch (OperationCanceledException) { return; }
+			catch (Exception ex)
+			{
+				if (!IsOrdinaryDisconnectException(ex))
+					SimpleHttpLogger.LogVerbose(ex);
+			}
+			finally
+			{
 				try
 				{
 					if (tcpStream != null)
 					{
-						// Several error cases above may leave the tcpStream object intact and undisposed.
 #if NET6_0
 						await tcpStream.DisposeAsync().ConfigureAwait(false);
 #else
@@ -803,50 +411,165 @@ namespace BPUtil.SimpleHttp
 						tcpStream = null;
 					}
 				}
-				catch (ThreadAbortException) { throw; }
 				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
-				try
-				{
-					tcpClient.Close();
-				}
-				catch (ThreadAbortException) { throw; }
-				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+				FinalConnectionCleanup();
 			}
 		}
 
-#if NET6_0
-		private ConcurrentDictionary<X509Certificate, SslStreamCertificateContext> tlsCertContexts = new ConcurrentDictionary<X509Certificate, SslStreamCertificateContext>();
-		private SslStreamCertificateContext CreateSslStreamCertificateContextFromCert(X509Certificate cert)
+		private void CommonRequestPreprocessing(bool isAsync)
 		{
-			X509Certificate2 c2;
-			if (cert is X509Certificate2)
-				c2 = (X509Certificate2)cert;
-			else
-				c2 = new X509Certificate2(cert);
-			return SslStreamCertificateContext.Create(c2, null);
-		}
-#endif
-		private void TlsNegotiate(X509Certificate cert)
-		{
-#if NET6_0
-			SslServerAuthenticationOptions sslServerOptions = new SslServerAuthenticationOptions();
-			sslServerOptions.ServerCertificateContext = tlsCertContexts.GetOrAdd(cert, CreateSslStreamCertificateContextFromCert);
-			sslServerOptions.EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
-			sslServerOptions.AllowRenegotiation = false; // Client-side renegotiation is viewed as insecure by the industry and is not available in TLS 1.3.
-			if (HttpServerBase.IsTlsCipherSuitesPolicySupported())
+			IsAsync = isAsync;
+			srv.Notify_ConnectionOpen(this);
+			if (!isAsync)
 			{
-				IEnumerable<TlsCipherSuite> suites = srv.GetAllowedCipherSuites(this);
-				if (suites != null)
-					sslServerOptions.CipherSuitesPolicy = new CipherSuitesPolicy(suites);
+				tcpClient.ReceiveTimeout = 5000; // Affects synchronous I/O only!
+				tcpClient.SendTimeout = 5000; // Affects synchronous I/O only!
+			}
+			tcpClient.NoDelay = true;
+			tcpStream = tcpClient.GetStream();
+		}
+		/// <summary>
+		/// Perform actions that should happen each time we are about to read a request.
+		/// </summary>
+		private void RecycleConnection()
+		{
+			Request = null;
+			Response = null;
+
+			// While the server is under low load, a larger buffer is allowed for better write performance.
+			if (this.ServerIsUnderHighLoad)
+				tcpClient.SendBufferSize = 8192;
+			else
+				tcpClient.SendBufferSize = 65536;
+		}
+
+		/// <summary>
+		/// <para>Call after creating the Request and Response objects.</para>
+		/// <para>Performs common request processing that is the same between Async and Sync processing methods.</para>
+		/// </summary>
+		private void CommonRequestProcessing()
+		{
+			if (string.IsNullOrWhiteSpace(HostName))
+			{
+				HostName = Request.Headers.Get("Host");
+				if (HostName != null)
+				{
+					string portSuffix = ":" + LocalEndPoint.Port;
+					if (HostName.EndsWith(portSuffix))
+						HostName = HostName.Substring(0, HostName.Length - portSuffix.Length);
+				}
+			}
+			if (string.IsNullOrWhiteSpace(HostName))
+				HostName = null;
+
+			IPAddress originalRemoteIp = RemoteIPAddress;
+			if (srv.XRealIPHeader)
+			{
+				string headerValue = Request.Headers.Get("X-Real-Ip");
+				if (!string.IsNullOrWhiteSpace(headerValue))
+				{
+					if (srv.IsTrustedProxyServer(this, originalRemoteIp))
+					{
+						headerValue = headerValue.Trim();
+						if (IPAddress.TryParse(headerValue, out IPAddress addr))
+							remoteIpAddress = addr;
+					}
+				}
+			}
+			if (srv.XForwardedForHeader)
+			{
+				string headerValue = Request.Headers.Get("X-Forwarded-For");
+				if (!string.IsNullOrWhiteSpace(headerValue))
+				{
+					if (srv.IsTrustedProxyServer(this, originalRemoteIp))
+					{
+						// Because we trust the source of the header, we must trust that they validated the chain of IP addresses all the way back to the root.
+						// Therefore we should get the leftmost address; this is the true client IP.
+						headerValue = headerValue.Split(',').FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+						if (headerValue != null)
+						{
+							headerValue = headerValue.Trim();
+							if (IPAddress.TryParse(headerValue, out IPAddress addr))
+								remoteIpAddress = addr;
+						}
+					}
+				}
 			}
 
-			tcpStream = new SslStream(tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
-			((SslStream)tcpStream).AuthenticateAsServer(sslServerOptions);
-#else
-			tcpStream = new SslStream(tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
-			((SslStream)tcpStream).AuthenticateAsServer(cert, false, Tls13 | SslProtocols.Tls12, false);
-#endif
+			if (shouldLogRequestsToFile())
+				SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, Request.HttpMethod, Request.Url.OriginalString, HostName);
+		}
+		/// <summary>
+		/// <para>Handles exception scenarios that are common to both Async and Sync processing methods.</para>
+		/// <para>Returns true if the processor should return immediately with no need to flush unwritten data.</para>
+		/// </summary>
+		/// <param name="e">Exception that occurred.</param>
+		/// <returns></returns>
+		private bool HandleCommonExceptionScenarios(Exception e)
+		{
+			if (IsOrdinaryDisconnectException(e))
+				return true;
 
+			if (shouldLogRequestsToFile())
+				SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, Request?.HttpMethod + ":FAIL", Request?.Url.OriginalString, HostName);
+
+			HttpProcessorException hpex = e.GetExceptionOfType<HttpProcessorException>();
+			if (hpex != null)
+			{
+				SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
+				Response.PreventKeepalive();
+				if (!Response.ResponseHeaderWritten)
+				{
+					Response.Simple(hpex.StatusString, hpex.ResponseBody);
+					if (hpex.Headers != null)
+						foreach (HttpHeader header in hpex.Headers)
+							Response.Headers.Add(header);
+				}
+			}
+			else if (e.GetExceptionOfType<HttpProtocolException>() != null)
+			{
+				SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
+				Response.PreventKeepalive();
+				if (!Response.ResponseHeaderWritten)
+					Response.Simple("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
+			}
+			else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
+			{
+				// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
+				SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
+				Response.PreventKeepalive();
+				Response.ResponseHeaderWritten = true;
+				return true;
+			}
+			else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)
+			{
+				SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
+				Response.PreventKeepalive();
+				if (!Response.ResponseHeaderWritten)
+					Response.Simple("500 Internal Server Error", "An error occurred while processing this request.");
+			}
+			else
+			{
+				SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
+				Response.PreventKeepalive();
+				if (!Response.ResponseHeaderWritten)
+					Response.Simple("500 Internal Server Error", "An error occurred while processing this request.");
+			}
+			return false;
+		}
+
+		/// <summary>
+		/// Called when the HttpProcessor's process method is exiting.
+		/// </summary>
+		private void FinalConnectionCleanup()
+		{
+			try
+			{
+				tcpClient.Close();
+				tcpClient = null;
+			}
+			catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+			srv.Notify_ConnectionClosed(this);
 		}
 
 		/// <summary>
@@ -856,19 +579,6 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		public static bool IsOrdinaryDisconnectException(Exception ex)
 		{
-			//if (ex is IOException)
-			//{
-			//	if (ex.InnerException != null && ex.InnerException is SocketException)
-			//	{
-			//		//if (ex.InnerException.Message.Contains("An established connection was aborted by the software in your host machine")
-			//		//	|| ex.InnerException.Message.Contains("An existing connection was forcibly closed by the remote host")
-			//		//	|| ex.InnerException.Message.Contains("The socket has been shut down") /* Mono/Linux */
-			//		//	|| ex.InnerException.Message.Contains("Connection reset by peer") /* Mono/Linux */
-			//		//	|| ex.InnerException.Message.Contains("The socket is not connected") /* Mono/Linux */
-			//		//	)
-			//		return true; // Connection aborted.  This happens often enough that reporting it can be excessive.
-			//	}
-			//}
 			if (ex is SocketException && (ex as SocketException).SocketErrorCode != SocketError.InvalidArgument)
 				return true;
 			if (ex is HttpProcessor.EndOfStreamException)
@@ -891,830 +601,10 @@ namespace BPUtil.SimpleHttp
 		{
 			return srv.shouldLogRequestsToFile();
 		}
-		// The following function was the start of an attempt to support basic authentication, but I have since decided against it as basic authentication is very insecure.
-		//private NetworkCredential ParseAuthorizationCredentials()
-		//{
-		//    string auth = this.httpHeaders["Authorization"].ToString();
-		//    if (auth != null && auth.StartsWith("Basic "))
-		//    {
-		//        byte[] bytes =  System.Convert.FromBase64String(auth.Substring(6));
-		//        string creds = ASCIIEncoding.ASCII.GetString(bytes);
-
-		//    }
-		//    return new NetworkCredential();
-		//}
-
-		/// <summary>
-		/// Parses the first line of the http request to get the request method, url, and protocol version. Returns true if successful or false if we encountered the end of the stream.  May throw various exceptions.
-		/// </summary>
-		/// <param name="stream">Stream to read data from.</param>
-		/// <param name="cancellationToken">Cancellation Token</param>
-		/// <exception cref="HttpProtocolException">Thrown if an HTTP protocol violation occurs.</exception>
-		private async Task<bool> parseRequest(UnreadableStream stream, CancellationToken cancellationToken = default)
-		{
-			string request = await streamReadLineAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
-			if (request == null)
-				return false;
-			string[] tokens = request.Split(' ');
-			if (tokens.Length != 3)
-				throw new HttpProtocolException("invalid http request line: " + request);
-			http_method = tokens[0].ToUpper();
-
-			try
-			{
-				if (tokens[1].IStartsWith("http://") || tokens[1].IStartsWith("https://") || tokens[1].IStartsWith("ws://") || tokens[1].IStartsWith("wss://"))
-					request_url = new Uri(tokens[1]);
-				else
-					request_url = new Uri(base_uri_this_server, tokens[1]);
-			}
-			catch (Exception ex)
-			{
-				throw new Exception("Invalid URL given in http request: " + request, ex); // TODO: Make this HttpProtocolException so that it will only be logged when verbose logging is enabled.
-			}
-
-			requestedPage = request_url.AbsolutePath.StartsWith("/") ? request_url.AbsolutePath.Substring(1) : request_url.AbsolutePath;
-
-			http_protocol_versionstring = tokens[2];
-			return true;
-		}
-
-		/// <summary>
-		/// Parses the http headers
-		/// </summary>
-		/// <param name="stream">Input stream.</param>
-		/// <param name="httpHeaders">Http header collection where parsed headers should be stored.</param>
-		/// <param name="cancellationToken">Cancellation Token</param>
-		internal static async Task readHeadersAsync(UnreadableStream stream, HttpHeaderCollection httpHeaders, CancellationToken cancellationToken = default)
-		{
-			string line;
-			while ((line = await streamReadLineAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false)) != "")
-			{
-				if (line == null)
-					throw new EndOfStreamException();
-				int separator = line.IndexOf(':');
-				if (separator == -1)
-					throw new HttpProtocolException("invalid http header line: " + line);
-				string name = line.Substring(0, separator);
-				int pos = separator + 1;
-				while (pos < line.Length && line[pos] == ' ')
-					pos++; // strip any spaces
-
-				string value = line.Substring(pos);
-				httpHeaders.Add(name, value);
-			}
-		}
-
-		internal static async Task<string> streamReadLineAsync(StreamReader reader, int maxLength = 32768)
-		{
-			string str = await reader.ReadLineAsync().ConfigureAwait(false);
-			if (str.Length >= maxLength)
-				throw new HttpProcessorException("413 Entity Too Large");
-			return str; // Null if end of stream.
-		}
-
-		/// <summary>
-		/// <para>Handles all request methods.</para>
-		/// <para>If the request has a body, this method provides it as <see cref="RequestBodyStream"/> which can be read only one time with no seeking.</para>
-		/// <para>Requests with a body must either specify a `Content-Length` or use `Transfer-Encoding: chunked`.</para>
-		/// </summary>
-		/// <param name="cancellationToken">Cancellation Token</param>
-		private async Task handleRequest(CancellationToken cancellationToken)
-		{
-			RequestBodyStream = null;
-			try
-			{
-				if (this.http_method != "TRACE")
-				{
-#pragma warning disable CS0618
-					string contentType = GetHeaderValue("Content-Type");
-#pragma warning restore
-					string content_length_str = GetHeaderValue("Content-Length");
-					if (!string.IsNullOrWhiteSpace(content_length_str))
-					{
-						if (long.TryParse(content_length_str, out long content_len))
-						{
-							if (content_len < 0)
-							{
-								SimpleHttpLogger.LogVerbose(this.RemoteIPAddressStr + " " + this.http_method + " - Content-Length (" + content_len + ") is not valid.");
-								await this.writeFailureAsync("400 Bad Request", "Content-Length was not valid.", cancellationToken: cancellationToken).ConfigureAwait(false);
-								return;
-							}
-							ContentLength = content_len;
-							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Request body will be read as Substream(" + content_len + ").");
-							RequestBodyStream = this.tcpStream.Substream(content_len);
-						}
-					}
-					else
-					{
-						string transferEncoding = GetHeaderValue("Transfer-Encoding");
-						if (transferEncoding != null)
-						{
-							string[] transferEncodingHeaderValues = transferEncoding
-								.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-								.Select(s => s.Trim())
-								.ToArray();
-							if (transferEncodingHeaderValues.Contains("chunked") && transferEncodingHeaderValues.Length == 1) // No support for multiple transfer encodings currently.
-							{
-								RequestBodyStream = new ReadableChunkedTransferEncodingStream(this.tcpStream);
-								SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Request body will be read as ReadableChunkedTransferEncodingStream.");
-							}
-						}
-					}
-					if (RequestBodyStream == null)
-					{
-						if (this.http_method == "POST" || this.http_method == "PUT" || this.http_method == "PATCH")
-						{
-							await this.writeFailureAsync("411 Length Required", "This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".", cancellationToken: cancellationToken).ConfigureAwait(false);
-							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "The request did not specify the length of its content via a method understood by this server.  This server requires that all POST, PUT, and PATCH requests include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".");
-							return;
-						}
-					}
-
-					if (contentType != null && contentType.Contains("application/x-www-form-urlencoded"))
-					{
-						if (RequestBodyStream == null)
-						{
-							await this.writeFailureAsync("411 Length Required", "This server requires requests with \"Content-Type: application/x-www-form-urlencoded\" to include a \"Content-Length\" header or use \"Transfer-Encoding: chunked\".", cancellationToken: cancellationToken).ConfigureAwait(false);
-							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "The request specified \"Content-Type: application/x-www-form-urlencoded\" but this server was unable to read the request body.");
-							return;
-						}
-						const int MAX_FORM_SIZE = 2 * 1024 * 1024;
-						bool lengthLimitExceeded = false;
-						if (ContentLength != null)
-							lengthLimitExceeded = ContentLength > MAX_FORM_SIZE;
-						if (!lengthLimitExceeded)
-						{
-							ByteUtil.AsyncReadResult readResult = await ByteUtil.ReadToEndWithMaxLengthAsync(RequestBodyStream, MAX_FORM_SIZE, cancellationToken).ConfigureAwait(false);
-							if (readResult.EndOfStream)
-							{
-								string formDataRaw = ByteUtil.Utf8NoBOM.GetString(readResult.Data);
-
-								RawPostParams = ParseQueryStringArguments(formDataRaw, false, true, convertPlusToSpace: true);
-								PostParams = ParseQueryStringArguments(formDataRaw, false, convertPlusToSpace: true);
-
-								MemoryStream ms = new MemoryStream(readResult.Data);
-								RequestBodyStream = ms;
-							}
-							else
-								lengthLimitExceeded = true;
-						}
-						if (lengthLimitExceeded)
-						{
-							SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Content-Length (" + MAX_FORM_SIZE + ") too big for a \"application/x-www-form-urlencoded\" request.  Server can handle up to " + MAX_FORM_SIZE + " bytes.");
-							await this.writeFailureAsync("413 Request Entity Too Large", "Request Too Large", cancellationToken: cancellationToken).ConfigureAwait(false);
-							return;
-						}
-					}
-				}
-
-				if (srv is HttpServerAsync)
-				{
-					HttpServerAsync s = srv as HttpServerAsync;
-					await s.handleRequest(this, http_method, cancellationToken).ConfigureAwait(false);
-				}
-				else if (srv is HttpServer)
-				{
-					HttpServer s = srv as HttpServer;
-					if (this.http_method == "GET")
-						s.handleGETRequest(this);
-					else if (this.http_method == "POST")
-						s.handlePOSTRequest(this);
-					else
-						s.handleOtherRequest(this, http_method);
-				}
-				else
-					throw new Exception("Unrecognized type of Http Server: " + srv.GetType().Name);
-			}
-			finally
-			{
-				if (RequestBodyStream != null)
-				{
-					if (RequestBodyStream is MemoryStream
-						|| (RequestBodyStream is Substream && (RequestBodyStream as Substream).EndOfStream)
-						|| (RequestBodyStream is ReadableChunkedTransferEncodingStream && (RequestBodyStream as ReadableChunkedTransferEncodingStream).EndOfStream))
-					{
-#if NET6_0
-						await RequestBodyStream.DisposeAsync().ConfigureAwait(false);
-#else
-						RequestBodyStream.Dispose();
-#endif
-						RequestBodyStream = null;
-					}
-					else
-					{
-						int bytesToRead = 125000;
-						ByteUtil.AsyncDiscardResult discardResult = await ByteUtil.DiscardUntilEndOfStreamWithMaxLengthAsync(RequestBodyStream, bytesToRead, cancellationToken).ConfigureAwait(false);
-#if NET6_0
-						await RequestBodyStream.DisposeAsync().ConfigureAwait(false);
-#else
-						RequestBodyStream.Dispose();
-#endif
-						RequestBodyStream = null;
-						if (discardResult.EndOfStream)
-						{
-							if (discardResult.BytesDiscarded > 0)
-								SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + "Request body was not fully read by the server.  The remainder of the stream was discarded.");
-							// else // Nothing was discarded, meaning the server did read the entire request body.
-						}
-						else
-						{
-							throw new HttpRequestBodyNotReadException("Request body was not fully read by the server, and there was more than " + StringUtil.FormatNetworkBytes(bytesToRead) + " remaining.  Closing this connection.");
-						}
-					}
-				}
-			}
-		}
 
 		private string GetDebugLogPrefix()
 		{
-			return this.RemoteIPAddressStr + " " + this.http_method + " " + this.request_url + " - ";
-		}
-		#region Response Compression
-		/// <summary>
-		/// Automatically compresses the response body using gzip encoding, if the client requested it.
-		/// Must be called BEFORE writeSuccess().
-		/// Note that the Content-Length header, if provided, should be the COMPRESSED length, so you likely won't know what value to use.  Omit the header instead.
-		/// Returns true if the response will be compressed, and sets this.compressionType.
-		/// </summary>
-		/// <returns></returns>
-		public virtual bool CompressResponseIfCompatible()
-		{
-			if (responseWritten)
-				return false;
-			if (ClientRequestsGZipCompression)
-			{
-				compressionType = CompressionType.GZip;
-				return true;
-			}
-			return false;
-		}
-		/// <summary>
-		/// Called automatically by writeSuccess method; flushes the existing output streams and wraps them in a gzipstream if gzip compression is to be used.
-		/// </summary>
-		private async Task EnableCompressionIfSet()
-		{
-			if (!responseWritten)
-				return;
-			if (this.http_method == "HEAD")
-				return; // No response should be written for "HEAD", therefore we should not wrap the output streams.
-			if (compressionType == CompressionType.GZip)
-			{
-				if (tcpStream is GZipStream)
-					return;
-				await outputStream.FlushAsync().ConfigureAwait(false);
-				await tcpStream.FlushAsync().ConfigureAwait(false);
-				tcpStream = new GZipStream(tcpStream, CompressionLevel.Optimal, true);
-				outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
-			}
-		}
-		/// <summary>
-		/// Called automatically by writeSuccess method; flushes the existing output streams and wraps them in a ChunkedTransferEncodingStream which ensures that all future data written to tcpStream or outputStream will be have appropriate chunk headers and footers written.
-		/// </summary>
-		private async Task EnableTransferEncodingChunked()
-		{
-			if (!responseWritten)
-				return;
-			if (tcpStream is WritableChunkedTransferEncodingStream)
-				return;
-			if (this.http_method == "HEAD")
-				return; // No response should be written for "HEAD", therefore we should not wrap the output streams.
-			await outputStream.FlushAsync().ConfigureAwait(false);
-			await tcpStream.FlushAsync().ConfigureAwait(false);
-			tcpStream = new WritableChunkedTransferEncodingStream(tcpStream);
-			outputStream = new StreamWriter(tcpStream, Utf8NoBOM, 1024, true);
-		}
-		/// <summary>
-		/// Returns true if the client has requested gzip compression.
-		/// </summary>
-		public bool ClientRequestsGZipCompression
-		{
-			get
-			{
-				string acceptEncoding = GetHeaderValue("Accept-Encoding", "");
-				string[] types = acceptEncoding.Split(',');
-				foreach (string type in types)
-					if (type.Trim().ToLower() == "gzip")
-					{
-						return true;
-					}
-				return false;
-			}
-		}
-		#endregion
-		/// <summary>
-		/// Synchronously writes the response headers for a successful response.  Call this one time before writing your response, after you have determined that the request is valid.
-		/// </summary>
-		/// <param name="contentType">The MIME type of your response. If null or empty, it will not be written (unless provided in <paramref name="additionalHeaders"/>).</param>
-		/// <param name="contentLength"><para>
-		/// (OPTIONAL) The length of your response, in bytes, if you know it. If you don't know it, provide -1, and if keep-alive is being used, then "Transfer-Encoding: chunked" will be used automatically on the output stream and you don't need to know anything about it.
-		/// </para>
-		/// <para>Some response codes do not allow a response body.  If a positive Content-Length is given with a response code that does not allow a response body, an exception will be thrown.  In such a case, it is optimal to use a negative value for Content-Length so the header will be omitted and no exception will be thrown.
-		/// </para></param>
-		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
-		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeSuccess(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
-		{
-			writeSuccessAsync(contentType, contentLength, responseCode, additionalHeaders).Wait();
-		}
-		/// <summary>
-		/// Asynchronously writes the response headers for a successful response.  Call this one time before writing your response, after you have determined that the request is valid.
-		/// </summary>
-		/// <param name="contentType">The MIME type of your response. If null or empty, it will not be written (unless provided in <paramref name="additionalHeaders"/>).</param>
-		/// <param name="contentLength"><para>
-		/// (OPTIONAL) The length of your response, in bytes, if you know it. If you don't know it, provide -1, and if keep-alive is being used, then "Transfer-Encoding: chunked" will be used automatically on the output stream and you don't need to know anything about it.
-		/// </para>
-		/// <para>Some response codes do not allow a response body.  If a positive Content-Length is given with a response code that does not allow a response body, an exception will be thrown.  In such a case, it is optimal to use a negative value for Content-Length so the header will be omitted and no exception will be thrown.
-		/// </para></param>
-		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
-		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		/// <param name="cancellationToken">Cancellation Token.</param>
-		public virtual async Task writeSuccessAsync(string contentType = "text/html; charset=utf-8", long contentLength = -1, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null, CancellationToken cancellationToken = default)
-		{
-			if (responseWritten)
-				throw new Exception("A response has already been written to this stream.");
-
-			int? responseStatusInt = NumberUtil.FirstInt(responseCode);
-			if (responseStatusInt == null)
-				throw new ArgumentException("Response code was not provided correctly.", "responseCode");
-
-			bool allowResponseBody = HttpServerBase.HttpStatusCodeCanHaveResponseBody(responseStatusInt.Value);
-			if (!allowResponseBody)
-			{
-				if (contentLength > 0)
-					throw new ArgumentException("The response code " + responseCode + " does not allow a response body, but contentLength " + contentLength + " was argued.", "contentLength");
-			}
-
-			responseWritten = true;
-			StringBuilder sb = new StringBuilder();
-			HashSet<string> reservedHeaderKeys = new HashSet<string>(new string[] { "Connection", "Keep-Alive" });
-
-			sb.AppendLineRN("HTTP/1.1 " + responseCode);
-			if (!string.IsNullOrEmpty(contentType))
-				WriteReservedHeader(sb, reservedHeaderKeys, "Content-Type", contentType);
-			if (contentLength > -1)
-				WriteReservedHeader(sb, reservedHeaderKeys, "Content-Length", contentLength.ToString());
-			bool chunkedTransferEncoding = allowResponseBody && this.keepAliveRequested && contentLength < 0;
-			if (chunkedTransferEncoding)
-				WriteReservedHeader(sb, reservedHeaderKeys, "Transfer-Encoding", "chunked");
-			if (compressionType == CompressionType.GZip)
-				WriteReservedHeader(sb, reservedHeaderKeys, "Content-Encoding", "gzip");
-			string cookieStr = responseCookies.ToString();
-			if (!string.IsNullOrEmpty(cookieStr))
-			{
-				reservedHeaderKeys.Add("Set-Cookie");
-				sb.AppendLineRN(cookieStr);
-			}
-			if (additionalHeaders != null)
-				foreach (HttpHeader header in additionalHeaders)
-				{
-					if (reservedHeaderKeys.Contains(header.Key, true))
-						throw new ApplicationException("writeSuccess() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
-					sb.AppendLineRN(header.Key + ": " + header.Value);
-				}
-
-			this.keepAlive = this.keepAliveRequested && !this.ServerIsUnderHighLoad;
-			if (this.keepAlive)
-			{
-				sb.AppendLineRN("Connection: keep-alive");
-				sb.AppendLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
-			}
-			else
-				sb.AppendLineRN("Connection: close");
-			sb.AppendLineRN("");
-
-			await outputStream.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
-
-			tcpClient.NoDelay = true;
-			await EnableCompressionIfSet().ConfigureAwait(false);
-			if (chunkedTransferEncoding)
-				await EnableTransferEncodingChunked().ConfigureAwait(false);
-		}
-		private void WriteReservedHeader(StringBuilder sb, HashSet<string> reservedHeaderKeys, string key, string value)
-		{
-			reservedHeaderKeys.Add(key);
-			sb.AppendLineRN(key + ": " + value);
-		}
-
-		/// <summary>
-		/// Synchronously writes a failure response header.  Call this one time to return an error response.
-		/// </summary>
-		/// <param name="code">(OPTIONAL) The http error code (including explanation entity).  For example: "404 Not Found" where 404 is the error code and "Not Found" is the explanation.</param>
-		/// <param name="description">(OPTIONAL) A description string to send after the headers as the response.  This is typically shown to the remote user in his browser.  If null, the code string is sent here.  If "", no response body is sent by this function, and you may or may not want to write your own.</param>
-		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeFailure(string code = "404 Not Found", string description = null, HttpHeaderCollection additionalHeaders = null)
-		{
-			writeFailureAsync(code, description, additionalHeaders).Wait();
-		}
-		/// <summary>
-		/// Asynchronously writes a failure response header.  Call this one time to return an error response.
-		/// </summary>
-		/// <param name="code">(OPTIONAL) The http error code (including explanation entity).  For example: "404 Not Found" where 404 is the error code and "Not Found" is the explanation.</param>
-		/// <param name="description">(OPTIONAL) A description string to send after the headers as the response.  This is typically shown to the remote user in his browser.  If null, the code string is sent here.  If "", no response body is sent by this function, and you may or may not want to write your own.</param>
-		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		/// <param name="cancellationToken">Cancellation Token.</param>
-		public virtual async Task writeFailureAsync(string code = "404 Not Found", string description = null, HttpHeaderCollection additionalHeaders = null, CancellationToken cancellationToken = default)
-		{
-			if (responseWritten)
-				throw new Exception("A response has already been written to this stream.");
-			if (code == null)
-				throw new ArgumentNullException("code", "HttpProcessor.writeFailure() requires a non-null code argument.");
-
-			if (description == null)
-				description = code;
-			int contentLength = Utf8NoBOM.GetByteCount(description);
-
-			responseWritten = true;
-			StringBuilder sb = new StringBuilder();
-			HashSet<string> reservedHeaderKeys = new HashSet<string>();
-			reservedHeaderKeys.Add("Connection");
-			sb.AppendLineRN("HTTP/1.1 " + code);
-			WriteReservedHeader(sb, reservedHeaderKeys, "Content-Type", "text/plain; charset=utf-8");
-			WriteReservedHeader(sb, reservedHeaderKeys, "Content-Length", contentLength.ToString());
-			if (additionalHeaders != null)
-				foreach (HttpHeader header in additionalHeaders)
-				{
-					if (reservedHeaderKeys.Contains(header.Key, true))
-						throw new ApplicationException("writeFailure() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
-					sb.AppendLineRN(header.Key + ": " + header.Value);
-				}
-			this.keepAlive = this.keepAliveRequested && !this.ServerIsUnderHighLoad;
-			if (this.keepAlive)
-			{
-				sb.AppendLineRN("Connection: keep-alive");
-				sb.AppendLineRN("Keep-Alive: timeout=" + GetKeepaliveTimeoutSeconds());
-			}
-			else
-				sb.AppendLineRN("Connection: close");
-			sb.AppendLineRN("");
-			if (description != "")
-				sb.Append(description);
-			await outputStream.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
-		}
-
-		/// <summary>
-		/// Synchronously writes a redirect header instructing the remote user's browser to load the URL you specify.  Call this one time and do not write any other data to the response stream.
-		/// </summary>
-		/// <param name="redirectToUrl">URL to redirect to.</param>
-		public virtual void writeRedirect(string redirectToUrl)
-		{
-			writeRedirectAsync(redirectToUrl).Wait();
-		}
-
-		/// <summary>
-		/// Asynchronously writes a redirect header instructing the remote user's browser to load the URL you specify.  Call this one time and do not write any other data to the response stream.
-		/// </summary>
-		/// <param name="redirectToUrl">URL to redirect to.</param>
-		/// <param name="cancellationToken">Cancellation Token.</param>
-		public virtual async Task writeRedirectAsync(string redirectToUrl, CancellationToken cancellationToken = default)
-		{
-			if (responseWritten)
-				throw new Exception("A response has already been written to this stream.");
-			responseWritten = true;
-			StringBuilder sb = new StringBuilder();
-			sb.AppendLineRN("HTTP/1.1 302 Found");
-			sb.AppendLineRN("Location: " + redirectToUrl);
-			sb.AppendLineRN("Connection: close");
-			sb.AppendLineRN("");
-			await outputStream.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
-		}
-
-		/// <summary>
-		/// Synchronously writes a static file response with built-in caching support.
-		/// </summary>
-		/// <param name="filePath">Path to the file on disk.</param>
-		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
-		public virtual void writeStaticFile(string filePath, string contentTypeOverride = null, bool canCache = true)
-		{
-			if (responseWritten)
-				throw new Exception("A response has already been written to this stream.");
-
-			writeStaticFile(new FileInfo(filePath), contentTypeOverride, canCache);
-		}
-		/// <summary>
-		/// Asynchronously writes a static file response with built-in caching support.
-		/// </summary>
-		/// <param name="filePath">Path to the file on disk.</param>
-		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
-		/// <param name="cancellationToken">Cancellation Token.</param>
-		public virtual async Task writeStaticFileAsync(string filePath, string contentTypeOverride = null, bool canCache = true, CancellationToken cancellationToken = default)
-		{
-			if (responseWritten)
-				throw new Exception("A response has already been written to this stream.");
-
-			await writeStaticFileAsync(new FileInfo(filePath), contentTypeOverride, canCache).ConfigureAwait(false);
-		}
-		/// <summary>
-		/// Synchronously writes a static file response with built-in caching support.
-		/// </summary>
-		/// <param name="fi">File on disk.</param>
-		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
-		public virtual void writeStaticFile(FileInfo fi, string contentTypeOverride = null, bool canCache = true)
-		{
-			writeStaticFileAsync(fi, contentTypeOverride, canCache).Wait();
-		}
-		/// <summary>
-		/// Asynchronously writes a static file response with built-in caching support.
-		/// </summary>
-		/// <param name="fi">File on disk.</param>
-		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
-		/// <param name="cancellationToken">Cancellation Token.</param>
-		public virtual async Task writeStaticFileAsync(FileInfo fi, string contentTypeOverride = null, bool canCache = true, CancellationToken cancellationToken = default)
-		{
-			if (responseWritten)
-				throw new Exception("A response has already been written to this stream.");
-
-			if (!fi.Exists)
-			{
-				await writeFailureAsync("404 Not Found", cancellationToken: cancellationToken).ConfigureAwait(false);
-				return;
-			}
-
-			bool cacheHit = false;
-
-			HttpHeaderCollection headers = new HttpHeaderCollection();
-			headers["Content-Type"] = contentTypeOverride != null ? contentTypeOverride : Mime.GetMimeType(fi.Extension);
-			headers["Date"] = DateTime.UtcNow.ToString("R");
-			headers["ETag"] = await MakeETag(fi).ConfigureAwait(false);
-			headers["Last-Modified"] = fi.GetLastWriteTimeUtcAndRepairIfBroken().ToString("R");
-			headers["Age"] = "0";
-			if (canCache && srv.CanCacheFileExtension(fi.Extension))
-				headers["Cache-Control"] = "max-age=604800, public";
-			else
-				headers["Cache-Control"] = "no-cache"; // Caching is technically allowed, but the user agent should always revalidate to ensure the cached value is not stale.
-
-
-			// If-None-Match
-			// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
-			string IfNoneMatch = GetHeaderValue("If-None-Match");
-			if (IfNoneMatch != null)
-			{
-				if (headers["ETag"] == IfNoneMatch)
-					cacheHit = true;
-			}
-			else
-			{
-				string IfModifiedSince = GetHeaderValue("If-Modified-Since");
-				if (IfModifiedSince != null && IfModifiedSince.IEquals(headers["Last-Modified"]))
-					cacheHit = true;
-			}
-			if (cacheHit)
-			{
-				await writeSuccessAsync(null, -1, "304 Not Modified", headers, cancellationToken).ConfigureAwait(false);
-			}
-			else
-			{
-				await writeSuccessAsync(null, fi.Length, additionalHeaders: headers, cancellationToken: cancellationToken).ConfigureAwait(false);
-				await outputStream.FlushAsync().ConfigureAwait(false);
-				using (FileStream fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-					await fs.CopyToAsync(tcpStream, 81920, cancellationToken).ConfigureAwait(false);
-				await tcpStream.FlushAsync().ConfigureAwait(false);
-			}
-		}
-
-		/// <summary>
-		/// Creates an ETag for the given file, which is a string that is expected to be the same when the file content is the same, and different when the file content is different.  If an error occurs, this method will throw an exception, not return null.
-		/// </summary>
-		/// <param name="fi">FileInfo representing the file for which an ETag should be generated.  It is required that this file exists and is readable.</param>
-		/// <param name="cancellationToken">Cancellation Token.</param>
-		/// <returns></returns>
-		private async Task<string> MakeETag(FileInfo fi, CancellationToken cancellationToken = default)
-		{
-			const long oneMillion = 1000000;
-			// Use SHA1 hash. It is faster than MD5 or xxHash.
-			using (System.Security.Cryptography.SHA1 sha = System.Security.Cryptography.SHA1.Create())
-			{
-				using (FileStream fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-				{
-					Stream stream;
-					if (fi.Length > 3 * oneMillion) // > 3MB
-					{
-						// ETag structure: Hash of [first 1MB, last 1MB, file size, file last modified date]
-						stream = new ConcatenatedStream(idx =>
-						{
-							if (idx == 0)
-							{
-								return fs.Substream(oneMillion);
-							}
-							else if (idx == 1)
-							{
-								fs.Seek(-oneMillion, SeekOrigin.End);
-								return fs.Substream(oneMillion);
-							}
-							else if (idx == 2)
-							{
-								byte[] buf = new byte[16];
-								ByteUtil.WriteInt64(fi.Length, buf, 0);
-								ByteUtil.WriteInt64(TimeUtil.GetTimeInMsSinceEpoch(fi.GetLastWriteTimeUtcAndRepairIfBroken()), buf, 8);
-								return new MemoryStream(buf);
-							}
-							else
-								return null;
-						});
-					}
-					else
-					{
-						// ETag structure: Hash of [file content]
-						stream = fs;
-					}
-#if NET6_0
-					byte[] hash = await sha.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
-#else
-					byte[] hash = await Task.Run(() => sha.ComputeHash(stream), cancellationToken).ConfigureAwait(false);
-#endif
-					return Base64UrlMod.ToBase64UrlMod(hash);
-				}
-			}
-		}
-
-		/// <summary>
-		/// Writes response headers to finish the WebSocket handshake with the client. No extensions are supported (such as compression) at this time.
-		/// </summary>
-		public virtual void writeWebSocketUpgrade()
-		{
-			writeWebSocketUpgradeAsync().Wait();
-		}
-
-		/// <summary>
-		/// Writes response headers to finish the WebSocket handshake with the client. No extensions are supported (such as compression) at this time.
-		/// </summary>
-		/// <param name="cancellationToken">Cancellation Token</param>
-		public virtual async Task writeWebSocketUpgradeAsync(CancellationToken cancellationToken = default)
-		{
-			if (responseWritten)
-				throw new Exception("A response has already been written to this stream.");
-			responseWritten = true;
-			StringBuilder sb = new StringBuilder();
-			sb.AppendLineRN("HTTP/1.1 101 Switching Protocols");
-			sb.AppendLineRN("Upgrade: websocket");
-			sb.AppendLineRN("Connection: Upgrade");
-			sb.AppendLineRN("Sec-WebSocket-Accept: " + WebSockets.WebSocket.CreateSecWebSocketAcceptValue(this.GetHeaderValue("sec-websocket-key")));
-			sb.AppendLineRN("");
-			await outputStream.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
-		}
-
-		/// <summary>
-		/// Writes the specified response with the Content-Length header set appropriately.
-		/// </summary>
-		/// <param name="body">Data to send in the response. This string will be encoded as UTF8.</param>
-		/// <param name="contentType">Content-Type header value. e.g. "text/html; charset=utf-8"</param>
-		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
-		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeFullResponseUTF8(string body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
-		{
-			writeFullResponseBytes(Utf8NoBOM.GetBytes(body), contentType, responseCode, additionalHeaders);
-		}
-		/// <summary>
-		/// Writes the specified response with the Content-Length header set appropriately.
-		/// </summary>
-		/// <param name="body">Data to send in the response. This string will be encoded as UTF8.</param>
-		/// <param name="contentType">Content-Type header value. e.g. "text/html; charset=utf-8"</param>
-		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
-		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		/// <param name="cancellationToken">Cancellation Token</param>
-		public virtual async Task writeFullResponseUTF8Async(string body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null, CancellationToken cancellationToken = default)
-		{
-			await writeFullResponseBytesAsync(Utf8NoBOM.GetBytes(body), contentType, responseCode, additionalHeaders, cancellationToken).ConfigureAwait(false);
-		}
-
-		/// <summary>
-		/// Writes the specified response with the Content-Length header set appropriately.
-		/// </summary>
-		/// <param name="body">Data to send in the response.</param>
-		/// <param name="contentType">Content-Type header value. e.g. "application/octet-stream"</param>
-		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
-		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		public virtual void writeFullResponseBytes(byte[] body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null)
-		{
-			writeSuccess(contentType, body.Length, responseCode, additionalHeaders);
-			outputStream.Flush();
-			tcpStream.Write(body, 0, body.Length);
-		}
-
-		/// <summary>
-		/// Writes the specified response with the Content-Length header set appropriately.
-		/// </summary>
-		/// <param name="body">Data to send in the response.</param>
-		/// <param name="contentType">Content-Type header value. e.g. "application/octet-stream"</param>
-		/// <param name="responseCode">(OPTIONAL) The response code and optional status string.</param>
-		/// <param name="additionalHeaders">(OPTIONAL) Additional headers to include in the response.</param>
-		/// <param name="cancellationToken">Cancellation Token</param>
-		public virtual async Task writeFullResponseBytesAsync(byte[] body, string contentType, string responseCode = "200 OK", HttpHeaderCollection additionalHeaders = null, CancellationToken cancellationToken = default)
-		{
-			await writeSuccessAsync(contentType, body.Length, responseCode, additionalHeaders, cancellationToken).ConfigureAwait(false);
-			await outputStream.FlushAsync().ConfigureAwait(false);
-			await tcpStream.WriteAsync(body, 0, body.Length, cancellationToken).ConfigureAwait(false);
-		}
-
-		/// <summary>
-		/// <para>Assists in writing a valid "304 Not Modified" response (which has no body). If using this for a static file, it is recommended to instead use <see cref="writeStaticFile(FileInfo, string, bool)"/>.</para>
-		/// <para>The response MUST include the following header fields:</para>
-		/// <para>
-		/// - <c>Date</c>, unless its omission is required by section 14.18.1
-		/// </para>
-		/// <para>
-		/// If a clockless origin server obeys these rules, and proxies and clients add their own Date to any response received without one (as already specified by[RFC 2068], section 14.19), caches will operate correctly.
-		/// </para>
-		/// <para>
-		/// - <c>ETag</c> and/or <c>Content-Location</c>, if the header would have been sent in a 200 response to the same request
-		/// </para>
-		/// <para>
-		/// - <c>Expires</c>, <c>Cache-Control</c>, and/or <c>Vary</c>, if the field-value might differ from that sent in any previous response for the same variant
-		/// </para>
-		/// </summary>
-		/// <param name="Date">Date header value. If null, it will be generated.</param>
-		/// <param name="ETag">ETag header value</param>
-		/// <param name="ContentLocation">Content-Location header value</param>
-		/// <param name="Expires">Expires header value</param>
-		/// <param name="CacheControl">Cache-Control header value</param>
-		/// <param name="Vary">Vary header value</param>
-		/// <param name="Age">Age header value (age of the resource in seconds, typically 0 if this is the origin server)</param>
-		/// <param name="LastModified">Last-Modified header value</param>
-		public virtual void write304NotModified(string Date, string ETag, string ContentLocation, string Expires, string CacheControl, string Vary, string Age, string LastModified)
-		{
-			HttpHeaderCollection headers = new HttpHeaderCollection();
-			if (Date == null)
-				Date = DateTime.UtcNow.ToString("R");
-			if (Date != null)
-				headers["Date"] = Date;
-			if (ETag != null)
-				headers["ETag"] = ETag;
-			if (ContentLocation != null)
-				headers["Content-Location"] = ContentLocation;
-			if (Expires != null)
-				headers["Expires"] = Expires;
-			if (CacheControl != null)
-				headers["Cache-Control"] = CacheControl;
-			if (Vary != null)
-				headers["Vary"] = Vary;
-			if (Age != null)
-				headers["Age"] = Age;
-			if (LastModified != null)
-				headers["Last-Modified"] = LastModified;
-			writeSuccess(null, -1, "304 Not Modified", headers);
-		}
-
-		/// <summary>
-		/// Gets the value of the header, or null if the header does not exist.  The name is case insensitive.  Multiple "Set-Cookie" headers can exist; if queried here, only the first header value will be returned.
-		/// </summary>
-		/// <param name="name">The case insensitive name of the header to get the value of.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist.</param>
-		/// <returns>The value of the header, or null if the header did not exist.</returns>
-		public string GetHeaderValue(string name, string defaultValue = null)
-		{
-			string value;
-			if (!httpHeaders.TryGetValue(name, out value))
-				value = defaultValue;
-			return value;
-		}
-
-		/// <summary>
-		/// <para>IMPORTANT: If you call this method, you must do it before reading from <see cref="RequestBodyStream"/>, otherwise you will not get the entire request body.</para>
-		/// <para>The first call to this method reads the remainder of the request body into a <see cref="MemoryStream"/>, seeks it to Position 0, and assigns it to the <see cref="RequestBodyStream"/> property.</para>
-		/// <para>Further calls to this method only return a reference to the existing MemoryStream without changing its seek position.</para>
-		/// <para>If there is no request body, this method returns null.</para>
-		/// </summary>
-		/// <param name="maxLength">[Default: 10 million] Maximium number of bytes to read before aborting. If the request body is larger, an Exception will be thrown.</param>
-		/// <exception cref="Exception">Throws if the requesty body is larger than the provided limit.</exception>
-		public MemoryStream GetRequestBodyMemoryStream(int maxLength = 10 * 1000 * 1000)
-		{
-			if (RequestBodyStream == null)
-				return null;
-			if (RequestBodyStream is MemoryStream)
-				return (MemoryStream)RequestBodyStream;
-			if (ByteUtil.ReadToEndWithMaxLength(RequestBodyStream, maxLength, out byte[] data))
-			{
-				MemoryStream ms = new MemoryStream(data);
-				RequestBodyStream = ms;
-				return ms;
-			}
-			else
-				throw new Exception("Request body was too large (max " + StringUtil.FormatNetworkBytes(maxLength) + ").");
-		}
-
-		/// <summary>
-		/// Returns the number of seconds the `Keep-Alive: timeout=N` header should specify.
-		/// </summary>
-		/// <returns></returns>
-		private int GetKeepaliveTimeoutSeconds()
-		{
-			int receiveTimeout = tcpClient.ReceiveTimeout;
-			if (receiveTimeout == 0)
-				return 60;
-			else if (receiveTimeout > 0)
-				return ((receiveTimeout / 1000) - 1).Clamp(1, 60);
-			else
-				return 3;
-		}
-		/// <summary>
-		/// Call this method before writing a response in order to prevent "Connection: keep-alive" from being sent.
-		/// </summary>
-		public void PreventKeepalive()
-		{
-			this.keepAliveRequested = false;
+			return this.RemoteIPAddressStr + " " + this.Request.HttpMethod + " " + this.Request.Url + " - ";
 		}
 
 		#region Request Proxy Http(s)
@@ -1723,8 +613,10 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		protected static SimpleThreadPool proxyResponseThreadPool = new SimpleThreadPool("ProxyResponses", 0, 1024, 10000);
 		/// <summary>
-		/// Acts as a proxy server, sending the request to a different URL.  This method starts a new (and unpooled) thread to handle the response from the remote server.
-		/// The "Host" header is rewritten (or added) and output as the first header.
+		/// <para>Primitive, mostly-synchronous proxy method.  Recommended to use instead <see cref="ProxyToAsync(string, ProxyOptions)"/> using <see cref="TaskHelper.RunAsyncCodeSafely(Func{Task})"/> if necessary.</para>
+		/// <para>Acts as a proxy server, sending the request to a different URL.</para>
+		/// <para>This method starts a new (and unpooled) thread to handle the response from the remote server.</para>
+		/// <para>The "Host" header is rewritten (or added) and output as the first header.</para>
 		/// </summary>
 		/// <param name="newUrl">The URL to proxy the original request to.</param>
 		/// <param name="networkTimeoutMs">The send and receive timeout to set for both TcpClients, in milliseconds.</param>
@@ -1734,7 +626,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="allowKeepalive">[DANGEROUS TO SET = true] If false, a Connection: close header will be added, and any existing Connection header will be dropped.  If true, the Connection header from the client will be preserved.  Assuming the client wanted keep-alive, this proxy request will remain active and the next request to come in on this connection will be proxied even if you didn't want it to be.  If your web server does ANYTHING ELSE besides proxy requests straight through to the same destination, this may result in client requests going to the wrong place.</param>
 		public void ProxyTo(string newUrl, int networkTimeoutMs = 60000, bool acceptAnyCert = false, ProxyDataBuffer snoopy = null, string host = null, bool allowKeepalive = false)
 		{
-			if (responseWritten)
+			if (Response.ResponseHeaderWritten)
 				throw new Exception("A response has already been written to this stream.");
 			//try
 			//{
@@ -1742,7 +634,7 @@ namespace BPUtil.SimpleHttp
 			Uri newUri = new Uri(newUrl);
 			if (string.IsNullOrWhiteSpace(host))
 				host = newUri.DnsSafeHost;
-			IPAddress ip = DnsHelper.GetHostAddressAsync(newUri.DnsSafeHost).GetAwaiter().GetResult();
+			IPAddress ip = TaskHelper.RunAsyncCodeSafely(() => DnsHelper.GetHostAddressAsync(newUri.DnsSafeHost));
 
 			using (TcpClient proxyClient = new TcpClient(ip.AddressFamily))
 			{
@@ -1750,36 +642,26 @@ namespace BPUtil.SimpleHttp
 				proxyClient.SendTimeout = this.tcpClient.SendTimeout = networkTimeoutMs;
 				proxyClient.Connect(ip, newUri.Port);
 				Stream proxyStream = proxyClient.GetStream();
-				responseWritten = true;
+				Response.ResponseHeaderWritten = true;
 				if (newUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
 				{
-					//try
-					//{
 					RemoteCertificateValidationCallback certCallback = null;
 					if (acceptAnyCert)
 						certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
 					proxyStream = new SslStream(proxyStream, false, certCallback, null);
-					((SslStream)proxyStream).AuthenticateAsClient(host, null, Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
-					//}
-					//catch (ThreadAbortException) { throw; }
-					//catch (SocketException) { throw; }
-					//catch (Exception ex)
-					//{
-					//	SimpleHttpLogger.LogVerbose(ex);
-					//	return ex;
-					//}
+					((SslStream)proxyStream).AuthenticateAsClient(host, null, TLS.TlsNegotiate.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
 				}
 
 				// Begin proxying by sending what we've already read from this.inputStream.
 				// The first line of our HTTP request will be different from the original.
-				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, http_method + ' ' + newUri.PathAndQuery + ' ' + http_protocol_versionstring + "\r\n", snoopy);
+				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, Request.HttpMethod + ' ' + newUri.PathAndQuery + ' ' + Request.HttpProtocolVersionString + "\r\n", snoopy);
 				// After the first line come the headers.
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Host: " + host + "\r\n", snoopy);
 				if (!allowKeepalive)
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: close\r\n", snoopy);
 				else
 					_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "Connection: keep-alive\r\n", snoopy);
-				foreach (HttpHeader header in httpHeaders)
+				foreach (HttpHeader header in Request.Headers)
 				{
 					if (!header.Key.IEquals("Host") && (allowKeepalive || !header.Key.IEquals("Connection")))
 						_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, header.Key + ": " + header.Value + "\r\n", snoopy);
@@ -1787,11 +669,11 @@ namespace BPUtil.SimpleHttp
 				_ProxyString(ProxyDataDirection.RequestToServer, proxyStream, "\r\n", snoopy);
 
 				// Write the original request body if there was one.
-				if (RequestBodyStream != null)
+				if (Request.RequestBodyStream != null)
 				{
-					if (RequestBodyStream is MemoryStream)
+					if (Request.RequestBodyStream is MemoryStream)
 					{
-						MemoryStream ms = (MemoryStream)RequestBodyStream;
+						MemoryStream ms = (MemoryStream)Request.RequestBodyStream;
 						long remember_position = ms.Position;
 						ms.Seek(0, SeekOrigin.Begin);
 						byte[] buf = ms.ToArray();
@@ -1799,7 +681,7 @@ namespace BPUtil.SimpleHttp
 						ms.Seek(remember_position, SeekOrigin.Begin);
 					}
 					else
-						CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, RequestBodyStream, proxyStream, snoopy);
+						CopyStreamUntilClosed(ProxyDataDirection.RequestToServer, Request.RequestBodyStream, proxyStream, snoopy);
 				}
 
 				// Start a thread to proxy the response to our client.
@@ -1877,244 +759,6 @@ namespace BPUtil.SimpleHttp
 		}
 		#endregion
 
-		#region Parameter parsing
-		/// <summary>
-		/// Parses the specified query string and returns a sorted list containing the arguments found in the specified query string.  Can also be used to parse the POST request body if the mimetype is "application/x-www-form-urlencoded".
-		/// </summary>
-		/// <param name="queryString"></param>
-		/// <param name="requireQuestionMark"></param>
-		/// <param name="preserveKeyCharacterCase">(Optional) If true, query string argument keys will be case sensitive.</param>
-		/// <param name="convertPlusToSpace">(Optional) If true, query string argument values will have any plus signs converted to spaces before URL decoding.</param>
-		/// <returns></returns>
-		protected static SortedList<string, string> ParseQueryStringArguments(string queryString, bool requireQuestionMark = true, bool preserveKeyCharacterCase = false, bool convertPlusToSpace = false)
-		{
-			SortedList<string, string> arguments = new SortedList<string, string>();
-			int idx = queryString.IndexOf('?');
-			if (idx > -1)
-				queryString = queryString.Substring(idx + 1);
-			else if (requireQuestionMark)
-				return arguments;
-			idx = queryString.LastIndexOf('#');
-			string hash = null;
-			if (idx > -1)
-			{
-				hash = queryString.Substring(idx + 1);
-				queryString = queryString.Remove(idx);
-			}
-			string[] parts = queryString.Split(new char[] { '&' });
-			for (int i = 0; i < parts.Length; i++)
-			{
-				string[] argument = parts[i].Split(new char[] { '=' });
-				if (argument.Length == 2)
-				{
-					if (convertPlusToSpace)
-						argument[1] = argument[1].Replace('+', ' ');
-					string key = Uri.UnescapeDataString(argument[0]);
-					if (!preserveKeyCharacterCase)
-						key = key.ToLower();
-					string existingValue;
-					if (arguments.TryGetValue(key, out existingValue))
-						arguments[key] += "," + Uri.UnescapeDataString(argument[1]);
-					else
-						arguments[key] = Uri.UnescapeDataString(argument[1]);
-				}
-			}
-			if (hash != null)
-				arguments["#"] = hash;
-			return arguments;
-		}
-
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key, or empty string if the key does not exist or has no value.</returns>
-		public string GetParam(string key)
-		{
-			return GetQSParam(key);
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public int GetIntParam(string key, int defaultValue = 0)
-		{
-			return GetQSIntParam(key, defaultValue);
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public long GetLongParam(string key, long defaultValue = 0)
-		{
-			return GetQSLongParam(key, defaultValue);
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public double GetDoubleParam(string key, double defaultValue = 0)
-		{
-			return GetQSDoubleParam(key, defaultValue);
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
-		public bool GetBoolParam(string key)
-		{
-			return GetQSBoolParam(key);
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key, or empty string if the key does not exist or has no value.</returns>
-		public string GetQSParam(string key)
-		{
-			if (key == null)
-				return "";
-			string value;
-			if (QueryString.TryGetValue(key.ToLower(), out value))
-				return value;
-			return "";
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public int GetQSIntParam(string key, int defaultValue = 0)
-		{
-			if (key == null)
-				return defaultValue;
-			int value;
-			if (int.TryParse(GetQSParam(key.ToLower()), out value))
-				return value;
-			return defaultValue;
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public long GetQSLongParam(string key, long defaultValue = 0)
-		{
-			if (key == null)
-				return defaultValue;
-			long value;
-			if (long.TryParse(GetQSParam(key.ToLower()), out value))
-				return value;
-			return defaultValue;
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public double GetQSDoubleParam(string key, double defaultValue = 0)
-		{
-			if (key == null)
-				return defaultValue;
-			double value;
-			if (double.TryParse(GetQSParam(key.ToLower()), out value))
-				return value;
-			return defaultValue;
-		}
-		/// <summary>
-		/// Returns the value of the Query String parameter with the specified key.
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
-		public bool GetQSBoolParam(string key)
-		{
-			string param = GetQSParam(key);
-			if (param == "1" || param.ToLower() == "true")
-				return true;
-			return false;
-		}
-		/// <summary>
-		/// Returns the value of a parameter sent via POST with MIME type "application/x-www-form-urlencoded".
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key, or empty string if the key does not exist or has no value.</returns>
-		public string GetPostParam(string key)
-		{
-			if (key == null)
-				return "";
-			string value;
-			if (PostParams.TryGetValue(key.ToLower(), out value))
-				return value;
-			return "";
-		}
-		/// <summary>
-		/// Returns the value of a parameter sent via POST with MIME type "application/x-www-form-urlencoded".
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public int GetPostIntParam(string key, int defaultValue = 0)
-		{
-			if (key == null)
-				return defaultValue;
-			int value;
-			if (int.TryParse(GetPostParam(key.ToLower()), out value))
-				return value;
-			return defaultValue;
-		}
-		/// <summary>
-		/// Returns the value of a parameter sent via POST with MIME type "application/x-www-form-urlencoded".
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public long GetPostLongParam(string key, long defaultValue = 0)
-		{
-			if (key == null)
-				return defaultValue;
-			long value;
-			if (long.TryParse(GetPostParam(key.ToLower()), out value))
-				return value;
-			return defaultValue;
-		}
-		/// <summary>
-		/// Returns the value of a parameter sent via POST with MIME type "application/x-www-form-urlencoded".
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <param name="defaultValue">The default value to return, in case the value did not exist or was not compatible with the data type.</param>
-		/// <returns>The value of the key, or [defaultValue] if the key does not exist or has no suitable value.</returns>
-		public double GetPostDoubleParam(string key, double defaultValue = 0)
-		{
-			if (key == null)
-				return defaultValue;
-			double value;
-			if (double.TryParse(GetPostParam(key.ToLower()), out value))
-				return value;
-			return defaultValue;
-		}
-		/// <summary>
-		/// Returns the value of a parameter sent via POST with MIME type "application/x-www-form-urlencoded".
-		/// </summary>
-		/// <param name="key">A case insensitive key.</param>
-		/// <returns>The value of the key. This function interprets a value of "1" or "true" (case insensitive) as being true.  Any other parameter value is interpreted as false.</returns>
-		public bool GetPostBoolParam(string key)
-		{
-			string param = GetPostParam(key);
-			if (param == "1" || param.ToLower() == "true")
-				return true;
-			return false;
-		}
-		#endregion
 
 		/// <summary>
 		/// Polls the socket to see if it has closed.
@@ -2127,16 +771,16 @@ namespace BPUtil.SimpleHttp
 			//return true;
 			if (!tcpClient.Connected)
 				return false;
-			bool readable = tcpClient.Client.Poll(0, System.Net.Sockets.SelectMode.SelectRead);
+			bool readable = tcpClient.Client.Poll(0, SelectMode.SelectRead);
 			if (readable)
 			{
 				// data is available for reading OR connection is closed.
 				byte[] buffer = new byte[1];
 				if (tcpClient.Client.Receive(buffer, SocketFlags.Peek) == 0)
-					return false; // No data available, connection must be closed
-								  // Data was available, connection may not be closed.
-				bool writable = tcpClient.Client.Poll(0, System.Net.Sockets.SelectMode.SelectWrite);
-				bool errored = tcpClient.Client.Poll(0, System.Net.Sockets.SelectMode.SelectError);
+					return false;
+				// Data was available, connection may not be closed.
+				bool writable = tcpClient.Client.Poll(0, SelectMode.SelectWrite);
+				bool errored = tcpClient.Client.Poll(0, SelectMode.SelectError);
 				return writable && !errored;
 			}
 			else
@@ -2152,7 +796,7 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		public NetworkCredential ValidateDigestAuth(string realm, IEnumerable<NetworkCredential> validCredentials)
 		{
-			string Authorization = GetHeaderValue("Authorization");
+			string Authorization = Request.Headers.Get("Authorization");
 			if (string.IsNullOrEmpty(Authorization))
 				return null;
 
@@ -2170,7 +814,7 @@ namespace BPUtil.SimpleHttp
 					parameters.TryGetValue("qop", out string qop);
 					parameters.TryGetValue("response", out string response);
 
-					string ha2 = Hash.GetMD5Hex(http_method + ":" + uri);
+					string ha2 = Hash.GetMD5Hex(Request.HttpMethod + ":" + uri);
 
 					foreach (NetworkCredential cred in validCredentials)
 					{
@@ -2216,34 +860,41 @@ namespace BPUtil.SimpleHttp
 			return "Digest realm=\"" + realm + "\", nonce=\"" + nonce + "\", opaque=\"" + opaque + "\", algorithm=MD5, qop=\"auth\", userhash=true";
 		}
 		/// <summary>
-		/// Removes the given appPath from the start of the incoming request URL, if it is found there.  Updates the <see cref="request_url"/> and <see cref="requestedPage"/> properties.
-		/// </summary>
-		/// <param name="appPath">AppPath string.</param>
-		public void RemoveAppPath(string appPath)
-		{
-			if (appPath == null)
-				return;
-			string ap = "/" + appPath.Trim('/', ' ', '\r', '\n', '\t');
-			if (ap == "/")
-				return;
-			if (request_url.AbsolutePath.IStartsWith(ap))
-			{
-				UriBuilder uriBuilder = new UriBuilder(request_url);
-				uriBuilder.Path = request_url.AbsolutePath.Substring(ap.Length);
-				request_url = uriBuilder.Uri;
-				requestedPage = request_url.AbsolutePath.StartsWith("/") ? request_url.AbsolutePath.Substring(1) : request_url.AbsolutePath;
-			}
-		}
-		/// <summary>
 		/// An exception containing an HTTP response code and text.
 		/// </summary>
-		internal class HttpProcessorException : Exception
+		public class HttpProcessorException : Exception
 		{
 			/// <summary>
-			/// Constructs an exception containing an HTTP response code and text.
+			/// Http response code and text, e.g. "413 Entity Too Large"
 			/// </summary>
-			/// <param name="message">Http response code and text, e.g. "413 Entity Too Large"</param>
-			public HttpProcessorException(string message) : base(message) { }
+			public string StatusString;
+			/// <summary>
+			/// Optional response body (will typically be visible in the web browser if this was a request for an HTML page).  If omitted, the <see cref="StatusString"/> is printed as the response body.
+			/// </summary>
+			public string ResponseBody;
+			/// <summary>
+			/// Http headers to set in the response.
+			/// </summary>
+			public HttpHeaderCollection Headers;
+			/// <summary>
+			/// Constructs an exception containing an HTTP response code and text, an optional body, and optional response headers.
+			/// </summary>
+			/// <param name="StatusString">Http response code and text, e.g. "413 Entity Too Large"</param>
+			/// <param name="ResponseBody">Optional response body (will typically be visible in the web browser if this was a request for an HTML page).  If omitted, the <paramref name="StatusString"/> is printed as the response body.</param>
+			/// <param name="Headers">Http headers to set in the response.</param>
+			public HttpProcessorException(string StatusString, string ResponseBody = null, HttpHeaderCollection Headers = null) : base(CreateMessage(StatusString, ResponseBody))
+			{
+				this.StatusString = StatusString;
+				this.ResponseBody = ResponseBody;
+				this.Headers = Headers;
+			}
+
+			private static string CreateMessage(string statusString, string responseBody)
+			{
+				if (responseBody == null)
+					return statusString;
+				return statusString + Environment.NewLine + responseBody;
+			}
 		}
 
 		/// <summary>
@@ -2999,11 +1650,11 @@ namespace BPUtil.SimpleHttp
 			return false;
 		}
 		/// <summary>
-		/// HashSet of file extensions (not case-sensitive) that are not allowed to be cached by the <see cref="HttpProcessor.writeStaticFile(string, string, bool)"/> method.
+		/// HashSet of file extensions (not case-sensitive) that are not allowed to be cached by the <c>Response.StaticFile()</c> method.
 		/// </summary>
 		protected HashSet<string> NoCacheStaticFileExtensions = new HashSet<string>(new string[] { ".htm", ".html" });
 		/// <summary>
-		/// Returns true if the given file extension is allowed to be cached by the <see cref="HttpProcessor.writeStaticFile(string, string, bool)"/> method.
+		/// Returns true if the given file extension is allowed to be cached by the <c>Response.StaticFile()</c> method.
 		/// </summary>
 		/// <param name="extension">File extension (e.g. ".txt")</param>
 		/// <returns></returns>
@@ -3092,12 +1743,11 @@ namespace BPUtil.SimpleHttp
 		{
 			if (method == HttpMethods.HEAD)
 			{
-				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
-				additionalHeaders.Add("Allow", "GET");
-				p.writeFailure("405 Method Not Allowed", additionalHeaders: additionalHeaders);
+				p.Response.Simple("405 Method Not Allowed");
+				p.Response.Headers.Add("Allow", "GET");
 			}
 			else
-				p.writeFailure("501 Not Implemented");
+				p.Response.Simple("501 Not Implemented");
 		}
 		/// <summary>
 		/// Each incoming connection to the server is passed to this method.  If the method returns true, an HTTP "503 Service Unavailable" response will be written and the connection will not be processed by an <see cref="HttpProcessor"/>.

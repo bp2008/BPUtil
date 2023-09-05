@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using BPUtil;
 using BPUtil.SimpleHttp;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -64,7 +65,7 @@ namespace UnitTests
 
 			ms.Seek(0, SeekOrigin.Begin);
 			chunkReader = new ReadableChunkedTransferEncodingStream(ms);
-			actual = ByteUtil.ReadToEndAsync(chunkReader).GetAwaiter().GetResult();
+			actual = TaskHelper.RunAsyncCodeSafely(() => ByteUtil.ReadToEndAsync(chunkReader));
 			CollectionAssert.AreEqual(expected, actual);
 		}
 
@@ -94,7 +95,7 @@ namespace UnitTests
 		}
 
 		[TestMethod]
-		public void ReadWriteChainAsync()
+		public async Task ReadWriteChainAsync()
 		{
 			string loremIpsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 			byte[] expected = ByteUtil.Utf8NoBOM.GetBytes(loremIpsum);
@@ -108,12 +109,12 @@ namespace UnitTests
 				{
 					string word = words[i];
 					byte[] buf = ByteUtil.Utf8NoBOM.GetBytes(word + (i == words.Length - 1 ? "" : " "));
-					chunkWriter.WriteAsync(buf, 0, buf.Length).Wait();
+					await chunkWriter.WriteAsync(buf, 0, buf.Length).ConfigureAwait(false);
 				}
 			}
 			ms.Seek(0, SeekOrigin.Begin);
 			ReadableChunkedTransferEncodingStream chunkReader = new ReadableChunkedTransferEncodingStream(ms);
-			byte[] actual = ByteUtil.ReadToEndAsync(chunkReader).GetAwaiter().GetResult();
+			byte[] actual = await ByteUtil.ReadToEndAsync(chunkReader).ConfigureAwait(false);
 
 			CollectionAssert.AreEqual(expected, actual);
 		}

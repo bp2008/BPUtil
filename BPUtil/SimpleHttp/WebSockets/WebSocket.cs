@@ -28,6 +28,16 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// The readable/writeable stream for the data connection.  Typically either NetworkStream or SslStream.
 		/// </summary>
 		public Stream tcpStream { get; protected set; }
+		/// <summary>
+		/// Gets or sets the amount of time the underlying <see cref="System.Net.Sockets.TcpClient"/> will wait to receive data once a synchronous/blocking read operation is initiated.
+		/// </summary>
+		/// <returns>The time-out value of the connection in milliseconds. The default value is 0.</returns>
+		public int ReceiveTimeout { get { return tcpClient.ReceiveTimeout; } set { tcpClient.ReceiveTimeout = value; } }
+		/// <summary>
+		/// Gets or sets the amount of time the underlying <see cref="System.Net.Sockets.TcpClient"/> will wait for a synchronous/blocking send operation to complete successfully.
+		/// </summary>
+		/// <returns>The send time-out value, in milliseconds. The default is 0.</returns>
+		public int SendTimeout { get { return tcpClient.SendTimeout; } set { tcpClient.SendTimeout = value; } }
 
 		protected Thread thrWebSocketRead;
 		protected Action<WebSocketFrame> onMessageReceived = delegate { };
@@ -68,17 +78,14 @@ namespace BPUtil.SimpleHttp.WebSockets
 
 			this.tcpStream = p.tcpStream;
 			handshakePerformed = true;
-			string version = p.GetHeaderValue("Sec-WebSocket-Version");
+			string version = p.Request.Headers.Get("Sec-WebSocket-Version");
 			if (version != "13")
 			{
-				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
-				additionalHeaders.Add("Sec-WebSocket-Version", "13");
-				p.writeSuccess(contentLength: 0, responseCode: "400 Bad Request", additionalHeaders: additionalHeaders);
-				p.outputStream.Flush();
-				throw new Exception("An unsupported web socket version was requested (\"" + version + "\").");
+				HttpHeaderCollection headers = new HttpHeaderCollection();
+				headers.Set("Sec-WebSocket-Version", "13");
+				throw new HttpProcessor.HttpProcessorException("400 Bad Request", "An unsupported web socket version was requested (\"" + version + "\").", headers);
 			}
-			p.writeWebSocketUpgrade();
-			p.outputStream.Flush();
+			p.Response.WebSocketUpgradeSync();
 		}
 
 		/// <summary>
@@ -393,17 +400,17 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <returns></returns>
 		public static bool IsWebSocketRequest(HttpProcessor p)
 		{
-			if (p.http_method != "GET")
+			if (p.Request.HttpMethod != "GET")
 				return false;
-			if (p.GetHeaderValue("Upgrade") != "websocket")
+			if (p.Request.Headers.Get("Upgrade") != "websocket")
 				return false;
-			string[] connectionHeaderValues = p.GetHeaderValue("connection")?
+			string[] connectionHeaderValues = p.Request.Headers.Get("Connection")?
 				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
 				.Select(s => s.Trim())
 				.ToArray();
 			if (connectionHeaderValues == null || !connectionHeaderValues.Contains("Upgrade"))
 				return false;
-			if (string.IsNullOrWhiteSpace(p.GetHeaderValue("Sec-WebSocket-Key")))
+			if (string.IsNullOrWhiteSpace(p.Request.Headers.Get("Sec-WebSocket-Key")))
 				return false;
 			return true;
 		}
@@ -482,8 +489,13 @@ namespace BPUtil.SimpleHttp.WebSockets
 				|| !httpHeaders.TryGetValue("sec-websocket-key", out string header_sec_websocket_key))
 				throw new Exception("WebSocket handshake could not complete due to missing required http header(s)");
 
+			string[] connectionHeaderValues = header_connection
+				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(s => s.Trim())
+				.ToArray();
+
 			if (header_upgrade != "websocket"
-				|| header_connection != "Upgrade"
+				|| !connectionHeaderValues.Contains("Upgrade")
 				|| string.IsNullOrWhiteSpace(header_sec_websocket_key))
 				throw new Exception("WebSocket handshake could not complete due to a required http header having an unexpected value");
 

@@ -34,7 +34,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="p">HttpProcessor</param>
 		public void Proxy(HttpProcessor p)
 		{
-			ProxyAsync(p).Wait();
+			TaskHelper.RunAsyncCodeSafely(() => ProxyAsync(p));
 		}
 		/// <summary>
 		/// Attempts to proxy the connection to Vite, starting Vite dev server if necessary.
@@ -85,20 +85,20 @@ namespace BPUtil.SimpleHttp
 					viteStartLock.Release();
 				}
 			}
-			if (!p.responseWritten)
+			if (!p.Response.ResponseHeaderWritten)
 				ex = await TryProxy(p).ConfigureAwait(false);
 			if (ex == null)
 				return;
 			if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
-				Logger.Debug(ex, "Failed to proxy \"" + p.request_url.PathAndQuery + "\" to Vite dev server.");
-			if (!p.responseWritten)
-				await p.writeFailureAsync("504 Gateway Timeout", cancellationToken: cancellationToken).ConfigureAwait(false);
+				Logger.Debug(ex, "Failed to proxy \"" + p.Request.Url.PathAndQuery + "\" to Vite dev server.");
+			if (!p.Response.ResponseHeaderWritten)
+				p.Response.Simple("504 Gateway Timeout");
 		}
 		private async Task<Exception> TryProxy(HttpProcessor p, CancellationToken cancellationToken = default)
 		{
 			try
 			{
-				UriBuilder builder = new UriBuilder(p.request_url);
+				UriBuilder builder = new UriBuilder(p.Request.Url);
 				builder.Scheme = "http";
 				builder.Host = IPAddress.IPv6Loopback.ToString();
 				builder.Port = vitePort;

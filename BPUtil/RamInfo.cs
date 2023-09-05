@@ -23,23 +23,24 @@ namespace BPUtil
 					return memoryStatus.ullTotalPhys;
 				}
 			}
-			else if (Environment.OSVersion.Platform == PlatformID.Unix)
-			{
-				_sysinfo info = new _sysinfo();
-				if (sysinfo(ref info) == 0)
-				{
-					return info.totalram * (ulong)info.mem_unit;
-				}
-			}
-			else if (Environment.OSVersion.Platform == PlatformID.MacOSX)
-			{
-				IntPtr size = IntPtr.Zero;
-				int retVal = sysctlbyname("hw.memsize", size, out IntPtr oldLen, IntPtr.Zero, 0);
-				if (retVal == 0)
-				{
-					return (ulong)size.ToInt64();
-				}
-			}
+			return 0;
+			//else if (Environment.OSVersion.Platform == PlatformID.Unix)
+			//{
+			//	_sysinfo info = new _sysinfo();
+			//	if (sysinfo(ref info) == 0)
+			//	{
+			//		return info.totalram * (ulong)info.mem_unit;
+			//	}
+			//}
+			//else if (Environment.OSVersion.Platform == PlatformID.MacOSX)
+			//{
+			//	IntPtr size = IntPtr.Zero;
+			//	int retVal = sysctlbyname("hw.memsize", size, out IntPtr oldLen, IntPtr.Zero, 0);
+			//	if (retVal == 0)
+			//	{
+			//		return (ulong)size.ToInt64();
+			//	}
+			//}
 
 			throw new Exception("Failed to get RAM size");
 		}

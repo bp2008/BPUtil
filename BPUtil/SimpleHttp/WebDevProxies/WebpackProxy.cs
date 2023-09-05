@@ -59,17 +59,17 @@ namespace BPUtil.SimpleHttp
 					}
 				}
 			}
-			if (!p.responseWritten)
+			if (!p.Response.ResponseHeaderWritten)
 				ex = TryProxy(p);
 			if (ex == null)
 				return;
-			Logger.Debug(ex, "Failed to proxy \"" + p.request_url.PathAndQuery + "\" to webpack dev server.");
+			Logger.Debug(ex, "Failed to proxy \"" + p.Request.Url.PathAndQuery + "\" to webpack dev server.");
 		}
 		private Exception TryProxy(HttpProcessor p)
 		{
 			try
 			{
-				p.ProxyTo("http://" + IPAddress.Loopback.ToString() + ":" + webpackPort + p.request_url.AbsolutePath);
+				p.ProxyTo("http://" + IPAddress.Loopback.ToString() + ":" + webpackPort + p.Request.Url.AbsolutePath);
 				return null;
 			}
 			catch (Exception ex) { return ex; }

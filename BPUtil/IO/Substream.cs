@@ -109,7 +109,23 @@ namespace BPUtil.IO
 				throw new ArgumentOutOfRangeException(nameof(count), "Count " + count + " must be no smaller than 0 but no larger than (buffer.Length - offset) (" + (buffer.Length - offset) + ").");
 			if (_position + count > _length)
 				throw new EndOfStreamException("Unable to write " + count + " bytes to Substream with " + (_length - _position) + " bytes remaining.");
+			_position += count;
 			_stream.Write(buffer, offset, count);
+		}
+
+		/// <inheritdoc />
+		public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+		{
+			if (buffer == null)
+				throw new ArgumentNullException(nameof(buffer));
+			if (offset != offset.Clamp(0, buffer.Length))
+				throw new ArgumentOutOfRangeException(nameof(offset), "Offset " + offset + " is outside the bounds of the buffer (" + buffer.Length + ").");
+			if (count < 0 || count > buffer.Length - offset)
+				throw new ArgumentOutOfRangeException(nameof(count), "Count " + count + " must be no smaller than 0 but no larger than (buffer.Length - offset) (" + (buffer.Length - offset) + ").");
+			if (_position + count > _length)
+				throw new EndOfStreamException("Unable to write " + count + " bytes to Substream with " + (_length - _position) + " bytes remaining.");
+			_position += count;
+			return _stream.WriteAsync(buffer, offset, count, cancellationToken);
 		}
 		/// <inheritdoc />
 		public override bool CanRead => _stream.CanRead;

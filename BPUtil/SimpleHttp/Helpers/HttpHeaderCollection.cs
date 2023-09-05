@@ -154,7 +154,8 @@ namespace BPUtil.SimpleHttp
 			set => this.Set(key, value);
 		}
 		/// <summary>
-		/// Gets an array of all the current HTTP Headers in the order in which they were added.
+		/// <para>Gets an array of all the current HTTP Headers in the order in which they were added.</para>
+		/// <para>Multiple "Set-Cookie" headers may exist.  All other headers are automatically combined if they are <c>Add</c>ed with an existing key.</para>
 		/// </summary>
 		/// <returns></returns>
 		public HttpHeader[] GetHeaderArray()

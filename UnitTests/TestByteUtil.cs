@@ -106,8 +106,8 @@ namespace UnitTests
 			}
 
 			Assert.AreEqual(len, ms.Position, "Position was not " + len);
-			Assert.AreEqual(0, ByteUtil.ReadToEndAsync(ms).GetAwaiter().GetResult().Length, "MemoryStream length was not " + 0);
-			Assert.AreEqual(0, ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)).GetAwaiter().GetResult().Length, "Substream length was not " + 0);
+			Assert.AreEqual(0, TaskHelper.RunAsyncCodeSafely(() => ByteUtil.ReadToEndAsync(ms)).Length, "MemoryStream length was not " + 0);
+			Assert.AreEqual(0, TaskHelper.RunAsyncCodeSafely(() => ByteUtil.ReadToEndAsync(ms.Substream(ms.Length))).Length, "Substream length was not " + 0);
 
 			ms.Position = 0;
 			byte[] output1 = ByteUtil.ReadToEnd(ms);
@@ -134,11 +134,11 @@ namespace UnitTests
 			Assert.AreEqual(0, ByteUtil.ReadToEnd(ms.Substream(ms.Length)).Length);
 
 			ms.Position = 0;
-			byte[] output1 = ByteUtil.ReadToEndAsync(ms).GetAwaiter().GetResult();
+			byte[] output1 = TaskHelper.RunAsyncCodeSafely(() => ByteUtil.ReadToEndAsync(ms));
 			CollectionAssert.AreEqual(input, output1);
 
 			ms.Position = 0;
-			byte[] output2 = ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)).GetAwaiter().GetResult();
+			byte[] output2 = TaskHelper.RunAsyncCodeSafely(() => ByteUtil.ReadToEndAsync(ms.Substream(ms.Length)));
 			CollectionAssert.AreEqual(input, output2);
 		}
 		[TestMethod]
@@ -153,46 +153,43 @@ namespace UnitTests
 				ms.WriteByte(input[i]);
 			}
 
-			byte[] output;
 			ms.Position = 0;
-			Assert.IsTrue(ByteUtil.ReadToEndWithMaxLength(ms, len * 2, out output));
-			CollectionAssert.AreEqual(input, output);
+			AssertReadToEndResult(true, input, ByteUtil.ReadToEndWithMaxLength(ms, len * 2));
 
 			ms.Position = 0;
-			Assert.IsTrue(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len * 2, out output));
-			CollectionAssert.AreEqual(input, output);
+			AssertReadToEndResult(true, input, ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len * 2));
 
 			ms.Position = 0;
-			Assert.IsTrue(ByteUtil.ReadToEndWithMaxLength(ms, len, out output));
-			CollectionAssert.AreEqual(input, output);
+			AssertReadToEndResult(true, input, ByteUtil.ReadToEndWithMaxLength(ms, len));
 
 			ms.Position = 0;
-			Assert.IsTrue(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len, out output));
-			CollectionAssert.AreEqual(input, output);
+			AssertReadToEndResult(true, input, ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len));
 
 			ms.Position = 0;
-			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms, len - 1, out output));
-			Assert.IsNull(output);
+			AssertReadToEndResult(false, null, ByteUtil.ReadToEndWithMaxLength(ms, len - 1));
 
 			ms.Position = 0;
-			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len - 1, out output));
-			Assert.IsNull(output);
+			AssertReadToEndResult(false, null, ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), len - 1));
 
 			ms.Position = 0;
-			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms, 1, out output));
-			Assert.IsNull(output);
+			AssertReadToEndResult(false, null, ByteUtil.ReadToEndWithMaxLength(ms, 1));
 
 			ms.Position = 0;
-			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), 1, out output));
-			Assert.IsNull(output);
+			AssertReadToEndResult(false, null, ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), 1));
 
 			ms.Position = 0;
-			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms, 0, out output));
-			Assert.IsNull(output);
+			AssertReadToEndResult(false, null, ByteUtil.ReadToEndWithMaxLength(ms, 0));
 
 			ms.Position = 0;
-			Assert.IsFalse(ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), 0, out output));
-			Assert.IsNull(output);
+			AssertReadToEndResult(false, null, ByteUtil.ReadToEndWithMaxLength(ms.Substream(ms.Length), 0));
+		}
+		private void AssertReadToEndResult(bool expectedEndOfStream, byte[] expectedOutput, ByteUtil.ReadToEndResult actualResult)
+		{
+			Assert.AreEqual(expectedEndOfStream, actualResult.EndOfStream);
+			if (expectedOutput != null)
+				CollectionAssert.AreEqual(expectedOutput, actualResult.Data);
+			else
+				Assert.IsNull(actualResult.Data);
 		}
 		[TestMethod]
 		public void TestDiscardUntilEndOfStream()

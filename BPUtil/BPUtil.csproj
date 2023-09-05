@@ -76,13 +76,16 @@
     <Compile Include="RateOfChange.cs" />
     <Compile Include="SimpleHttp\Helpers\AllowedConnectionTypes.cs" />
     <Compile Include="SimpleHttp\Helpers\Cookies.cs" />
+    <Compile Include="SimpleHttp\Helpers\SimpleHttpRequest.cs" />
     <Compile Include="SimpleHttp\Helpers\SimpleHttpExtensions.cs" />
     <Compile Include="SimpleHttp\Helpers\HttpMethods.cs" />
     <Compile Include="SimpleHttp\Helpers\SimpleHttpLogger.cs" />
+    <Compile Include="SimpleHttp\Helpers\SimpleHttpResponse.cs" />
     <Compile Include="SimpleHttp\Streams\GlobalThrottledStream.cs" />
     <Compile Include="SimpleHttp\Streams\ReadableChunkedTransferEncodingStream.cs" />
     <Compile Include="SimpleHttp\Streams\WritableChunkedTransferEncodingStream.cs" />
     <Compile Include="SimpleHttp\TLS\ITlsCipherSuiteSet.cs" />
+    <Compile Include="SimpleHttp\TLS\TlsNegotiate.cs" />
     <Compile Include="TaskHelper.cs" />
     <Compile Include="Throttle.cs" />
     <Compile Include="DescriptionAttribute.cs" />

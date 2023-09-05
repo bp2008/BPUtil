@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -47,25 +48,25 @@ namespace BPUtil.MVC
 		/// Processes a request from a client, then returns true. Returns false if the request could not be processed. Exceptions thrown by a controller are caught here.
 		/// </summary>
 		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
-		/// <param name="requestPath">(Optional) The path requested by the client.  If this path starts with '/', the '/' will be removed automatically (if there are multiple '/' at the start, only one is removed). (if null, defaults to httpProcessor.request_url.PathAndQuery)</param>
-		/// <returns></returns>
+		/// <param name="requestPath">(Optional) The path requested by the client.  If this path starts with '/', the '/' will be removed automatically (if there are multiple '/' at the start, only one is removed). (if null, defaults to httpProcessor.Request.Url.PathAndQuery)</param>
+		/// <returns>Returns true if the request was handled by this MVC instance, false if the caller should try to handle the request another way.</returns>
 		public bool ProcessRequest(HttpProcessor httpProcessor, string requestPath = null)
 		{
-			return ProcessRequestAsync(httpProcessor, requestPath).GetAwaiter().GetResult();
+			return TaskHelper.RunAsyncCodeSafely(() => ProcessRequestAsync(httpProcessor, requestPath));
 		}
 		/// <summary>
 		/// Processes a request from a client, then returns true. Returns false if the request could not be processed. Exceptions thrown by a controller are caught here.
 		/// </summary>
 		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
-		/// <param name="requestPath">(Optional) The path requested by the client.  If this path starts with '/', the '/' will be removed automatically (if there are multiple '/' at the start, only one is removed). (if null, defaults to httpProcessor.request_url.PathAndQuery)</param>
+		/// <param name="requestPath">(Optional) The path requested by the client.  If this path starts with '/', the '/' will be removed automatically (if there are multiple '/' at the start, only one is removed). (if null, defaults to httpProcessor.Request.Url.PathAndQuery)</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
-		/// <returns></returns>
+		/// <returns>Returns true if the request was handled by this MVC instance, false if the caller should try to handle the request another way.</returns>
 		public async Task<bool> ProcessRequestAsync(HttpProcessor httpProcessor, string requestPath = null, CancellationToken cancellationToken = default)
 		{
-			if (httpProcessor.responseWritten)
+			if (httpProcessor.Response.ResponseHeaderWritten)
 				throw new Exception("MVCMain.ProcessRequest was called with an HttpProcessor that had already written a response.");
 			if (requestPath == null)
-				requestPath = httpProcessor.request_url.PathAndQuery;
+				requestPath = httpProcessor.Request.Url.PathAndQuery;
 			if (requestPath.StartsWith("/"))
 				requestPath = requestPath.Substring(1);
 			RequestContext context = new RequestContext(httpProcessor, requestPath);
@@ -77,12 +78,13 @@ namespace BPUtil.MVC
 			{
 				actionResult = await controllerInfo.CallMethod(context, cancellationToken).ConfigureAwait(false);
 			}
+			catch (OperationCanceledException) { throw; }
 			catch (Exception ex)
 			{
 				actionResult = GenerateErrorPage(context, ex);
 			}
 
-			if (httpProcessor.responseWritten) // Controller methods may handle their own response, in which case we will ignore the result.
+			if (httpProcessor.Response.ResponseHeaderWritten) // Controller methods may handle their own response, in which case we will ignore the result.
 				return true;
 
 			if (actionResult == null)
@@ -102,14 +104,14 @@ namespace BPUtil.MVC
 
 			if (body == null)
 			{
-				httpProcessor.writeSuccess(actionResult.ContentType, 0, actionResult.ResponseStatus, context.additionalResponseHeaders);
+				httpProcessor.Response.Set(actionResult.ContentType, 0, actionResult.ResponseStatus, context.additionalResponseHeaders);
 			}
 			else
 			{
 				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
 				bool addedContentEncoding = false;
 				bool addedContentType = false;
-				if (actionResult.Compress && body.Length >= 32 && httpProcessor.ClientRequestsGZipCompression)
+				if (actionResult.Compress && body.Length >= 32 && httpProcessor.Request.ClientRequestsGZipCompression)
 				{
 					byte[] compressed = Compression.GZipCompress(body);
 					if (compressed.Length < body.Length)
@@ -137,9 +139,8 @@ namespace BPUtil.MVC
 							additionalHeaders.Add(header);
 					}
 				}
-				httpProcessor.writeSuccess(actionResult.ContentType, body.Length, actionResult.ResponseStatus, additionalHeaders);
-				httpProcessor.outputStream.Flush();
-				httpProcessor.tcpStream.Write(body, 0, body.Length);
+				httpProcessor.Response.Set(actionResult.ContentType, body.Length, actionResult.ResponseStatus, additionalHeaders);
+				httpProcessor.Response.BodyContent = body;
 			}
 			return true;
 		}
