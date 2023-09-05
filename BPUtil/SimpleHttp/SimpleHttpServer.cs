@@ -297,6 +297,8 @@ namespace BPUtil.SimpleHttp
 					try
 					{
 						Request = SimpleHttpRequest.FromStream(base_uri_this_server, tcpStream);
+						if (Request == null)
+							return;
 						try
 						{
 							Response = new SimpleHttpResponse(this);
@@ -366,6 +368,8 @@ namespace BPUtil.SimpleHttp
 					try
 					{
 						Request = await SimpleHttpRequest.FromStreamAsync(base_uri_this_server, (UnreadableStream)tcpStream, readTimeoutSeconds * 1000, cancellationToken).ConfigureAwait(false);
+						if (Request == null)
+							return;
 						try
 						{
 							Response = new SimpleHttpResponse(this);
@@ -604,7 +608,7 @@ namespace BPUtil.SimpleHttp
 
 		private string GetDebugLogPrefix()
 		{
-			return this.RemoteIPAddressStr + " " + this.Request.HttpMethod + " " + this.Request.Url + " - ";
+			return this.RemoteIPAddressStr + " " + this.Request?.HttpMethod + " " + this.Request?.Url + " - ";
 		}
 
 		#region Request Proxy Http(s)
