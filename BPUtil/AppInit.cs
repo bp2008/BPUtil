@@ -531,7 +531,7 @@ WantedBy=multi-user.target";
 			Match m = rx.Match(fileContent);
 			if (m.Success)
 			{
-				string newPropertyLine = propertyName + "=" + propertyValue + "\\n";
+				string newPropertyLine = propertyName + "=" + propertyValue + "\n";
 				if (propertyValue == null)
 					newPropertyLine = ""; // This is a delete operation, so replace the match with empty string.
 				fileContent = fileContent.Substring(0, m.Index) + newPropertyLine + fileContent.Substring(m.Index + m.Length);
