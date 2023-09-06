@@ -17,6 +17,10 @@ namespace BPUtil.SimpleHttp
 		private readonly Stream _stream;
 		private bool streamEnded = false;
 		/// <summary>
+		/// Gets a value indicating if the final chunk has been written.
+		/// </summary>
+		public bool StreamEnded => streamEnded;
+		/// <summary>
 		/// Initializes a new instance of the WritableChunkedTransferEncodingStream class.
 		/// </summary>
 		/// <param name="stream">The underlying stream to write to.</param>
@@ -57,6 +61,14 @@ namespace BPUtil.SimpleHttp
 		{
 			get => _stream.Position;
 			set => _stream.Position = value;
+		}
+		private long _payloadBytesWritten = 0;
+		/// <summary>
+		/// The number of payload bytes that have been written so far by this WritableChunkedTransferEncodingStream.
+		/// </summary>
+		public long PayloadBytesWritten
+		{
+			get => Interlocked.Read(ref _payloadBytesWritten);
 		}
 
 		/// <inheritdoc />
@@ -104,6 +116,7 @@ namespace BPUtil.SimpleHttp
 			WriteChunkHeader(count);
 			_stream.Write(buffer, offset, count);
 			WriteChunkTrailer();
+			Interlocked.Add(ref _payloadBytesWritten, count);
 		}
 
 		/// <summary>
@@ -122,6 +135,7 @@ namespace BPUtil.SimpleHttp
 			await WriteChunkHeaderAsync(count, cancellationToken).ConfigureAwait(false);
 			await _stream.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
 			await WriteChunkTrailerAsync(cancellationToken).ConfigureAwait(false);
+			Interlocked.Add(ref _payloadBytesWritten, count);
 		}
 		/// <summary>
 		/// Writes an empty chunk to the stream, indicating that the HTTP response is completed.  You should discontinue use of the WritableChunkedTransferEncodingStream after calling this.

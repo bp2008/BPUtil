@@ -546,7 +546,7 @@ namespace BPUtil
 		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
 		/// <returns>A line of text read from a binary input stream</returns>
 		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">Throws if the line length reaches the limit before the line ends.</exception>
-		public static string HttpStreamReadLine(Stream inputStream, int maxLength = 32768)
+		public static string HttpStreamReadLine(Stream inputStream, int maxLength = 16384)
 		{
 			int charsConsumed = 0;
 			int next_char;
@@ -584,7 +584,7 @@ namespace BPUtil
 		/// <returns></returns>
 		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
 		/// <exception cref="OperationCanceledException">If the timeout is exceeded during any ReadAsync operation.</exception>
-		public static async Task<string> HttpStreamReadLineAsync(UnreadableStream stream, int timeoutMilliseconds, int maxLength = 32768, CancellationToken cancellationToken = default)
+		public static async Task<string> HttpStreamReadLineAsync(UnreadableStream stream, int timeoutMilliseconds, int maxLength = 16384, CancellationToken cancellationToken = default)
 		{
 			StringBuilder sb = new StringBuilder();
 			byte[] buffer = ByteUtil.BufferGet();
@@ -631,7 +631,7 @@ namespace BPUtil
 		/// <param name="maxLength">Maximum line length.</param>
 		/// <returns></returns>
 		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
-		public static async Task<string> HttpStreamReadLineAsync(StreamReader reader, int maxLength = 32768)
+		public static async Task<string> HttpStreamReadLineAsync(StreamReader reader, int maxLength = 16384)
 		{
 			string str = await reader.ReadLineAsync().ConfigureAwait(false);
 			if (str.Length >= maxLength)
@@ -649,17 +649,17 @@ namespace BPUtil
 		/// <param name="cancellationToken">Cancellation Token.  A time-based cancellation token will be linked with this one such that the operation is canceled if the given token is canceled or if the time-based token is canceled because time ran out.</param>
 		/// <returns></returns>
 		/// <exception cref="OperationCanceledException">If the timeout is exceeded during the ReadAsync operation.</exception>
-		public static Task<int> ReadAsyncWithTimeout(Stream stream, byte[] buffer, int offset, int length, int timeoutMilliseconds, CancellationToken cancellationToken = default)
+		public static async Task<int> ReadAsyncWithTimeout(Stream stream, byte[] buffer, int offset, int length, int timeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			if (timeoutMilliseconds <= 0)
 			{
-				return stream.ReadAsync(buffer, offset, length, cancellationToken);
+				return await stream.ReadAsync(buffer, offset, length, cancellationToken).ConfigureAwait(false);
 			}
 			else
 			{
 				using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(timeoutMilliseconds))
 				using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
-					return stream.ReadAsync(buffer, offset, length, cts.Token);
+					return await stream.ReadAsync(buffer, offset, length, cts.Token).ConfigureAwait(false);
 			}
 		}
 		#endregion

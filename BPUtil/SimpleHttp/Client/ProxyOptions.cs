@@ -60,11 +60,11 @@ namespace BPUtil.SimpleHttp.Client
 		/// <summary>
 		/// An event that is raised before response headers are proxied from our client to the remote server, allowing for those headers to be viewed or modified.
 		/// </summary>
-		public event EventHandler<HttpHeaderCollection> BeforeRequestHeadersSent = delegate { };
+		public event EventHandler<HttpProcessor> BeforeRequestHeadersSent = delegate { };
 		/// <summary>
 		/// An event that is raised before response headers are sent to from the remote server to our client, allowing for those headers to be viewed or modified.
 		/// </summary>
-		public event EventHandler<HttpHeaderCollection> BeforeResponseHeadersSent = delegate { };
+		public event EventHandler<HttpProcessor> BeforeResponseHeadersSent = delegate { };
 		/// <summary>
 		/// Defines how to handle the "X-Forwarded-For" header.  Default: Drop.
 		/// </summary>
@@ -94,12 +94,12 @@ namespace BPUtil.SimpleHttp.Client
 		/// Raises the BeforeRequestHeadersSent event.
 		/// </summary>
 		/// <param name="sender">Reference to the object which is raising the event.</param>
-		/// <param name="headers">HTTP Header Collection which may be modified by those subscribing to the event.</param>
-		internal void RaiseBeforeRequestHeadersSent(object sender, HttpHeaderCollection headers)
+		/// <param name="processor">HttpProcessor which may be modified by those subscribing to the event.</param>
+		internal void RaiseBeforeRequestHeadersSent(object sender, HttpProcessor processor)
 		{
 			try
 			{
-				BeforeRequestHeadersSent(sender, headers);
+				BeforeRequestHeadersSent(sender, processor);
 			}
 			catch (Exception ex)
 			{
@@ -110,12 +110,12 @@ namespace BPUtil.SimpleHttp.Client
 		/// Raises the BeforeResponseHeadersSent event.
 		/// </summary>
 		/// <param name="sender">Reference to the object which is raising the event.</param>
-		/// <param name="headers">HTTP Header Collection which may be modified by those subscribing to the event.</param>
-		internal void RaiseBeforeResponseHeadersSent(object sender, HttpHeaderCollection headers)
+		/// <param name="processor">HttpProcessor which may be modified by those subscribing to the event.</param>
+		internal void RaiseBeforeResponseHeadersSent(object sender, HttpProcessor processor)
 		{
 			try
 			{
-				BeforeResponseHeadersSent(sender, headers);
+				BeforeResponseHeadersSent(sender, processor);
 			}
 			catch (Exception ex)
 			{

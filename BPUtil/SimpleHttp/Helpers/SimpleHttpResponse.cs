@@ -37,6 +37,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		private byte[] bodyContent = null;
 		private byte? _keepAliveTimeSeconds = null;
+		private bool _checkAsyncUsage = true;
 		#region Internal response stream references
 		private Substream _substream;
 		private GZipStream _gzipstream;
@@ -58,6 +59,8 @@ namespace BPUtil.SimpleHttp
 			}
 			set
 			{
+				if (ResponseHeaderWritten)
+					throw new ApplicationException("The response header was already written.");
 				int? responseStatusInt = NumberUtil.FirstInt(value);
 				if (responseStatusInt == null)
 					throw new ArgumentException("HTTP Response status string is an incorrect format: " + value, "StatusString");
@@ -107,6 +110,8 @@ namespace BPUtil.SimpleHttp
 			}
 			set
 			{
+				if (ResponseHeaderWritten)
+					throw new ApplicationException("The response header was already written.");
 				Headers["Content-Type"] = value;
 			}
 		}
@@ -203,7 +208,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
 		public void StaticFile(string filePath, string contentTypeOverride = null, bool canCache = true)
 		{
-			if (p.IsAsync)
+			if (_checkAsyncUsage && p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in blocking/synchronous mode.");
 			if (ResponseHeaderWritten)
 				throw new ApplicationException("The response header was already written.");
@@ -220,7 +225,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="cancellationToken">Cancellation Token.</param>
 		public Task StaticFileAsync(string filePath, string contentTypeOverride = null, bool canCache = true, CancellationToken cancellationToken = default)
 		{
-			if (!p.IsAsync)
+			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");
 			if (ResponseHeaderWritten)
 				throw new ApplicationException("The response header was already written.");
@@ -235,7 +240,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
 		public void StaticFile(FileInfo fi, string contentTypeOverride = null, bool canCache = true)
 		{
-			if (p.IsAsync)
+			if (_checkAsyncUsage && p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in blocking/synchronous mode.");
 
 			if (!fi.Exists)
@@ -244,24 +249,27 @@ namespace BPUtil.SimpleHttp
 				return;
 			}
 
-			SetupStaticFileCommonHeaders(fi, contentTypeOverride, canCache);
-
-			Headers["ETag"] = MakeETagSync(fi);
-
 			bool cacheHit = false;
-			// If-None-Match
-			// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
-			string IfNoneMatch = p.Request.Headers.Get("If-None-Match");
-			if (IfNoneMatch != null)
+			bool isCacheable = SetupStaticFileCommonHeaders(fi, contentTypeOverride, canCache);
+
+			if (isCacheable)
 			{
-				if (Headers["ETag"] == IfNoneMatch)
-					cacheHit = true;
-			}
-			else
-			{
-				string IfModifiedSince = p.Request.Headers.Get("If-Modified-Since");
-				if (IfModifiedSince != null && IfModifiedSince.IEquals(Headers["Last-Modified"]))
-					cacheHit = true;
+				Headers["ETag"] = MakeETagSync(fi);
+
+				// If-None-Match
+				// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
+				string IfNoneMatch = p.Request.Headers.Get("If-None-Match");
+				if (IfNoneMatch != null)
+				{
+					if (Headers["ETag"] == IfNoneMatch)
+						cacheHit = true;
+				}
+				else
+				{
+					string IfModifiedSince = p.Request.Headers.Get("If-Modified-Since");
+					if (IfModifiedSince != null && IfModifiedSince.IEquals(Headers["Last-Modified"]))
+						cacheHit = true;
+				}
 			}
 
 			if (cacheHit)
@@ -288,7 +296,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="cancellationToken">Cancellation Token.</param>
 		public async Task StaticFileAsync(FileInfo fi, string contentTypeOverride = null, bool canCache = true, CancellationToken cancellationToken = default)
 		{
-			if (!p.IsAsync)
+			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");
 
 			if (!fi.Exists)
@@ -297,24 +305,27 @@ namespace BPUtil.SimpleHttp
 				return;
 			}
 
-			SetupStaticFileCommonHeaders(fi, contentTypeOverride, canCache);
-
-			Headers["ETag"] = await MakeETagAsync(fi).ConfigureAwait(false);
-
 			bool cacheHit = false;
-			// If-None-Match
-			// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
-			string IfNoneMatch = p.Request.Headers.Get("If-None-Match");
-			if (IfNoneMatch != null)
+			bool isCacheable = SetupStaticFileCommonHeaders(fi, contentTypeOverride, canCache);
+
+			if (isCacheable)
 			{
-				if (Headers["ETag"] == IfNoneMatch)
-					cacheHit = true;
-			}
-			else
-			{
-				string IfModifiedSince = p.Request.Headers.Get("If-Modified-Since");
-				if (IfModifiedSince != null && IfModifiedSince.IEquals(Headers["Last-Modified"]))
-					cacheHit = true;
+				Headers["ETag"] = await MakeETagAsync(fi).ConfigureAwait(false);
+
+				// If-None-Match
+				// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
+				string IfNoneMatch = p.Request.Headers.Get("If-None-Match");
+				if (IfNoneMatch != null)
+				{
+					if (Headers["ETag"] == IfNoneMatch)
+						cacheHit = true;
+				}
+				else
+				{
+					string IfModifiedSince = p.Request.Headers.Get("If-Modified-Since");
+					if (IfModifiedSince != null && IfModifiedSince.IEquals(Headers["Last-Modified"]))
+						cacheHit = true;
+				}
 			}
 
 			if (cacheHit)
@@ -332,17 +343,23 @@ namespace BPUtil.SimpleHttp
 			await FinishAsync(cancellationToken).ConfigureAwait(false);
 		}
 
-		private void SetupStaticFileCommonHeaders(FileInfo fi, string contentTypeOverride, bool canCache)
+		private bool SetupStaticFileCommonHeaders(FileInfo fi, string contentTypeOverride, bool canCache)
 		{
 			Reset("200 OK");
 			Headers["Content-Type"] = contentTypeOverride != null ? contentTypeOverride : Mime.GetMimeType(fi.Extension);
-			Headers["Date"] = DateTime.UtcNow.ToString("R");
-			Headers["Last-Modified"] = fi.GetLastWriteTimeUtcAndRepairIfBroken().ToString("R");
-			Headers["Age"] = "0";
 			if (canCache && p.srv.CanCacheFileExtension(fi.Extension))
+			{
+				Headers["Date"] = DateTime.UtcNow.ToString("R");
+				Headers["Last-Modified"] = fi.GetLastWriteTimeUtcAndRepairIfBroken().ToString("R");
+				Headers["Age"] = "0";
 				Headers["Cache-Control"] = "max-age=604800, public";
+				return true;
+			}
 			else
+			{
 				Headers["Cache-Control"] = "no-cache"; // Caching is technically allowed, but the user agent should always revalidate to ensure the cached value is not stale.
+				return false;
+			}
 		}
 
 		/// <summary>
@@ -489,9 +506,9 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public void WebSocketUpgradeSync()
 		{
-			byte[] buffer = _Prep_WebSocketUpgrade();
-			p.tcpStream.Write(buffer, 0, buffer.Length);
-			p.tcpStream.Flush();
+			_checkAsyncUsage = false;
+			_Prep_WebSocketUpgrade();
+			FinishSync();
 		}
 
 		/// <summary>
@@ -499,27 +516,18 @@ namespace BPUtil.SimpleHttp
 		/// <para>Afterward, the tcpStream will be ready to hand over to the WebSocket, and this Response object will be finished.</para>
 		/// </summary>
 		/// <param name="cancellationToken">Cancellation Token</param>
-		public async Task WebSocketUpgradeAsync(CancellationToken cancellationToken = default)
+		public Task WebSocketUpgradeAsync(CancellationToken cancellationToken = default)
 		{
-			if (!p.IsAsync)
+			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");
-			byte[] buffer = _Prep_WebSocketUpgrade();
-			await p.tcpStream.WriteAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
-			await p.tcpStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+			_Prep_WebSocketUpgrade();
+			return FinishAsync(cancellationToken);
 		}
-		private byte[] _Prep_WebSocketUpgrade()
+		private void _Prep_WebSocketUpgrade()
 		{
 			Reset("101 Switching Protocols");
-			ResponseHeaderWritten = true;
-			PreventKeepalive();
-
-			StringBuilder sb = new StringBuilder();
-			sb.AppendLineRN("HTTP/1.1 101 Switching Protocols");
-			sb.AppendLineRN("Upgrade: websocket");
-			sb.AppendLineRN("Connection: Upgrade");
-			sb.AppendLineRN("Sec-WebSocket-Accept: " + WebSockets.WebSocket.CreateSecWebSocketAcceptValue(p.Request.Headers.Get("sec-websocket-key")));
-			sb.AppendLineRN("");
-			return ByteUtil.Utf8NoBOM.GetBytes(sb.ToString());
+			Headers["Upgrade"] = "websocket";
+			Headers["Sec-WebSocket-Accept"] = WebSockets.WebSocket.CreateSecWebSocketAcceptValue(p.Request.Headers.Get("sec-websocket-key"));
 		}
 		#endregion
 		#region Set (equivalent to legacy writeSuccess)
@@ -565,7 +573,7 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		public Stream GetResponseStreamSync()
 		{
-			if (p.IsAsync)
+			if (_checkAsyncUsage && p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in blocking/synchronous mode.");
 			if (!ResponseHeaderWritten)
 				WriteResponseHeader();
@@ -578,7 +586,7 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		public async Task<Stream> GetResponseStreamAsync(CancellationToken cancellationToken = default)
 		{
-			if (!p.IsAsync)
+			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");
 			if (!ResponseHeaderWritten)
 				await WriteResponseHeaderAsync(cancellationToken).ConfigureAwait(false);
@@ -591,6 +599,7 @@ namespace BPUtil.SimpleHttp
 		/// <para>It consists of the status line and HTTP headers followed by an empty line.</para>
 		/// <para>If this method is called more than once per response, an ApplicationException is thrown.</para>  
 		/// </summary>
+		/// <param name="chunkedTransferEncoding">(Output) True if chunked transfer encoding needs to be used to write a response body.</param>
 		/// <returns>The response header.</returns>
 		/// <exception cref="ApplicationException">If the response header can not be generated due to an error.</exception>
 		private byte[] GetResponseHeader(out bool chunkedTransferEncoding)
@@ -619,6 +628,18 @@ namespace BPUtil.SimpleHttp
 			HashSet<string> reservedHeaderKeys = new HashSet<string>(new string[] { "Connection", "Keep-Alive" });
 
 			sb.AppendLineRN("HTTP/1.1 " + StatusString);
+			if (Headers["Upgrade"] == "websocket")
+			{
+				PreventKeepalive();
+				sb.AppendLineRN("Connection: upgrade");
+			}
+			else if (KeepaliveTimeSeconds > 0)
+			{
+				sb.AppendLineRN("Connection: keep-alive");
+				sb.AppendLineRN("Keep-Alive: timeout=" + (KeepaliveTimeSeconds - 1).Clamp(1, 60));
+			}
+			else
+				sb.AppendLineRN("Connection: close");
 			chunkedTransferEncoding = allowResponseBody && KeepaliveTimeSeconds > 0 && ContentLength == null;
 			if (chunkedTransferEncoding)
 				WriteReservedHeader(sb, reservedHeaderKeys, "Transfer-Encoding", "chunked");
@@ -633,17 +654,9 @@ namespace BPUtil.SimpleHttp
 			foreach (HttpHeader header in Headers)
 			{
 				if (reservedHeaderKeys.Contains(header.Key, true))
-					throw new ApplicationException("writeSuccess() additionalHeaders conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
+					throw new ApplicationException("SimpleHttpResponse.GetResponseHeader() HTTP Headers conflict: Header \"" + header.Key + "\" is already predetermined for this response.");
 				sb.AppendLineRN(header.Key + ": " + header.Value);
 			}
-
-			if (KeepaliveTimeSeconds > 0)
-			{
-				sb.AppendLineRN("Connection: keep-alive");
-				sb.AppendLineRN("Keep-Alive: timeout=" + (KeepaliveTimeSeconds - 1).Clamp(1, 60));
-			}
-			else
-				sb.AppendLineRN("Connection: close");
 			sb.AppendLineRN("");
 			return ByteUtil.Utf8NoBOM.GetBytes(sb.ToString());
 		}
@@ -713,7 +726,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		internal void WriteResponseHeaderIfNeededSync()
 		{
-			if (p.IsAsync)
+			if (_checkAsyncUsage && p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in blocking/synchronous mode.");
 			if (!ResponseHeaderWritten)
 				WriteResponseHeader();
@@ -721,9 +734,10 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Called by the HttpProcessor after control returns from the Http Server to ensure that the configured response was written.
 		/// </summary>
+		/// <param name="cancellationToken">Cancellation Token</param>
 		internal Task WriteResponseHeaderIfNeededAsync(CancellationToken cancellationToken = default)
 		{
-			if (!p.IsAsync)
+			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");
 			if (!ResponseHeaderWritten)
 				return WriteResponseHeaderAsync(cancellationToken);
@@ -757,7 +771,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="chunkedTransferEncoding"></param>
 		/// <returns></returns>
 		/// <exception cref="ApplicationException"></exception>
-		private void PrepareResponseStream(bool chunkedTransferEncoding)
+		internal void PrepareResponseStream(bool chunkedTransferEncoding)
 		{
 			if (!ResponseHeaderWritten)
 				throw new ApplicationException("Can't prepare response body stream before the response header is written.");
@@ -787,7 +801,7 @@ namespace BPUtil.SimpleHttp
 		/// <exception cref="ApplicationException">If the server failed to write the promised number of bytes to the response body.</exception>
 		public void FinishSync()
 		{
-			if (p.IsAsync)
+			if (_checkAsyncUsage && p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in blocking/synchronous mode.");
 
 			WriteResponseHeaderIfNeededSync();
@@ -822,7 +836,7 @@ namespace BPUtil.SimpleHttp
 		/// <exception cref="ApplicationException">If the server failed to write the promised number of bytes to the response body.</exception>
 		public async Task FinishAsync(CancellationToken cancellationToken = default)
 		{
-			if (!p.IsAsync)
+			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");
 
 			await WriteResponseHeaderIfNeededAsync(cancellationToken).ConfigureAwait(false);
@@ -876,6 +890,45 @@ namespace BPUtil.SimpleHttp
 			StatusString = httpStatusString;
 			bodyContent = null;
 			Headers.Clear();
+		}
+		/// <inheritdoc/>
+		public override string ToString()
+		{
+			if (!ResponseHeaderWritten)
+				return "Nothing written yet (currently configured as " + StatusString + ")";
+			if (Headers.Get("Upgrade") == "websocket")
+				return "WebSocket";
+			Stream rs = responseStream;
+			if (rs != null)
+			{
+				if (rs is Substream)
+				{
+					Substream s = (Substream)rs;
+					return StatusString + ", BODY: " + s.Length + " bytes " + (s.EndOfStream ? "(fully written)" : "(not fully written)");
+				}
+				if (rs is WritableChunkedTransferEncodingStream)
+				{
+					WritableChunkedTransferEncodingStream s = (WritableChunkedTransferEncodingStream)rs;
+					return StatusString + ", BODY: " + s.PayloadBytesWritten + " bytes " + (s.StreamEnded ? "(fully written)" : "(and counting)");
+				}
+			}
+			long? cl = ContentLength;
+			if (cl != null)
+				return StatusString + ", Content-Length: " + cl;
+			if (rs != null)
+				return StatusString + ", BODY: unknown";
+			return StatusString;
+		}
+		/// <summary>
+		/// Creates the response header data and prepares a response stream.  Returns the response header data.  It is critical that the caller writes the returned response header data to the tcpStream and flushes the tcpStream before writing anything to the response stream.
+		/// </summary>
+		/// <returns>Returns the response header data.</returns>
+		internal byte[] PrepareForProxy(out Stream responseStream)
+		{
+			byte[] responseHeader = GetResponseHeader(out bool chunkedTransferEncoding);
+			PrepareResponseStream(chunkedTransferEncoding);
+			responseStream = this.responseStream;
+			return responseHeader;
 		}
 		#endregion
 	}

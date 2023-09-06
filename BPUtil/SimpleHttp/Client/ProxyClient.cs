@@ -284,7 +284,7 @@ namespace BPUtil.SimpleHttp.Client
 				sbRequestText.AppendLineRN("Transfer-Encoding: chunked");
 			ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
 
-			options.RaiseBeforeRequestHeadersSent(this, p.Request.Headers);
+			options.RaiseBeforeRequestHeadersSent(this, p);
 
 			foreach (HttpHeader header in p.Request.Headers)
 			{
@@ -370,11 +370,22 @@ namespace BPUtil.SimpleHttp.Client
 			if (proxyTiming != null)
 				proxyHttpHeaders["Server-Timing"] = proxyTiming.ToServerTimingHeader();
 
-			// Decide how to respond
+			///////////////////////////////
+			// PHASE 5: Process Response //
+			///////////////////////////////
+			// Begin populating the Response object
 			options.bet?.Start("Proxy Process Response Headers");
-			ProxyResponseDecision decision = ProxyResponseDecision.Undefined;
-			long proxyContentLength = 0;
+			p.Response.StatusString = responseStatusLine.StatusString;
+			foreach (HttpHeader header in proxyHttpHeaders)
+			{
+				if (!doNotProxyHeaders.Contains(header.Key, true))
+					p.Response.Headers.Add(header);
+			}
+
+			// Decide how to respond
+			Stream proxyResponseStream = proxyStream;
 			bool remoteServerWantsKeepalive = false;
+
 			string proxyConnectionHeader;
 			if (!proxyHttpHeaders.TryGetValue("Connection", out proxyConnectionHeader))
 			{
@@ -387,25 +398,19 @@ namespace BPUtil.SimpleHttp.Client
 				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
 				.Select(s => s.Trim())
 				.ToArray();
-
-			if (p.Request.HttpMethod == "HEAD")
-				decision = ProxyResponseDecision.NoBody;
-			else if (proxyConnectionHeaderValues.Contains("upgrade", true) && proxyHttpHeaders.TryGetValue("Upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
+			if (proxyConnectionHeaderValues.Contains("upgrade", true) && proxyHttpHeaders.TryGetValue("Upgrade", out string proxyUpgradeHeader) && proxyUpgradeHeader.IEquals("websocket"))
 			{
 				options.log.AppendLine("This is a websocket connection.");
-				decision = ProxyResponseDecision.Websocket;
+				p.Response.Headers["Upgrade"] = "websocket";
 			}
 			else
 			{
 				remoteServerWantsKeepalive = proxyConnectionHeaderValues.Contains("keep-alive");
 
 				if (!HttpServer.HttpStatusCodeCanHaveResponseBody(responseStatusLine.StatusCodeInt))
-					decision = ProxyResponseDecision.NoBody;
-				else if (proxyHttpHeaders.TryGetValue("Content-Length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out proxyContentLength) && proxyContentLength > -1)
-				{
-					// Content-Length
-					decision = ProxyResponseDecision.ContentLength;
-				}
+					proxyResponseStream = null;
+				else if (proxyHttpHeaders.TryGetValue("Content-Length", out string proxyContentLengthStr) && long.TryParse(proxyContentLengthStr, out long proxyContentLength) && proxyContentLength > -1)
+					proxyResponseStream = proxyResponseStream.Substream(proxyContentLength);
 				else
 				{
 					if (proxyHttpHeaders.TryGetValue("Transfer-Encoding", out string proxyTransferEncoding))
@@ -418,31 +423,24 @@ namespace BPUtil.SimpleHttp.Client
 						if (proxyTransferEncodingValues.Contains("chunked", true))
 						{
 							// Transfer-Encoding: chunked
-							decision = ProxyResponseDecision.ReadChunked;
+							proxyResponseStream = new ReadableChunkedTransferEncodingStream(proxyResponseStream);
 							if (proxyTransferEncodingValues.Length > 1)
 								options.log.AppendLine("WARNING: Transfer-Encoding is not recognized fully: " + proxyTransferEncoding);
 						}
 						else
 							options.log.AppendLine("WARNING: Transfer-Encoding is not recognized: " + proxyTransferEncoding);
 					}
-					if (decision == ProxyResponseDecision.Undefined)
+					if (proxyResponseStream == proxyStream && remoteServerWantsKeepalive)
 					{
-						if (remoteServerWantsKeepalive)
-							decision = ProxyResponseDecision.NoBody;
-						else
-							decision = ProxyResponseDecision.UntilClosed;
+						proxyResponseStream = null;
+						remoteServerWantsKeepalive = false;
 					}
 				}
-
-				//// keep-alive responses must either specify a "Content-Length" or use "Transfer-Encoding: chunked".
-				//if (remoteServerWantsKeepalive && decision != ProxyResponseDecision.ContentLength && decision != ProxyResponseDecision.Chunked)
-				//{
-				//	p.writeFullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
-				//	return new ProxyResult(ProxyResultErrorCode.BadGateway, "ProxyTo can't process this request because the remote server specified \"Connection: keepalive\" without specifying a \"Content-Length\" or using \"Transfer-Encoding: chunked\". The request was: " + requestLine + ". All headers:\r\n" + string.Join("\r\n", proxyHttpHeadersRaw.Select(i => i.Key + ": " + i.Value)), false, false);
-				//}
 			}
+			if (p.Request.HttpMethod == "HEAD")
+				proxyResponseStream = null;
 
-			options.log.AppendLine("Response will be read as: " + decision + (decision == ProxyResponseDecision.ContentLength ? (" (" + proxyContentLength + ")") : ""));
+			options.log.AppendLine("Response will be read as: " + proxyResponseStream?.GetType().Name ?? "[no response body]");
 
 			// Rewrite redirect location to point at this server
 			if (proxyHttpHeaders.ContainsKey("Location"))
@@ -461,91 +459,29 @@ namespace BPUtil.SimpleHttp.Client
 			/////////////////////////////
 			// PHASE 5: WRITE RESPONSE //
 			/////////////////////////////
-			// Write response status line
-			responseStatusLine.Version = "1.1"; // We do not speak HTTP 1.0, but the server we talked to might.
-			options.bet?.Start("Proxy Write Response: " + decision);
-			Stream outgoingStream = p.tcpStream;
-			p.Response.ResponseHeaderWritten = true;
-			StringBuilder sbResponseText = new StringBuilder();
-			sbResponseText.AppendLineRN(responseStatusLine.ToString());
+			options.bet?.Start("Proxy Write Response: " + proxyResponseStream?.GetType().Name ?? "[no response body]");
+			options.RaiseBeforeResponseHeadersSent(this, p);
 
-			// Write response headers
-			bool wrapOutputStreamChunked = false;
-			string responseConnectionHeader;
-			if (decision == ProxyResponseDecision.Websocket)
-				responseConnectionHeader = "upgrade";
-			else if (p.Response.KeepaliveTimeSeconds == 0)
-				responseConnectionHeader = "close";
-			else
-				responseConnectionHeader = "keep-alive";
-			sbResponseText.AppendLineRN("Connection: " + responseConnectionHeader);
-			if (responseConnectionHeader == "keep-alive")
-				sbResponseText.AppendLineRN("Keep-Alive: timeout=" + (p.Response.KeepaliveTimeSeconds - 1).Clamp(1, 60));
+			// Work with the response object to create the response header and create a response stream we can use to write a response body.
+			byte[] responseHeaderBytes = p.Response.PrepareForProxy(out Stream outgoingStream);
 
-			if (decision == ProxyResponseDecision.Websocket)
-				sbResponseText.AppendLineRN("Upgrade: websocket");
-			else
+			// Write the response header.
+			await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, p.tcpStream, responseHeaderBytes, responseHeaderBytes.Length, snoopy, options.cancellationToken).ConfigureAwait(false);
+
+			// Flush the tcpStream to ensure that future writes to outgoingStream are not out of order.
+			if (outgoingStream != p.tcpStream)
+				p.tcpStream.Flush();
+
+			if (p.Response.Headers["Upgrade"] == "websocket")
 			{
-				if (responseConnectionHeader == "keep-alive")
-				{
-					if (decision != ProxyResponseDecision.ContentLength && decision != ProxyResponseDecision.NoBody)
-					{
-						// No content-length was provided, and there is assumed to be a response body.  We must use "Transfer-Encoding: chunked" for our response.
-						sbResponseText.AppendLineRN("Transfer-Encoding: chunked");
-						wrapOutputStreamChunked = true;
-					}
-				}
+				// Asynchronously proxy additional incoming data to the remote server (do not await)
+				_ = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy, options.cancellationToken);
+				// Later code will handle proxying the response from the remote server to our client.
 			}
+			if (proxyResponseStream != null)
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
 
-			options.RaiseBeforeResponseHeadersSent(this, proxyHttpHeaders);
-
-			foreach (HttpHeader header in proxyHttpHeaders)
-			{
-				if (doNotProxyHeaders.Contains(header.Key, true))
-					continue;
-				sbResponseText.AppendLineRN(header.Key + ": " + header.Value);
-			}
-
-			// Write blank line to indicate the end of the response headers
-			sbResponseText.AppendLineRN("");
-
-			await _ProxyStringAsync(ProxyDataDirection.ResponseFromServer, outgoingStream, sbResponseText.ToString(), snoopy, options.cancellationToken).ConfigureAwait(false);
-			// RESPONSE HEADERS ARE WRITTEN
-
-			if (wrapOutputStreamChunked)
-			{
-				outgoingStream = new WritableChunkedTransferEncodingStream(outgoingStream);
-				options.log.AppendLine("Response will be written with \"Transfer-Encoding: chunked\".");
-			}
-
-			// Handle the rest of the response based on the decision made earlier.
-			if (decision == ProxyResponseDecision.ContentLength)
-			{
-				await CopyNBytesAsync(proxyContentLength, ProxyDataDirection.ResponseFromServer, proxyStream, outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
-			}
-			else if (decision == ProxyResponseDecision.ReadChunked)
-			{
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, new ReadableChunkedTransferEncodingStream(proxyStream), outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
-			}
-			else if (decision == ProxyResponseDecision.UntilClosed)
-			{
-				await ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
-			}
-			else if (decision == ProxyResponseDecision.Websocket)
-			{
-				// Proxy response to client asynchronously (do not await)
-				_ = ProxyResponseToClientAsync(proxyStream, outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
-
-				// The current thread will handle additional incoming data from our client and proxy it to the remote server.
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy, options.cancellationToken).ConfigureAwait(false);
-			}
-			else if (decision == ProxyResponseDecision.NoBody)
-			{
-				// All done!
-			}
-
-			if (outgoingStream is WritableChunkedTransferEncodingStream)
-				await (outgoingStream as WritableChunkedTransferEncodingStream).WriteFinalChunkAsync(options.cancellationToken).ConfigureAwait(false);
+			await p.Response.FinishAsync(options.cancellationToken).ConfigureAwait(false);
 
 			//////////////////////
 			// PHASE 6: CLEANUP //
@@ -844,34 +780,6 @@ namespace BPUtil.SimpleHttp.Client
 		}
 
 		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
-		private static void ProxyResponseToClient(Stream serverStream, Stream clientStream, ProxyDataBuffer snoopy)
-		{
-			try
-			{
-				CopyStreamUntilClosed(ProxyDataDirection.ResponseFromServer, serverStream, clientStream, snoopy);
-			}
-			catch (Exception ex)
-			{
-				if (HttpProcessor.IsOrdinaryDisconnectException(ex))
-					return;
-				SimpleHttpLogger.LogVerbose(ex);
-			}
-		}
-
-		private static async Task ProxyResponseToClientAsync(Stream serverStream, Stream clientStream, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
-		{
-			try
-			{
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, serverStream, clientStream, snoopy, cancellationToken).ConfigureAwait(false);
-			}
-			catch (Exception ex)
-			{
-				if (HttpProcessor.IsOrdinaryDisconnectException(ex) || ex.GetExceptionOfType<ObjectDisposedException>() != null)
-					return;
-				SimpleHttpLogger.LogVerbose(ex);
-			}
-		}
-		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
 		private static void CopyStreamUntilClosed(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
 		{
 			byte[] buf = ByteUtil.BufferGet();
@@ -1016,6 +924,10 @@ namespace BPUtil.SimpleHttp.Client
 			/// Original string sent into the constructor.
 			/// </summary>
 			public string OriginalStatusLine;
+			/// <summary>
+			/// Returns the full status string, e.g. "200 OK" or "404 Not Found".
+			/// </summary>
+			public string StatusString => StatusCode + (StatusText == null ? "" : " " + StatusText);
 			/// <summary>
 			/// Constructs an empty HttpResponseStatusLine.
 			/// </summary>

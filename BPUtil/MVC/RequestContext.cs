@@ -9,7 +9,17 @@ namespace BPUtil.MVC
 {
 	public class RequestContext
 	{
+		/// <summary>
+		/// The <see cref="HttpProcessor"/> that is handling the request.
+		/// </summary>
 		public readonly HttpProcessor httpProcessor;
+		/// <summary>
+		/// The <see cref="HttpServerBase"/> that accepted the connection.
+		/// </summary>
+		public readonly HttpServerBase Server;
+		/// <summary>
+		/// The full path string requested by the client.
+		/// </summary>
 		public readonly string OriginalRequestPath;
 		/// <summary>
 		/// The "path" part of the URL.  E.g. for the url "Articles/Science/Moon.html?search=crater" the "path" part is "Articles/Science/Moon.html".
@@ -59,6 +69,7 @@ namespace BPUtil.MVC
 		public RequestContext(HttpProcessor httpProcessor, string requestPath)
 		{
 			this.httpProcessor = httpProcessor;
+			this.Server = httpProcessor.srv;
 			this.OriginalRequestPath = requestPath;
 
 			int idxQmark = requestPath.IndexOf('?');

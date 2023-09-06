@@ -241,6 +241,7 @@ namespace BPUtil.SimpleHttp
 		/// <exception cref="EndOfStreamException">If the end of the stream is encountered before the full Http Header section is read.</exception>
 		private static List<string> ReadHttpHeaderSectionSync(Stream stream)
 		{
+			int charsRemaining = 32768;
 			List<string> lines = new List<string>();
 			while (true)
 			{
@@ -253,6 +254,9 @@ namespace BPUtil.SimpleHttp
 				}
 				else if (line == "")
 					return lines;
+				charsRemaining -= line.Length;
+				if (charsRemaining <= 0)
+					throw new HttpProcessorException("413 Entity Too Large");
 				lines.Add(line);
 			}
 		}
@@ -266,6 +270,7 @@ namespace BPUtil.SimpleHttp
 		/// <exception cref="EndOfStreamException">If the end of the stream is encountered before the full Http Header section is read.</exception>
 		internal static async Task<List<string>> ReadHttpHeaderSectionAsync(UnreadableStream stream, int timeoutMilliseconds, CancellationToken cancellationToken)
 		{
+			int charsRemaining = 32768;
 			List<string> lines = new List<string>();
 			while (true)
 			{
@@ -278,6 +283,9 @@ namespace BPUtil.SimpleHttp
 				}
 				else if (line == "")
 					return lines;
+				charsRemaining -= line.Length;
+				if (charsRemaining <= 0)
+					throw new HttpProcessorException("413 Entity Too Large");
 				lines.Add(line);
 			}
 		}
@@ -723,6 +731,27 @@ namespace BPUtil.SimpleHttp
 				Url = uriBuilder.Uri;
 				Page = Url.AbsolutePath.StartsWith("/") ? Url.AbsolutePath.Substring(1) : Url.AbsolutePath;
 			}
+		}
+		/// <inheritdoc/>
+		public override string ToString()
+		{
+			if (Headers.Get("Upgrade") == "websocket")
+				return HttpMethod + " " + Url + " WebSocket";
+			if (RequestBodyStream == null)
+				return HttpMethod + " " + Url;
+			if (RequestBodyStream is MemoryStream)
+				return HttpMethod + " " + Url + " BODY: " + (RequestBodyStream as MemoryStream).Length + " bytes (fully read)";
+			if (RequestBodyStream is Substream)
+			{
+				Substream s = (Substream)RequestBodyStream;
+				return HttpMethod + " " + Url + " BODY: " + s.Length + " bytes " + (s.EndOfStream ? "(fully read)" : "(not fully read)");
+			}
+			if (RequestBodyStream is ReadableChunkedTransferEncodingStream)
+			{
+				ReadableChunkedTransferEncodingStream s = (ReadableChunkedTransferEncodingStream)RequestBodyStream;
+				return HttpMethod + " " + Url + " BODY: " + s.PayloadBytesRead + " bytes " + (s.EndOfStream ? "(fully read)" : "(and counting)");
+			}
+			return HttpMethod + " " + Url + " BODY unknown type";
 		}
 		#endregion
 	}

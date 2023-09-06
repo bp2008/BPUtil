@@ -259,6 +259,11 @@ namespace BPUtil.SimpleHttp
 		/// Gets the local endpoint.
 		/// </summary>
 		public IPEndPoint LocalEndPoint => (IPEndPoint)tcpClient.Client.LocalEndPoint;
+		private static long _connectionIdCounter = 0;
+		/// <summary>
+		/// A unique auto-incremented identifier of this HttpProcessor instance, guaranteed to be unique for the lifetime of the current process.
+		/// </summary>
+		public readonly long ConnectionID = Interlocked.Increment(ref _connectionIdCounter);
 		#endregion
 
 		/// <summary>
@@ -321,7 +326,7 @@ namespace BPUtil.SimpleHttp
 					catch (OperationCanceledException) { return; }
 					catch (Exception e)
 					{
-						if (HandleCommonExceptionScenarios(e))
+						if (HandleCommonExceptionScenarios(e, "HttpProcessor.Process:"))
 							return;
 					}
 					Response.FinishSync();
@@ -332,8 +337,7 @@ namespace BPUtil.SimpleHttp
 			catch (OperationCanceledException) { return; }
 			catch (Exception ex)
 			{
-				if (!IsOrdinaryDisconnectException(ex))
-					SimpleHttpLogger.LogVerbose(ex, "HttpProcessor.Process:Outer:" + GetDebugLogPrefix());
+				HandleCommonExceptionScenarios(ex, "HttpProcessor.Process:Outer:");
 			}
 			finally
 			{
@@ -387,7 +391,7 @@ namespace BPUtil.SimpleHttp
 					catch (OperationCanceledException) { return; }
 					catch (Exception e)
 					{
-						if (HandleCommonExceptionScenarios(e))
+						if (HandleCommonExceptionScenarios(e, "HttpProcessor.ProcessAsync:"))
 							return;
 					}
 					await Response.FinishAsync(cancellationToken).ConfigureAwait(false);
@@ -398,8 +402,7 @@ namespace BPUtil.SimpleHttp
 			catch (OperationCanceledException) { return; }
 			catch (Exception ex)
 			{
-				if (!IsOrdinaryDisconnectException(ex))
-					SimpleHttpLogger.LogVerbose(ex, "HttpProcessor.ProcessAsync:Outer:" + GetDebugLogPrefix());
+				HandleCommonExceptionScenarios(ex, "HttpProcessor.ProcessAsync:Outer:");
 			}
 			finally
 			{
@@ -442,9 +445,15 @@ namespace BPUtil.SimpleHttp
 
 			// While the server is under low load, a larger buffer is allowed for better write performance.
 			if (this.ServerIsUnderHighLoad)
-				tcpClient.SendBufferSize = 8192;
+			{
+				if (tcpClient.SendBufferSize != 8192)
+					tcpClient.SendBufferSize = 8192;
+			}
 			else
-				tcpClient.SendBufferSize = 65536;
+			{
+				if (tcpClient.SendBufferSize != 65536)
+					tcpClient.SendBufferSize = 65536;
+			}
 		}
 
 		/// <summary>
@@ -508,8 +517,9 @@ namespace BPUtil.SimpleHttp
 		/// <para>Returns true if the processor should return immediately with no need to flush unwritten data.</para>
 		/// </summary>
 		/// <param name="e">Exception that occurred.</param>
+		/// <param name="errorLogPrefix">A string which should be printed at the start of any error logs.</param>
 		/// <returns></returns>
-		private bool HandleCommonExceptionScenarios(Exception e)
+		private bool HandleCommonExceptionScenarios(Exception e, string errorLogPrefix)
 		{
 			if (IsOrdinaryDisconnectException(e))
 				return true;
@@ -520,7 +530,7 @@ namespace BPUtil.SimpleHttp
 			HttpProcessorException hpex = e.GetExceptionOfType<HttpProcessorException>();
 			if (hpex != null)
 			{
-				SimpleHttpLogger.LogVerbose("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				if (!Response.ResponseHeaderWritten)
 				{
@@ -532,7 +542,7 @@ namespace BPUtil.SimpleHttp
 			}
 			else if (e.GetExceptionOfType<HttpProtocolException>() != null)
 			{
-				SimpleHttpLogger.LogVerbose("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				if (!Response.ResponseHeaderWritten)
 					Response.Simple("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
@@ -540,21 +550,21 @@ namespace BPUtil.SimpleHttp
 			else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
 			{
 				// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
-				SimpleHttpLogger.LogVerbose("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				Response.ResponseHeaderWritten = true;
 				return true;
 			}
 			else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)
 			{
-				SimpleHttpLogger.Log("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				if (!Response.ResponseHeaderWritten)
 					Response.Simple("500 Internal Server Error", "An error occurred while processing this request.");
 			}
 			else
 			{
-				SimpleHttpLogger.Log("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				if (!Response.ResponseHeaderWritten)
 					Response.Simple("500 Internal Server Error", "An error occurred while processing this request.");
@@ -863,6 +873,23 @@ namespace BPUtil.SimpleHttp
 
 			return "Digest realm=\"" + realm + "\", nonce=\"" + nonce + "\", opaque=\"" + opaque + "\", algorithm=MD5, qop=\"auth\", userhash=true";
 		}
+
+		/// <inheritdoc/>
+		public override string ToString()
+		{
+			StringBuilder sb = new StringBuilder();
+			sb.Append("[" + this.ConnectionID + "] [" + this.RemoteIPAddressStr + " -> " + this.HostName + "]");
+			if (this.Request == null)
+				sb.Append(" ... awaiting request");
+			else
+			{
+				sb.Append(" Req: " + this.Request.ToString());
+				if (this.Response != null)
+					sb.Append(" Res: " + this.Response.ToString());
+			}
+			return sb.ToString();
+		}
+
 		/// <summary>
 		/// An exception containing an HTTP response code and text.
 		/// </summary>
@@ -1258,12 +1285,17 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public long TotalRequestsServed => Interlocked.Read(ref _totalRequestsServed);
 		/// <summary>
+		/// Collection of all active HTTP processors, keyed on their remote endpoint.
+		/// </summary>
+		private ConcurrentDictionary<long, HttpProcessor> ActiveHttpProcessors = new ConcurrentDictionary<long, HttpProcessor>();
+		/// <summary>
 		/// Increments the <see cref="CurrentNumberOfOpenConnections"/> counter in a thread-safe manner.
 		/// </summary>
 		internal void Notify_ConnectionOpen(HttpProcessor p)
 		{
 			Interlocked.Increment(ref _totalConnectionsServed);
 			Interlocked.Increment(ref _currentNumberOfOpenConnections);
+			ActiveHttpProcessors[p.ConnectionID] = p;
 		}
 		/// <summary>
 		/// Decrements the <see cref="CurrentNumberOfOpenConnections"/> counter in a thread-safe manner.
@@ -1271,6 +1303,7 @@ namespace BPUtil.SimpleHttp
 		internal void Notify_ConnectionClosed(HttpProcessor p)
 		{
 			Interlocked.Decrement(ref _currentNumberOfOpenConnections);
+			ActiveHttpProcessors.TryRemove(p.ConnectionID, out HttpProcessor ignored);
 		}
 		/// <summary>
 		/// Increments the <see cref="TotalRequestsServed"/> counter in a thread-safe manner.
@@ -1699,6 +1732,14 @@ namespace BPUtil.SimpleHttp
 		/// Gets or sets maximum number of connections that should be allowed simultaneously.
 		/// </summary>
 		public virtual int MaxConnections { get; set; }
+		/// <summary>
+		/// Returns an array of all active HttpProcessor instances being processed by this server, ordered in the order in which the TCP connections were accepted.
+		/// </summary>
+		/// <returns></returns>
+		public HttpProcessor[] GetActiveHttpProcessors()
+		{
+			return ActiveHttpProcessors.Values.OrderBy(p => p.ConnectionID).ToArray();
+		}
 	}
 	/// <summary>
 	/// Base class for Http Web Servers that use a classic synchronous API with a thread pool for request handling.

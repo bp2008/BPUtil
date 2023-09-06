@@ -44,6 +44,14 @@ namespace BPUtil.SimpleHttp
 			get => _stream.Position;
 			set => _stream.Position = value;
 		}
+		private long _payloadBytesRead = 0;
+		/// <summary>
+		/// The number of payload bytes that have been read so far by this ReadableChunkedTransferEncodingStream.
+		/// </summary>
+		public long PayloadBytesRead
+		{
+			get => Interlocked.Read(ref _payloadBytesRead);
+		}
 
 		/// <inheritdoc />
 		public override void Flush()
@@ -79,6 +87,7 @@ namespace BPUtil.SimpleHttp
 				int justRead = _stream.Read(buffer, offset, toRead);
 				if (justRead == 0)
 					throw new EndOfStreamException("ReadableChunkedTransferEncodingStream encountered end of stream with " + remainingThisChunk + " bytes of a chunk remaining to read.");
+				Interlocked.Add(ref _payloadBytesRead, justRead);
 				totalRead += justRead;
 				offset += justRead;
 				remainingThisChunk -= justRead;
@@ -132,6 +141,7 @@ namespace BPUtil.SimpleHttp
 				int justRead = await _stream.ReadAsync(buffer, offset, toRead, cancellationToken).ConfigureAwait(false);
 				if (justRead == 0)
 					throw new EndOfStreamException("ReadableChunkedTransferEncodingStream encountered end of stream with " + remainingThisChunk + " bytes of a chunk remaining to read.");
+				Interlocked.Add(ref _payloadBytesRead, justRead);
 				totalRead += justRead;
 				offset += justRead;
 				remainingThisChunk -= justRead;
