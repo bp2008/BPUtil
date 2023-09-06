@@ -444,7 +444,7 @@ WantedBy=multi-user.target";
 #if NETFRAMEWORK || NET6_0_WIN
 			if (string.IsNullOrWhiteSpace(serviceName))
 				throw new ArgumentException(nameof(serviceName) + " is invalid", nameof(serviceName));
-			if (string.IsNullOrWhiteSpace(variableName))
+			if (string.IsNullOrWhiteSpace(variableName) || variableName.Contains('='))
 				throw new ArgumentException(nameof(variableName) + " is invalid", nameof(variableName));
 
 			string keyPath = @"SYSTEM\CurrentControlSet\Services\" + serviceName;
@@ -454,27 +454,35 @@ WantedBy=multi-user.target";
 			{
 				string[] existingVars = (string[])key.GetValue("Environment");
 
+				bool didFind = false;
 				List<string> newVars = new List<string>();
-				foreach (string ev in existingVars)
-				{
-					int idxEquals = ev.IndexOf('=');
-					if (idxEquals > -1)
+				if (existingVars != null)
+					foreach (string ev in existingVars)
 					{
-						string k = ev.Substring(0, idxEquals);
-						string v;
-						if (k == variableName)
+						int idxEquals = ev.IndexOf('=');
+						if (idxEquals > -1)
 						{
-							if (variableValue == null)
-								continue;
-							v = variableValue;
-							variableValue = null;
+							string k = ev.Substring(0, idxEquals);
+							string v;
+							if (k == variableName)
+							{
+								didFind = true;
+								if (variableValue == null)
+									continue;
+								v = variableValue;
+								variableValue = null;
+							}
+							else
+								v = ev.Substring(idxEquals + 1);
+							newVars.Add(k + "=" + v);
 						}
-						else
-							v = ev.Substring(idxEquals + 1);
-						newVars.Add(k + "=" + v);
 					}
-				}
-				key.SetValue("Environment", newVars.ToArray());
+				if (!didFind && variableValue != null)
+					newVars.Add(variableName + "=" + variableValue);
+				if (newVars.Count == 0)
+					key.DeleteValue("Environment", false);
+				else
+					key.SetValue("Environment", newVars.ToArray());
 			}
 #else
 			throw new PlatformNotSupportedException();
