@@ -98,7 +98,7 @@ namespace BPUtil
 							if (ReportException != null)
 								ReportException(ex);
 							else
-								Logger.Debug(ex);
+								Logger.Debug(ex, invokeOnGuiThread ? "SetTimeout:OnGui" : "SetTimeout:OnBackground");
 						}
 					}
 				);

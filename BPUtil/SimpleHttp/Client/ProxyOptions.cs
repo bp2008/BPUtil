@@ -103,7 +103,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			catch (Exception ex)
 			{
-				Logger.Debug(ex);
+				Logger.Debug(ex, "ProxyOptions.RaiseBeforeRequestHeadersSent");
 			}
 		}
 		/// <summary>
@@ -119,7 +119,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			catch (Exception ex)
 			{
-				Logger.Debug(ex);
+				Logger.Debug(ex, "ProxyOptions.RaiseBeforeResponseHeadersSent");
 			}
 		}
 	}

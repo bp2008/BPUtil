@@ -66,7 +66,7 @@ namespace BPUtil
 				if (actionToTry != null)
 					actionToTry();
 			}
-			catch (Exception ex) { Logger.Debug(ex); }
+			catch (Exception ex) { Logger.Debug(ex, "Try.Catch(Action)"); }
 		}
 		/// <summary>
 		/// Runs the specified Func inside a try block and logs all exceptions.  Returns default(T) in the event of an exception, otherwise whatever the Func returned.
@@ -79,7 +79,7 @@ namespace BPUtil
 				if (funcToTry != null)
 					return funcToTry();
 			}
-			catch (Exception ex) { Logger.Debug(ex); }
+			catch (Exception ex) { Logger.Debug(ex, "Try.Catch(Func)"); }
 			return default(T);
 		}
 
@@ -95,7 +95,7 @@ namespace BPUtil
 					actionToTry();
 			}
 			catch (ThreadAbortException) { throw; }
-			catch (Exception ex) { Logger.Debug(ex); }
+			catch (Exception ex) { Logger.Debug(ex, "Try.Catch_RethrowThreadAbort(Action)"); }
 		}
 
 		/// <summary>
@@ -109,7 +109,7 @@ namespace BPUtil
 				if (funcBoolToTry != null)
 					return funcBoolToTry();
 			}
-			catch (Exception ex) { Logger.Debug(ex); }
+			catch (Exception ex) { Logger.Debug(ex, "Try.CatchBool()"); }
 			return false;
 		}
 		/// <summary>

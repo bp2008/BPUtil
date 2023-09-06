@@ -333,7 +333,7 @@ namespace BPUtil.SimpleHttp
 			catch (Exception ex)
 			{
 				if (!IsOrdinaryDisconnectException(ex))
-					SimpleHttpLogger.LogVerbose(ex);
+					SimpleHttpLogger.LogVerbose(ex, "HttpProcessor.Process:Outer:" + GetDebugLogPrefix());
 			}
 			finally
 			{
@@ -342,7 +342,7 @@ namespace BPUtil.SimpleHttp
 					tcpStream?.Dispose();
 					tcpStream = null;
 				}
-				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex, "HttpProcessor.Process:Outer:Finally:" + GetDebugLogPrefix()); }
 				FinalConnectionCleanup();
 			}
 		}
@@ -399,7 +399,7 @@ namespace BPUtil.SimpleHttp
 			catch (Exception ex)
 			{
 				if (!IsOrdinaryDisconnectException(ex))
-					SimpleHttpLogger.LogVerbose(ex);
+					SimpleHttpLogger.LogVerbose(ex, "HttpProcessor.ProcessAsync:Outer:" + GetDebugLogPrefix());
 			}
 			finally
 			{
@@ -415,7 +415,7 @@ namespace BPUtil.SimpleHttp
 						tcpStream = null;
 					}
 				}
-				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+				catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex, "HttpProcessor.ProcessAsync:Outer:Finally:" + GetDebugLogPrefix()); }
 				FinalConnectionCleanup();
 			}
 		}
@@ -520,7 +520,7 @@ namespace BPUtil.SimpleHttp
 			HttpProcessorException hpex = e.GetExceptionOfType<HttpProcessorException>();
 			if (hpex != null)
 			{
-				SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.LogVerbose("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				if (!Response.ResponseHeaderWritten)
 				{
@@ -532,7 +532,7 @@ namespace BPUtil.SimpleHttp
 			}
 			else if (e.GetExceptionOfType<HttpProtocolException>() != null)
 			{
-				SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.LogVerbose("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				if (!Response.ResponseHeaderWritten)
 					Response.Simple("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
@@ -540,21 +540,21 @@ namespace BPUtil.SimpleHttp
 			else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
 			{
 				// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
-				SimpleHttpLogger.LogVerbose(GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.LogVerbose("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				Response.ResponseHeaderWritten = true;
 				return true;
 			}
 			else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)
 			{
-				SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.Log("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				if (!Response.ResponseHeaderWritten)
 					Response.Simple("500 Internal Server Error", "An error occurred while processing this request.");
 			}
 			else
 			{
-				SimpleHttpLogger.Log(GetDebugLogPrefix() + e.ToHierarchicalString());
+				SimpleHttpLogger.Log("HttpProcessor:Common:" + GetDebugLogPrefix() + e.ToHierarchicalString());
 				Response.PreventKeepalive();
 				if (!Response.ResponseHeaderWritten)
 					Response.Simple("500 Internal Server Error", "An error occurred while processing this request.");
@@ -572,7 +572,7 @@ namespace BPUtil.SimpleHttp
 				tcpClient.Close();
 				tcpClient = null;
 			}
-			catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex); }
+			catch (Exception ex) { SimpleHttpLogger.LogVerbose(ex, "HttpProcessor.FinalConnectionCleanup:"); }
 			srv.Notify_ConnectionClosed(this);
 		}
 
@@ -702,7 +702,7 @@ namespace BPUtil.SimpleHttp
 							return;
 						if (IsOrdinaryDisconnectException(ex))
 							return;
-						SimpleHttpLogger.LogVerbose(ex);
+						SimpleHttpLogger.LogVerbose(ex, "HttpProcessor.ProxyTo:");
 					}
 				});
 

@@ -946,11 +946,6 @@ namespace BPUtil.SimpleHttp.Client
 				}
 				return totalProxied;
 			}
-			catch (Exception ex)
-			{
-				Logger.Debug(ex);
-				throw;
-			}
 			finally
 			{
 				ByteUtil.BufferRecycle(buf);
