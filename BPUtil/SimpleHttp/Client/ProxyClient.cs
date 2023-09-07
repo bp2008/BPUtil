@@ -23,9 +23,21 @@ namespace BPUtil.SimpleHttp.Client
 		/// Web origin which this client is bound to, all lower case. e.g. "https://example.com"
 		/// </summary>
 		public readonly string Origin;
+		/// <summary>
+		/// The TcpClient representing the connection to the remote server.
+		/// </summary>
 		private TcpClient proxyClient;
+		/// <summary>
+		/// The bidirectional data stream from the connection to the remote server.
+		/// </summary>
 		private UnreadableStream proxyStream;
+		/// <summary>
+		/// When this is Finished, the ProxyClient is expired and should be disposed.
+		/// </summary>
 		private CountdownStopwatch expireTimer = CountdownStopwatch.StartNew(TimeSpan.FromMinutes(60));
+		/// <summary>
+		/// A string describing details of the last request handled by this ProxyClient, for debugging purposes.
+		/// </summary>
 		private string lastRequestDetails;
 
 		/// <summary>
@@ -68,67 +80,66 @@ namespace BPUtil.SimpleHttp.Client
 				while (true)
 				{
 					numTries++;
-					ProxyClient client;
-					if (!pool.TryDequeue(out client))
-					{
-						client = new ProxyClient(origin);
-						options.log.AppendLine("Using New ProxyClient");
-						options.bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with new client");
-					}
-					else
-					{
-						if (client.expireTimer.Finished)
-						{
-							options.log.AppendLine("Removing Expired ProxyClient");
-							client.Dispose();
-							client = null;
-							continue;
-						}
-						options.log.AppendLine("Using Existing ProxyClient");
-						options.bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with existing client");
-					}
-
-					ProxyResult result = null;
+					ProxyClient client = null;
 					try
 					{
-						options.cancellationToken.ThrowIfCancellationRequested();
-						result = await client.BeginProxyRequestAsync(p, uri, options).ConfigureAwait(false);
-					}
-					catch (OperationCanceledException)
-					{
-						break;
-					}
-					catch (Exception ex)
-					{
-						if (HttpProcessor.IsOrdinaryDisconnectException(ex))
-							options.log.AppendLine("Unexpected disconnection!");
-						else
-							options.log.AppendLine("ERROR: Exception occurred: " + ex.FlattenMessages());
-						client.Dispose();
-						client = null;
-						ex.Rethrow();
-					}
-					options.bet?.Start("ProxyRequest analyze result #" + numTries + ": " + result.ErrorCode);
-
-					if (result.IsProxyClientReusable)
-					{
-						pool.Enqueue(client);
-						options.log.AppendLine("Recycling ProxyClient for future use.");
-					}
-					else
-					{
-						client.Dispose();
-						client = null;
-					}
-					if (result.Success)
-						break;
-					else
-					{
-						if (!result.ShouldTryAgainWithAnotherConnection)
+						if (!pool.TryDequeue(out client))
 						{
-							options.log.AppendLine("ERROR: ProxyRequest to uri \"" + uri.ToString() + "\" failed with error: " + result.ErrorMessage);
+							client = new ProxyClient(origin);
+							options.log.AppendLine("Using New ProxyClient");
+							options.bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with new client");
+						}
+						else
+						{
+							if (client.expireTimer.Finished)
+							{
+								options.log.AppendLine("Removing Expired ProxyClient");
+								continue;
+							}
+							options.log.AppendLine("Using Existing ProxyClient");
+							options.bet?.Start("ProxyRequest BeginProxyRequestAsync #" + numTries + " with existing client");
+						}
+
+						ProxyResult result = null;
+						try
+						{
+							options.cancellationToken.ThrowIfCancellationRequested();
+							result = await client.BeginProxyRequestAsync(p, uri, options).ConfigureAwait(false);
+						}
+						catch (OperationCanceledException)
+						{
 							break;
 						}
+						catch (Exception ex)
+						{
+							if (HttpProcessor.IsOrdinaryDisconnectException(ex))
+								options.log.AppendLine("Unexpected disconnection!");
+							else
+								options.log.AppendLine("ERROR: Exception occurred: " + ex.FlattenMessages());
+							ex.Rethrow();
+						}
+						options.bet?.Start("ProxyRequest analyze result #" + numTries + ": " + result.ErrorCode);
+
+						if (result.IsProxyClientReusable && pool.Count < 128)
+						{
+							pool.Enqueue(client);
+							client = null;
+							options.log.AppendLine("Recycling ProxyClient for future use.");
+						}
+						if (result.Success)
+							break;
+						else
+						{
+							if (!result.ShouldTryAgainWithAnotherConnection)
+							{
+								options.log.AppendLine("ERROR: ProxyRequest to uri \"" + uri.ToString() + "\" failed with error: " + result.ErrorMessage);
+								break;
+							}
+						}
+					}
+					finally
+					{
+						client?.Dispose();
 					}
 				}
 			}
@@ -196,7 +207,6 @@ namespace BPUtil.SimpleHttp.Client
 				host = uri.DnsSafeHost;
 
 			p.tcpClient.NoDelay = true;
-			int networkTimeoutMs = options.networkTimeoutMs.Clamp(1000, 60000);
 
 			///////////////////////////
 			// PHASE 1: ANALYZE REQUEST //
@@ -296,7 +306,7 @@ namespace BPUtil.SimpleHttp.Client
 
 			try
 			{
-				await _ProxyStringAsync(ProxyDataDirection.RequestToServer, proxyStream, sbRequestText.ToString(), snoopy, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+				await _ProxyStringAsync(ProxyDataDirection.RequestToServer, proxyStream, sbRequestText.ToString(), snoopy, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
@@ -314,13 +324,13 @@ namespace BPUtil.SimpleHttp.Client
 				if (sendRequestChunked)
 					streamToWrite = new WritableChunkedTransferEncodingStream(proxyStream);
 
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.Request.RequestBodyStream, streamToWrite, snoopy, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.Request.RequestBodyStream, streamToWrite, snoopy, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 
 				if (sendRequestChunked)
 					await ((WritableChunkedTransferEncodingStream)streamToWrite).CloseAsync(options.cancellationToken).ConfigureAwait(false);
 			}
 
-			proxyStream.Flush();
+			await proxyStream.FlushAsync(options.cancellationToken).ConfigureAwait(false);
 
 			////////////////////////////
 			// PHASE 4: READ RESPONSE //
@@ -332,7 +342,7 @@ namespace BPUtil.SimpleHttp.Client
 			HttpHeaderCollection proxyHttpHeaders = new HttpHeaderCollection();
 			try
 			{
-				List<string> responseHeaderLines = await SimpleHttpRequest.ReadHttpHeaderSectionAsync(proxyStream, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+				List<string> responseHeaderLines = await SimpleHttpRequest.ReadHttpHeaderSectionAsync(proxyStream, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 				if (responseHeaderLines == null || responseHeaderLines.Count == 0)
 				{
 					if (!didConnect)
@@ -389,7 +399,7 @@ namespace BPUtil.SimpleHttp.Client
 
 			// Decide how to respond
 			Stream proxyResponseStream = proxyStream;
-			bool remoteServerWantsKeepalive = false;
+			bool remoteServerWantsKeepalive = false; // Do NOT set true for WebSocket connections.
 
 			string proxyConnectionHeader;
 			if (!proxyHttpHeaders.TryGetValue("Connection", out proxyConnectionHeader))
@@ -461,35 +471,36 @@ namespace BPUtil.SimpleHttp.Client
 					proxyHttpHeaders["Location"] = uriBuilder.Uri.ToString();
 				}
 			}
+			options.RaiseBeforeResponseHeadersSent(this, p);
+
 			/////////////////////////////
-			// PHASE 5: WRITE RESPONSE //
+			// PHASE 6: WRITE RESPONSE //
 			/////////////////////////////
 			options.bet?.Start("Proxy Write Response: " + proxyResponseStream?.GetType().Name ?? "[no response body]");
-			options.RaiseBeforeResponseHeadersSent(this, p);
 
 			// Work with the response object to create the response header and create a response stream we can use to write a response body.
 			byte[] responseHeaderBytes = p.Response.PrepareForProxy(out Stream outgoingStream);
 
 			// Write the response header.
-			await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, p.tcpStream, responseHeaderBytes, responseHeaderBytes.Length, snoopy, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+			await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, p.tcpStream, responseHeaderBytes, responseHeaderBytes.Length, snoopy, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 
 			// Flush the tcpStream to ensure that future writes to outgoingStream are not out of order.
 			if (outgoingStream != p.tcpStream)
-				p.tcpStream.Flush();
+				await p.tcpStream.FlushAsync(options.cancellationToken).ConfigureAwait(false);
 
 			if (p.Response.Headers["Upgrade"] == "websocket")
 			{
 				// Asynchronously proxy additional incoming data to the remote server (do not await)
-				_ = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy, networkTimeoutMs, options.cancellationToken);
+				_ = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.tcpStream, proxyStream, snoopy, options.networkTimeoutMs, options.cancellationToken);
 				// Later code will handle proxying the response from the remote server to our client.
 			}
 			if (proxyResponseStream != null)
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 
 			await p.Response.FinishAsync(options.cancellationToken).ConfigureAwait(false);
 
 			//////////////////////
-			// PHASE 6: CLEANUP //
+			// PHASE 7: CLEANUP //
 			//////////////////////
 			options.bet?.Start("Proxy Finish");
 			if (snoopy != null)
@@ -551,9 +562,17 @@ namespace BPUtil.SimpleHttp.Client
 					proxyTiming?.Start("Connect");
 					options.bet?.Start("Connect");
 #if NET6_0
-					await proxyClient.ConnectAsync(ip, uri.Port, options.cancellationToken).ConfigureAwait(false);
+
+					await TaskHelper.DoWithTimeout(proxyClient.ConnectAsync(ip, uri.Port, options.cancellationToken).AsTask(), options.networkTimeoutMs,
+						() => throw new HttpProcessor.HttpProcessorException("504 Gateway Timeout")).ConfigureAwait(false);
 #else
-					await proxyClient.ConnectAsync(ip, uri.Port).ConfigureAwait(false);
+					await TaskHelper.DoWithCancellation(proxyClient.ConnectAsync(ip, uri.Port), options.networkTimeoutMs, options.cancellationToken,
+						(timeout) =>
+						{
+							if (timeout)
+								throw new HttpProcessor.HttpProcessorException("504 Gateway Timeout");
+							throw new OperationCanceledException();
+						}).ConfigureAwait(false);
 #endif
 					pStream = proxyClient.GetStream();
 				}
@@ -774,9 +793,7 @@ namespace BPUtil.SimpleHttp.Client
 				int read = 1;
 				while (read > 0)
 				{
-					using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(ioTimeoutMilliseconds))
-					using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
-						read = await source.ReadAsync(buf, 0, buf.Length, cts.Token).ConfigureAwait(false);
+					read = await source.ReadAsync(buf, 0, buf.Length, cancellationToken).ConfigureAwait(false);
 					if (read > 0)
 						await _ProxyDataAsync(Direction, target, buf, read, snoopy, ioTimeoutMilliseconds, cancellationToken).ConfigureAwait(false);
 				}

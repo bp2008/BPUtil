@@ -145,15 +145,21 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="task">The task to await.</param>
 		/// <param name="timeoutMilliseconds">Timeout in milliseconds.</param>
+		/// <param name="doIfCancelled">(Optional) Method to call if the timeout occurs before the task completes.</param>
 		/// <returns>The task which was passed in.</returns>
 		/// <exception cref="OperationCanceledException">If the task does not complete within the specified time period.</exception>
-		public static async Task DoWithTimeout(Task task, int timeoutMilliseconds)
+		public static async Task DoWithTimeout(Task task, int timeoutMilliseconds, Func<Task> doIfCancelled = null)
 		{
 			if (timeoutMilliseconds <= 0)
 				throw new ArgumentOutOfRangeException(nameof(timeoutMilliseconds), "The timeout must be greater than 0 milliseconds.");
 			Task completedTask = await Task.WhenAny(task, Task.Delay(timeoutMilliseconds)).ConfigureAwait(false);
 			if (completedTask != task)
-				throw new OperationCanceledException("The operation has timed out.");
+			{
+				if (doIfCancelled != null)
+					await doIfCancelled().ConfigureAwait(false);
+				else
+					throw new OperationCanceledException("TaskHelper.DoWithTimeout: The operation has timed out.");
+			}
 		}
 		/// <summary>
 		/// Returns the result of the given task or throws <see cref="OperationCanceledException"/> if the task does not complete within the specified time period.
@@ -161,16 +167,22 @@ namespace BPUtil
 		/// <typeparam name="T">Type of result.</typeparam>
 		/// <param name="task">The task to await.</param>
 		/// <param name="timeoutMilliseconds">Timeout in milliseconds.</param>
+		/// <param name="doIfCancelled">(Optional) Method to call if the timeout occurs before the task completes.</param>
 		/// <returns>The result of the given task.</returns>
 		/// <exception cref="OperationCanceledException">If the task does not complete within the specified time period.</exception>
-		public static async Task<T> GetWithTimeout<T>(Task<T> task, int timeoutMilliseconds)
+		public static async Task<T> GetWithTimeout<T>(Task<T> task, int timeoutMilliseconds, Func<Task<T>> doIfCancelled = null)
 		{
 			if (timeoutMilliseconds <= 0)
 				throw new ArgumentOutOfRangeException(nameof(timeoutMilliseconds), "The timeout must be greater than 0 milliseconds.");
 			Task completedTask = await Task.WhenAny(task, Task.Delay(timeoutMilliseconds)).ConfigureAwait(false);
-			if (completedTask == task)
-				return task.GetAwaiter().GetResult();
-			throw new OperationCanceledException("The operation has timed out.");
+			if (completedTask != task)
+			{
+				if (doIfCancelled != null)
+					return await doIfCancelled().ConfigureAwait(false);
+				else
+					throw new OperationCanceledException("TaskHelper.GetWithTimeout: The operation has timed out.");
+			}
+			return task.GetAwaiter().GetResult();
 		}
 
 		/// <summary>
@@ -214,6 +226,57 @@ namespace BPUtil
 				if (completedTask == timeoutTask)
 					throw new OperationCanceledException("A timeout expired while waiting for a condition to be met.");
 				cancellationToken.ThrowIfCancellationRequested();
+			}
+		}
+		/// <summary>
+		/// Awaits with cancellation an async Task that does not natively support cancellation.
+		/// </summary>
+		/// <param name="task">A Task which has already been started.  This should do your async work.</param>
+		/// <param name="cancellationToken">Cancellation Token to observe for cancellation.</param>
+		/// <param name="doIfCancelled">(Optional) Method to call if cancellation occurs before the task completes.</param>
+		/// <returns></returns>
+		/// <exception cref="OperationCanceledException">If the task is canceled and <paramref name="doIfCancelled"/> is not provided.</exception>
+		public static async Task DoWithCancellation(Task task, CancellationToken cancellationToken, Func<Task> doIfCancelled = null)
+		{
+			TaskCompletionSource<bool> taskCompletionSource = new TaskCompletionSource<bool>();
+			using (cancellationToken.Register(() => taskCompletionSource.TrySetResult(true)))
+			{
+				if (task != await Task.WhenAny(task, taskCompletionSource.Task).ConfigureAwait(false))
+				{
+					if (doIfCancelled != null)
+						await doIfCancelled().ConfigureAwait(false);
+					else
+						throw new OperationCanceledException("TaskHelper.DoWithCancellation: The operation was cancelled.");
+				}
+			}
+		}
+		/// <summary>
+		/// Awaits with cancellation an async Task that does not natively support cancellation.
+		/// </summary>
+		/// <param name="task">A Task which has already been started.  This should do your async work.</param>
+		/// <param name="timeoutMilliseconds">Number of milliseconds to wait for the task to complete before triggering cancellation.  Must be greater than 0.</param>
+		/// <param name="cancellationToken">Cancellation Token to observe for cancellation.</param>
+		/// <param name="doIfCancelled">(Optional) Method to call if cancellation or the timeout occurs before the task completes.  This method receives a bool argument indicating if the cancellation was due to the timeout (<paramref name="timeoutMilliseconds"/>).</param>
+		/// <returns></returns>
+		/// <exception cref="ArgumentOutOfRangeException">If <paramref name="timeoutMilliseconds"/> is not greater than 0.</exception>
+		/// <exception cref="OperationCanceledException">If the task is canceled and <paramref name="doIfCancelled"/> is not provided.</exception>
+		public static async Task DoWithCancellation(Task task, int timeoutMilliseconds, CancellationToken cancellationToken, Func<bool, Task> doIfCancelled = null)
+		{
+			if (timeoutMilliseconds <= 0)
+				throw new ArgumentOutOfRangeException(nameof(timeoutMilliseconds), nameof(timeoutMilliseconds) + " must be > 0.");
+
+			TaskCompletionSource<bool> taskCompletionSource = new TaskCompletionSource<bool>();
+			using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(timeoutMilliseconds))
+			using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
+			using (cts.Token.Register(() => taskCompletionSource.TrySetResult(true)))
+			{
+				if (task != await Task.WhenAny(task, taskCompletionSource.Task).ConfigureAwait(false))
+				{
+					if (doIfCancelled != null)
+						await doIfCancelled(ctsTimeout.IsCancellationRequested).ConfigureAwait(false);
+					else
+						throw new OperationCanceledException("TaskHelper.DoWithCancellation: The operation " + (ctsTimeout.IsCancellationRequested ? "timed out." : "was cancelled."));
+				}
 			}
 		}
 	}

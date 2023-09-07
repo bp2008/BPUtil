@@ -22,7 +22,21 @@ namespace BPUtil.SimpleHttp.Client
 		/// <summary>
 		/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds. Clamped to the range [1000, 60000].
 		/// </summary>
-		public int networkTimeoutMs = 60000;
+		private int _networkTimeoutMs = 60000;
+		/// <summary>
+		/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds. Clamped to the range [1000, 60000].
+		/// </summary>
+		public int networkTimeoutMs
+		{
+			get
+			{
+				return _networkTimeoutMs;
+			}
+			set
+			{
+				_networkTimeoutMs = value.Clamp(1000, 60000);
+			}
+		}
 		/// <summary>
 		/// [Default: false] If true, certificate validation will be disabled for outgoing https connections.
 		/// </summary>

@@ -164,9 +164,9 @@ namespace BPUtil.SimpleHttp
 		public void Simple(string StatusString, string Description = null)
 		{
 			if (Description == null)
-				Description = StatusString;
+				Description = "";
 
-			FullResponseUTF8(Description, "text/plain; charset=utf-8", StatusString);
+			FullResponseUTF8(Description, Description != "" ? "text/plain; charset=utf-8" : null, StatusString);
 		}
 		#endregion
 		#region Redirect
