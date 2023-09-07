@@ -296,7 +296,7 @@ namespace BPUtil.SimpleHttp.Client
 
 			try
 			{
-				await _ProxyStringAsync(ProxyDataDirection.RequestToServer, proxyStream, sbRequestText.ToString(), snoopy, options.cancellationToken).ConfigureAwait(false);
+				await _ProxyStringAsync(ProxyDataDirection.RequestToServer, proxyStream, sbRequestText.ToString(), snoopy, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
@@ -314,7 +314,7 @@ namespace BPUtil.SimpleHttp.Client
 				if (sendRequestChunked)
 					streamToWrite = new WritableChunkedTransferEncodingStream(proxyStream);
 
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.Request.RequestBodyStream, streamToWrite, snoopy, options.cancellationToken).ConfigureAwait(false);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.Request.RequestBodyStream, streamToWrite, snoopy, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 
 				if (sendRequestChunked)
 					await ((WritableChunkedTransferEncodingStream)streamToWrite).CloseAsync(options.cancellationToken).ConfigureAwait(false);
@@ -334,7 +334,12 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				List<string> responseHeaderLines = await SimpleHttpRequest.ReadHttpHeaderSectionAsync(proxyStream, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 				if (responseHeaderLines == null || responseHeaderLines.Count == 0)
-					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
+				{
+					if (!didConnect)
+						return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
+					throw new HttpProcessor.HttpProcessorException("502 Bad Gateway");
+				}
+
 				try
 				{
 					responseStatusLine = new HttpResponseStatusLine(responseHeaderLines[0]);
@@ -352,14 +357,14 @@ namespace BPUtil.SimpleHttp.Client
 				// Parse response headers from remote server
 				SimpleHttpRequest.ParseHeaders(proxyHttpHeaders, responseHeaderLines);
 			}
-			catch (HttpProcessor.EndOfStreamException ex)
+			catch (HttpProcessor.EndOfStreamException)
 			{
 				if (!didConnect)
 				{
 					options.log.AppendLine("Recycled proxy stream EOF while reading response from remote server. Will retry.");
 					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered unexpected end of stream while reading the response from the remote server. Should retry with a new connection.", false, true);
 				}
-				ex.Rethrow();
+				throw new HttpProcessor.HttpProcessorException("502 Bad Gateway");
 			}
 			finally
 			{
@@ -466,7 +471,7 @@ namespace BPUtil.SimpleHttp.Client
 			byte[] responseHeaderBytes = p.Response.PrepareForProxy(out Stream outgoingStream);
 
 			// Write the response header.
-			await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, p.tcpStream, responseHeaderBytes, responseHeaderBytes.Length, snoopy, options.cancellationToken).ConfigureAwait(false);
+			await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, p.tcpStream, responseHeaderBytes, responseHeaderBytes.Length, snoopy, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 
 			// Flush the tcpStream to ensure that future writes to outgoingStream are not out of order.
 			if (outgoingStream != p.tcpStream)
@@ -475,11 +480,11 @@ namespace BPUtil.SimpleHttp.Client
 			if (p.Response.Headers["Upgrade"] == "websocket")
 			{
 				// Asynchronously proxy additional incoming data to the remote server (do not await)
-				_ = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy, options.cancellationToken);
+				_ = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, outgoingStream, proxyStream, snoopy, networkTimeoutMs, options.cancellationToken);
 				// Later code will handle proxying the response from the remote server to our client.
 			}
 			if (proxyResponseStream != null)
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, options.cancellationToken).ConfigureAwait(false);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 
 			await p.Response.FinishAsync(options.cancellationToken).ConfigureAwait(false);
 
@@ -736,36 +741,16 @@ namespace BPUtil.SimpleHttp.Client
 			/// </summary>
 			NoBody
 		}
-		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
-		private static void _ProxyString(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy)
+		private static async Task _ProxyStringAsync(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy, int ioTimeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			if (snoopy != null)
 				snoopy.AddItem(new ProxyDataItem(Direction, str));
 			byte[] buf = ByteUtil.Utf8NoBOM.GetBytes(str);
-			target.Write(buf, 0, buf.Length);
+			using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(ioTimeoutMilliseconds))
+			using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
+				await target.WriteAsync(buf, 0, buf.Length, cts.Token).ConfigureAwait(false);
 		}
-		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
-		private static void _ProxyData(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy)
-		{
-			if (snoopy != null)
-			{
-				ProxyDataItem item;
-				if (buf.Length != length)
-					item = new ProxyDataItem(Direction, ByteUtil.SubArray(buf, 0, length));
-				else
-					item = new ProxyDataItem(Direction, (byte[])buf.Clone());
-				snoopy?.AddItem(item);
-			}
-			target.Write(buf, 0, length);
-		}
-		private static async Task _ProxyStringAsync(ProxyDataDirection Direction, Stream target, string str, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
-		{
-			if (snoopy != null)
-				snoopy.AddItem(new ProxyDataItem(Direction, str));
-			byte[] buf = ByteUtil.Utf8NoBOM.GetBytes(str);
-			await target.WriteAsync(buf, 0, buf.Length, cancellationToken).ConfigureAwait(false);
-		}
-		private static async Task _ProxyDataAsync(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
+		private static async Task _ProxyDataAsync(ProxyDataDirection Direction, Stream target, byte[] buf, int length, ProxyDataBuffer snoopy, int ioTimeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			if (snoopy != null)
 			{
@@ -776,11 +761,12 @@ namespace BPUtil.SimpleHttp.Client
 					item = new ProxyDataItem(Direction, buf);
 				snoopy?.AddItem(item);
 			}
-			await target.WriteAsync(buf, 0, length, cancellationToken).ConfigureAwait(false);
+			using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(ioTimeoutMilliseconds))
+			using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
+				await target.WriteAsync(buf, 0, length, cts.Token).ConfigureAwait(false);
 		}
 
-		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
-		private static void CopyStreamUntilClosed(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
+		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy, int ioTimeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			byte[] buf = ByteUtil.BufferGet();
 			try
@@ -788,71 +774,12 @@ namespace BPUtil.SimpleHttp.Client
 				int read = 1;
 				while (read > 0)
 				{
-					read = source.Read(buf, 0, buf.Length);
+					using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(ioTimeoutMilliseconds))
+					using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
+						read = await source.ReadAsync(buf, 0, buf.Length, cts.Token).ConfigureAwait(false);
 					if (read > 0)
-						_ProxyData(Direction, target, buf, read, snoopy);
+						await _ProxyDataAsync(Direction, target, buf, read, snoopy, ioTimeoutMilliseconds, cancellationToken).ConfigureAwait(false);
 				}
-			}
-			finally
-			{
-				ByteUtil.BufferRecycle(buf);
-			}
-		}
-		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
-		{
-			byte[] buf = ByteUtil.BufferGet();
-			try
-			{
-				int read = 1;
-				while (read > 0)
-				{
-					read = await source.ReadAsync(buf, 0, buf.Length, cancellationToken).ConfigureAwait(false);
-					if (read > 0)
-						await _ProxyDataAsync(Direction, target, buf, read, snoopy, cancellationToken).ConfigureAwait(false);
-				}
-			}
-			finally
-			{
-				ByteUtil.BufferRecycle(buf);
-			}
-		}
-		[Obsolete("Blocking I/O is not safe to use in an async context.", true)]
-		private static long CopyNBytes(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy)
-		{
-			long totalProxied = 0;
-			byte[] buf = ByteUtil.BufferGet();
-			try
-			{
-				int read = 1;
-				while (read > 0 && totalProxied < N)
-				{
-					read = source.Read(buf, 0, (int)Math.Min(N - totalProxied, buf.Length));
-					if (read > 0)
-						_ProxyData(Direction, target, buf, read, snoopy);
-					totalProxied += read;
-				}
-				return totalProxied;
-			}
-			finally
-			{
-				ByteUtil.BufferRecycle(buf);
-			}
-		}
-		private static async Task<long> CopyNBytesAsync(long N, ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy, CancellationToken cancellationToken = default)
-		{
-			long totalProxied = 0;
-			byte[] buf = ByteUtil.BufferGet();
-			try
-			{
-				int read = 1;
-				while (read > 0 && totalProxied < N)
-				{
-					read = await source.ReadAsync(buf, 0, (int)Math.Min(N - totalProxied, buf.Length), cancellationToken).ConfigureAwait(false);
-					if (read > 0)
-						await _ProxyDataAsync(Direction, target, buf, read, snoopy, cancellationToken).ConfigureAwait(false);
-					totalProxied += read;
-				}
-				return totalProxied;
 			}
 			finally
 			{
