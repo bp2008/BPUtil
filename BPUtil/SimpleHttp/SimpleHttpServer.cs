@@ -329,10 +329,13 @@ namespace BPUtil.SimpleHttp
 						if (HandleCommonExceptionScenarios(e, "HttpProcessor.Process:"))
 							return;
 					}
-					Response.FinishSync();
-					srv.Notify_RequestHandled();
+					if (Response != null)
+					{
+						Response.FinishSync();
+						srv.Notify_RequestHandled();
+					}
 				}
-				while (Response.KeepaliveTimeSeconds > 0);
+				while (Response?.KeepaliveTimeSeconds > 0);
 			}
 			catch (OperationCanceledException) { return; }
 			catch (Exception ex)
@@ -394,10 +397,13 @@ namespace BPUtil.SimpleHttp
 						if (HandleCommonExceptionScenarios(e, "HttpProcessor.ProcessAsync:"))
 							return;
 					}
-					await Response.FinishAsync(cancellationToken).ConfigureAwait(false);
-					srv.Notify_RequestHandled();
+					if (Response != null)
+					{
+						await Response.FinishAsync(cancellationToken).ConfigureAwait(false);
+						srv.Notify_RequestHandled();
+					}
 				}
-				while (Response.KeepaliveTimeSeconds > 0);
+				while (Response?.KeepaliveTimeSeconds > 0);
 			}
 			catch (OperationCanceledException) { return; }
 			catch (Exception ex)
@@ -521,6 +527,13 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		private bool HandleCommonExceptionScenarios(Exception e, string errorLogPrefix)
 		{
+			if (e == null)
+			{
+				SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + "Exception object was null.");
+				SimpleHttpLogger.Log(new System.Diagnostics.StackTrace().ToString());
+				return true;
+			}
+
 			if (IsOrdinaryDisconnectException(e))
 				return true;
 
