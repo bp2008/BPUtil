@@ -191,6 +191,9 @@ namespace BPUtil.SimpleHttp.Client
 			if (p.Response.ResponseHeaderWritten)
 				throw new ApplicationException("This ProxyClient is unable to complete the current request because a response has already been written to the client making this request.");
 
+			// This would show up occasionally in the admin console dashboard and be confusing:
+			//p.Response.Simple("500 Internal Server Error", "This server had an unexpected failure when attempting to proxy the request.");
+
 			if (options == null)
 				options = new ProxyOptions();
 
@@ -257,14 +260,14 @@ namespace BPUtil.SimpleHttp.Client
 				{
 					if (options.allowGatewayTimeoutResponse)
 					{
-						p.Response.FullResponseUTF8("", "text/plain; charset=utf-8", "504 Gateway Timeout");
+						p.Response.Simple("504 Gateway Timeout");
 						return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
 					}
 					ex.Rethrow();
 				}
 				catch (TLSNegotiationFailedException ex)
 				{
-					p.Response.FullResponseUTF8("", "text/plain; charset=utf-8", "502 Bad Gateway");
+					p.Response.Simple("502 Bad Gateway");
 					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, ex.ToHierarchicalString(), false, false);
 				}
 			}
@@ -336,8 +339,8 @@ namespace BPUtil.SimpleHttp.Client
 			// PHASE 4: READ RESPONSE //
 			////////////////////////////
 			// Read response from remote server
-			proxyTiming?.Start("Read Response Headers");
-			options.bet?.Start("Read Response Headers");
+			proxyTiming?.Start("Read Response Header");
+			options.bet?.Start("Read Response Header");
 			HttpResponseStatusLine responseStatusLine = null;
 			HttpHeaderCollection proxyHttpHeaders = new HttpHeaderCollection();
 			try
@@ -347,7 +350,8 @@ namespace BPUtil.SimpleHttp.Client
 				{
 					if (!didConnect)
 						return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
-					throw new HttpProcessor.HttpProcessorException("502 Bad Gateway");
+					p.Response.Simple("502 Bad Gateway");
+					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, "ProxyClient encountered end of stream reading response status line from the remote server (this was a new connection).", false, false);
 				}
 
 				try
@@ -374,7 +378,17 @@ namespace BPUtil.SimpleHttp.Client
 					options.log.AppendLine("Recycled proxy stream EOF while reading response from remote server. Will retry.");
 					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered unexpected end of stream while reading the response from the remote server. Should retry with a new connection.", false, true);
 				}
-				throw new HttpProcessor.HttpProcessorException("502 Bad Gateway");
+				p.Response.Simple("502 Bad Gateway");
+				return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, "ProxyClient encountered unexpected end of stream while reading the response from the remote server (this was a new connection).", false, false);
+			}
+			catch (TimeoutException ex)
+			{
+				if (options.allowGatewayTimeoutResponse)
+				{
+					p.Response.Simple("504 Gateway Timeout");
+					return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
+				}
+				ex.Rethrow();
 			}
 			finally
 			{
@@ -390,7 +404,7 @@ namespace BPUtil.SimpleHttp.Client
 			///////////////////////////////
 			// Begin populating the Response object
 			options.bet?.Start("Proxy Process Response Headers");
-			p.Response.StatusString = responseStatusLine.StatusString;
+			p.Response.Reset(responseStatusLine.StatusString);
 			foreach (HttpHeader header in proxyHttpHeaders)
 			{
 				if (!doNotProxyHeaders.Contains(header.Key, true))
@@ -563,14 +577,14 @@ namespace BPUtil.SimpleHttp.Client
 					options.bet?.Start("Connect");
 #if NET6_0
 
-					await TaskHelper.DoWithTimeout(proxyClient.ConnectAsync(ip, uri.Port, options.cancellationToken).AsTask(), options.networkTimeoutMs,
-						() => throw new HttpProcessor.HttpProcessorException("504 Gateway Timeout")).ConfigureAwait(false);
+					await TaskHelper.DoWithTimeout(proxyClient.ConnectAsync(ip, uri.Port, options.cancellationToken).AsTask(), options.connectTimeoutMs,
+						() => throw new GatewayTimeoutException("ProxyClient outgoing connection attempt timed out.")).ConfigureAwait(false);
 #else
-					await TaskHelper.DoWithCancellation(proxyClient.ConnectAsync(ip, uri.Port), options.networkTimeoutMs, options.cancellationToken,
+					await TaskHelper.DoWithCancellation(proxyClient.ConnectAsync(ip, uri.Port), options.connectTimeoutMs, options.cancellationToken,
 						(timeout) =>
 						{
 							if (timeout)
-								throw new HttpProcessor.HttpProcessorException("504 Gateway Timeout");
+								throw new GatewayTimeoutException("ProxyClient outgoing connection attempt timed out.");
 							throw new OperationCanceledException();
 						}).ConfigureAwait(false);
 #endif

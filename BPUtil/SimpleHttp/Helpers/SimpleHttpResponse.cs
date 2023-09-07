@@ -883,7 +883,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		/// <param name="httpStatusString">Assigns this value to <see cref="StatusString"/>.</param>
 		/// <exception cref="ApplicationException">Throws if the response header was already written.</exception>
-		private void Reset(string httpStatusString = "404 Not Found")
+		public void Reset(string httpStatusString = "404 Not Found")
 		{
 			if (ResponseHeaderWritten)
 				throw new ApplicationException("The response header was already written.");
@@ -909,7 +909,7 @@ namespace BPUtil.SimpleHttp
 				if (rs is WritableChunkedTransferEncodingStream)
 				{
 					WritableChunkedTransferEncodingStream s = (WritableChunkedTransferEncodingStream)rs;
-					return StatusString + ", BODY: " + s.PayloadBytesWritten + " bytes " + (s.StreamEnded ? "(fully written)" : "(and counting)");
+					return StatusString + ", BODY: " + s.PayloadBytesWritten + " bytes " + (s.EndOfStream ? "(fully written)" : "(and counting)");
 				}
 			}
 			long? cl = ContentLength;
@@ -918,6 +918,41 @@ namespace BPUtil.SimpleHttp
 			if (rs != null)
 				return StatusString + ", BODY: unknown";
 			return StatusString;
+		}
+		public object GetSummary()
+		{
+			if (!ResponseHeaderWritten)
+				return new { Type = "Pending", HeaderWritten = false, Status = StatusString };
+			if (Headers.Get("Upgrade") == "websocket")
+				return new { Type = "WebSocket", HeaderWritten = true, Status = StatusString };
+			return new { Type = "Regular", HeaderWritten = true, Status = StatusString, Body = GetBodySummary() };
+		}
+
+		private object GetBodySummary()
+		{
+			Stream rs = responseStream;
+			if (rs != null)
+			{
+				if (rs is Substream)
+				{
+					Substream s = (Substream)rs;
+					return new { Written = s.Position, Size = s.Length };
+				}
+				if (rs is WritableChunkedTransferEncodingStream)
+				{
+					WritableChunkedTransferEncodingStream s = (WritableChunkedTransferEncodingStream)rs;
+					if (s.EndOfStream)
+						return new { Written = s.PayloadBytesWritten, Size = s.PayloadBytesWritten };
+					else
+						return new { Written = s.PayloadBytesWritten };
+				}
+			}
+			long? cl = ContentLength;
+			if (cl != null)
+				return new { Size = cl };
+			if (rs != null)
+				return new { };
+			return null;
 		}
 		/// <summary>
 		/// Creates the response header data and prepares a response stream.  Returns the response header data.  It is critical that the caller writes the returned response header data to the tcpStream and flushes the tcpStream before writing anything to the response stream.

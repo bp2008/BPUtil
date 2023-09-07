@@ -264,6 +264,10 @@ namespace BPUtil.SimpleHttp
 		/// A unique auto-incremented identifier of this HttpProcessor instance, guaranteed to be unique for the lifetime of the current process.
 		/// </summary>
 		public readonly long ConnectionID = Interlocked.Increment(ref _connectionIdCounter);
+		/// <summary>
+		/// Gets the number of requests that have been handled by this HttpProcessor
+		/// </summary>
+		public long RequestsHandled { get; private set; } = 0;
 		#endregion
 
 		/// <summary>
@@ -333,6 +337,7 @@ namespace BPUtil.SimpleHttp
 					{
 						Response.FinishSync();
 						srv.Notify_RequestHandled();
+						RequestsHandled++;
 					}
 				}
 				while (Response?.KeepaliveTimeSeconds > 0);
@@ -401,6 +406,7 @@ namespace BPUtil.SimpleHttp
 					{
 						await Response.FinishAsync(cancellationToken).ConfigureAwait(false);
 						srv.Notify_RequestHandled();
+						RequestsHandled++;
 					}
 				}
 				while (Response?.KeepaliveTimeSeconds > 0);
@@ -901,6 +907,20 @@ namespace BPUtil.SimpleHttp
 					sb.Append(" Res: " + this.Response.ToString());
 			}
 			return sb.ToString();
+		}
+		public object GetSummary()
+		{
+			return new
+			{
+				ID = ConnectionID,
+				ClientIP = RemoteIPAddressStr,
+				Host = HostName,
+				LocalPort = LocalEndPoint.Port,
+				Tls = secure_https,
+				RequestsHandled = RequestsHandled,
+				Request = Request?.GetSummary(),
+				Response = Response?.GetSummary()
+			};
 		}
 
 		/// <summary>

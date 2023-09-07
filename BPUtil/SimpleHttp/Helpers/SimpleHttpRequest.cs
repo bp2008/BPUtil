@@ -753,6 +753,40 @@ namespace BPUtil.SimpleHttp
 			}
 			return HttpMethod + " " + Url + " BODY unknown type";
 		}
+		public object GetSummary()
+		{
+			return new
+			{
+				Method = HttpMethod,
+				Url = Url.ToString(),
+				Body = GetBodySummary()
+			};
+		}
+
+		private object GetBodySummary()
+		{
+			if (Headers.Get("Upgrade") == "websocket")
+				return new { Type = "WebSocket" };
+			if (RequestBodyStream is MemoryStream)
+			{
+				MemoryStream s = (MemoryStream)RequestBodyStream;
+				return new { Type = "Regular", Read = s.Length, Size = s.Length };
+			}
+			if (RequestBodyStream is Substream)
+			{
+				Substream s = (Substream)RequestBodyStream;
+				return new { Type = "Regular", Read = s.Position, Size = s.Length };
+			}
+			if (RequestBodyStream is ReadableChunkedTransferEncodingStream)
+			{
+				ReadableChunkedTransferEncodingStream s = (ReadableChunkedTransferEncodingStream)RequestBodyStream;
+				if (s.EndOfStream)
+					return new { Type = "Regular", Read = s.PayloadBytesRead, Size = s.PayloadBytesRead };
+				else
+					return new { Type = "Regular", Read = s.PayloadBytesRead };
+			}
+			return null;
+		}
 		#endregion
 	}
 }

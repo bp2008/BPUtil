@@ -333,6 +333,7 @@ namespace BPUtil
 		/// <param name="timeoutMilliseconds">If greater than 0, the operation will time out if no progress is made for this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <returns>An object containing the result of the operation.</returns>
+		/// <exception cref="TimeoutException">If the read operation times out.</exception>
 		public static async Task<ReadToEndResult> ReadToEndWithMaxLengthAsync(Stream stream, int maxLength, int timeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			if (stream == null)
@@ -472,6 +473,7 @@ namespace BPUtil
 		/// <param name="timeoutMilliseconds">If greater than 0, the operation will time out if no progress is made for this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <returns>An object indicating the result of the operation.</returns>
+		/// <exception cref="TimeoutException">If the read operation times out.</exception>
 		public static async Task<DiscardToEndResult> DiscardUntilEndOfStreamWithMaxLengthAsync(Stream stream, long maxLength, int timeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			if (stream == null)
@@ -575,7 +577,7 @@ namespace BPUtil
 			return data.ToString();
 		}
 		/// <summary>
-		/// Asynchronously reads a line of text from a binary input stream.  The text ends when '\n' is encountered or the end of the stream is encountered.  If End of Stream is reached without reading anything, returns null. '\r' characters are counted against <paramref name="maxLength"/> but not included in the returned string.
+		/// Asynchronously reads a line of text from a binary input stream.  The text ends when '\n' is encountered or the end of the stream is encountered.  Returns null if End of Stream is reached without reading anything. '\r' characters are counted against <paramref name="maxLength"/> but not included in the returned string.
 		/// </summary>
 		/// <param name="stream">Input stream to read a line of text from.</param>
 		/// <param name="timeoutMilliseconds">If greater than 0, the operation will time out if no progress is made for this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
@@ -584,6 +586,7 @@ namespace BPUtil
 		/// <returns></returns>
 		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
 		/// <exception cref="OperationCanceledException">If the timeout is exceeded during any ReadAsync operation.</exception>
+		/// <exception cref="TimeoutException">If the read operation times out.</exception>
 		public static async Task<string> HttpStreamReadLineAsync(UnreadableStream stream, int timeoutMilliseconds, int maxLength = 16384, CancellationToken cancellationToken = default)
 		{
 			StringBuilder sb = new StringBuilder();
@@ -649,6 +652,7 @@ namespace BPUtil
 		/// <param name="cancellationToken">Cancellation Token.  A time-based cancellation token will be linked with this one such that the operation is canceled if the given token is canceled or if the time-based token is canceled because time ran out.</param>
 		/// <returns></returns>
 		/// <exception cref="OperationCanceledException">If the timeout is exceeded during the ReadAsync operation.</exception>
+		/// <exception cref="TimeoutException">If the read operation times out.</exception>
 		public static async Task<int> ReadAsyncWithTimeout(Stream stream, byte[] buffer, int offset, int length, int timeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			if (timeoutMilliseconds <= 0)
@@ -659,7 +663,18 @@ namespace BPUtil
 			{
 				using (CancellationTokenSource ctsTimeout = new CancellationTokenSource(timeoutMilliseconds))
 				using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
-					return await stream.ReadAsync(buffer, offset, length, cts.Token).ConfigureAwait(false);
+				{
+					try
+					{
+						return await stream.ReadAsync(buffer, offset, length, cts.Token).ConfigureAwait(false);
+					}
+					catch (OperationCanceledException ex)
+					{
+						if (!cancellationToken.IsCancellationRequested)
+							throw new TimeoutException("The read operation timed out.", ex);
+						throw;
+					}
+				}
 			}
 		}
 		#endregion

@@ -19,7 +19,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Gets a value indicating if the final chunk has been written.
 		/// </summary>
-		public bool StreamEnded => streamEnded;
+		public bool EndOfStream => streamEnded;
 		/// <summary>
 		/// Initializes a new instance of the WritableChunkedTransferEncodingStream class.
 		/// </summary>

@@ -152,12 +152,13 @@ namespace BPUtil.IO
 		/// <inheritdoc />
 		public override long Position
 		{
-			get => _stream.Position - _offset;
+			get => _position;
 			set
 			{
 				if (value > _length)
 					throw new ArgumentOutOfRangeException("value", "Value " + value + " is greater than the length of this Substream (" + _length + ").");
 				_stream.Position = value + _offset;
+				_position = value;
 			}
 		}
 

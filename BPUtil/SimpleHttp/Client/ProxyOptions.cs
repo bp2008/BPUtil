@@ -19,12 +19,33 @@ namespace BPUtil.SimpleHttp.Client
 		/// Unique identifier for this request. Counter starts at 0 each time the program is launched.
 		/// </summary>
 		public readonly long RequestId = Interlocked.Increment(ref counter);
+		private int _connectTimeoutMs = 15000;
 		/// <summary>
-		/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds. Clamped to the range [1000, 60000].
+		/// <para>[Default: 15000] The connection timeout, in milliseconds.</para>
+		/// <para>Clamped to the range [1000, 60000].</para>
+		/// <para>This timeout applies only to the Connect operation (when connecting to the destination server to faciliate proxying).</para>
 		/// </summary>
+		public int connectTimeoutMs
+		{
+			get
+			{
+				return _connectTimeoutMs;
+			}
+			set
+			{
+				_connectTimeoutMs = value.Clamp(1000, 60000);
+			}
+		}
 		private int _networkTimeoutMs = 60000;
 		/// <summary>
-		/// [Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds. Clamped to the range [1000, 60000].
+		/// <para>[Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds.</para>
+		/// <para>Clamped to the range [1000, 600000].</para>
+		/// <para>This timeout applies to:</para>
+		/// <para>* Reading the HTTP request body from the client.</para>
+		/// <para>* Reading the HTTP response header from the destination server.</para>
+		/// <para>* All other proxy operations that send data on a network socket.</para>
+		/// <para>If a destination sometimes has slow time-to-first-byte, you may need to increase this timeout.</para>
+		/// <para>This timeout does not apply when reading a response body or WebSocket data because these actions often sit idle for extended periods of time.</para>
 		/// </summary>
 		public int networkTimeoutMs
 		{
@@ -34,7 +55,7 @@ namespace BPUtil.SimpleHttp.Client
 			}
 			set
 			{
-				_networkTimeoutMs = value.Clamp(1000, 60000);
+				_networkTimeoutMs = value.Clamp(1000, 600000);
 			}
 		}
 		/// <summary>
