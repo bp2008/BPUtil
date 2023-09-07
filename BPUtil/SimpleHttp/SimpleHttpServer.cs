@@ -327,7 +327,6 @@ namespace BPUtil.SimpleHttp
 							Request.CleanupSync();
 						}
 					}
-					catch (OperationCanceledException) { return; }
 					catch (Exception e)
 					{
 						if (HandleCommonExceptionScenarios(e, "HttpProcessor.Process:"))
@@ -342,7 +341,6 @@ namespace BPUtil.SimpleHttp
 				}
 				while (Response?.KeepaliveTimeSeconds > 0);
 			}
-			catch (OperationCanceledException) { return; }
 			catch (Exception ex)
 			{
 				HandleCommonExceptionScenarios(ex, "HttpProcessor.Process:Outer:");
@@ -396,7 +394,6 @@ namespace BPUtil.SimpleHttp
 							await Request.CleanupAsync(readTimeoutSeconds * 1000, cancellationToken).ConfigureAwait(false);
 						}
 					}
-					catch (OperationCanceledException) { return; }
 					catch (Exception e)
 					{
 						if (HandleCommonExceptionScenarios(e, "HttpProcessor.ProcessAsync:"))
@@ -411,7 +408,6 @@ namespace BPUtil.SimpleHttp
 				}
 				while (Response?.KeepaliveTimeSeconds > 0);
 			}
-			catch (OperationCanceledException) { return; }
 			catch (Exception ex)
 			{
 				HandleCommonExceptionScenarios(ex, "HttpProcessor.ProcessAsync:Outer:");
@@ -617,6 +613,8 @@ namespace BPUtil.SimpleHttp
 			if (ex is HttpProcessor.EndOfStreamException)
 				return true;
 			if (ex is System.IO.EndOfStreamException)
+				return true;
+			if (ex is OperationCanceledException)
 				return true;
 			if (ex is AggregateException)
 			{
