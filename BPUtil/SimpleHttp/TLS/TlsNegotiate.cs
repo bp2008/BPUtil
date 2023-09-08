@@ -81,8 +81,8 @@ namespace BPUtil.SimpleHttp.TLS
 							SslServerAuthenticationOptions sslOptions = new SslServerAuthenticationOptions();
 							sslOptions.ApplicationProtocols = new List<SslApplicationProtocol> { new SslApplicationProtocol("acme-tls/1") };
 							sslOptions.ServerCertificate = cert;
-							p.tcpStream = new SslStream(p.tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
-							await ((SslStream)p.tcpStream).AuthenticateAsServerAsync(sslOptions, cancellationToken).ConfigureAwait(false);
+							SslStream ssA = WrapSslStream(p);
+							await TaskHelper.DoWithTimeout(ssA.AuthenticateAsServerAsync(sslOptions, cancellationToken), (HttpProcessor.readTimeoutSeconds * 2000).Clamp(1000, 30000)).ConfigureAwait(false);
 							SimpleHttpLogger.LogVerbose("\"acme-tls/1\" client connected using SslProtocol." + (p.tcpStream as SslStream).SslProtocol);
 							return false; // This connection is not allowed to be used for data transmission after TLS negotiation is complete.
 #else
@@ -97,6 +97,7 @@ namespace BPUtil.SimpleHttp.TLS
 							SimpleHttpLogger.LogVerbose("TLS negotiation failed because the certificate selector [" + p.certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ".");
 							return false;
 						}
+						SslStream ss = WrapSslStream(p);
 #if NET6_0
 						SslServerAuthenticationOptions sslServerOptions = new SslServerAuthenticationOptions();
 						sslServerOptions.ServerCertificateContext = tlsCertContexts.GetOrAdd(cert, CreateSslStreamCertificateContextFromCert);
@@ -109,11 +110,9 @@ namespace BPUtil.SimpleHttp.TLS
 								sslServerOptions.CipherSuitesPolicy = new CipherSuitesPolicy(suites);
 						}
 
-						p.tcpStream = new SslStream(p.tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
-						await ((SslStream)p.tcpStream).AuthenticateAsServerAsync(sslServerOptions, cancellationToken).ConfigureAwait(false);
+						await TaskHelper.DoWithTimeout(ss.AuthenticateAsServerAsync(sslServerOptions, cancellationToken), HttpProcessor.readTimeoutSeconds * 1000).ConfigureAwait(false);
 #else
-						p.tcpStream = new SslStream(p.tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
-						await TaskHelper.DoWithTimeout(((SslStream)p.tcpStream).AuthenticateAsServerAsync(cert, false, Tls13 | SslProtocols.Tls12, false), 5000).ConfigureAwait(false);
+						await TaskHelper.DoWithCancellation(ss.AuthenticateAsServerAsync(cert, false, Tls13 | SslProtocols.Tls12, false), HttpProcessor.readTimeoutSeconds * 1000, cancellationToken).ConfigureAwait(false);
 #endif
 						SimpleHttpLogger.LogVerbose("Client connected using SslProtocol." + (p.tcpStream as SslStream).SslProtocol);
 					}
@@ -151,6 +150,12 @@ namespace BPUtil.SimpleHttp.TLS
 			}
 			p.base_uri_this_server = new Uri("http" + (p.secure_https ? "s" : "") + "://" + p.tcpClient.Client.LocalEndPoint.ToString(), UriKind.Absolute);
 			return true;
+		}
+		private static SslStream WrapSslStream(HttpProcessor p)
+		{
+			SslStream sslStream = new SslStream(p.tcpStream, false, null, null, EncryptionPolicy.RequireEncryption);
+			p.tcpStream = sslStream;
+			return sslStream;
 		}
 	}
 }

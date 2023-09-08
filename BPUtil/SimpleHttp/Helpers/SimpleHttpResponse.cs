@@ -231,6 +231,7 @@ namespace BPUtil.SimpleHttp
 				throw new ApplicationException("The response header was already written.");
 			return StaticFileAsync(new FileInfo(filePath), contentTypeOverride, canCache, cancellationToken);
 		}
+
 		/// <summary>
 		/// <para>Synchronously writes a static file response with built-in caching support.</para>
 		/// <para>This completes the response.</para>
@@ -694,6 +695,8 @@ namespace BPUtil.SimpleHttp
 
 			if (bodyContent != null)
 			{
+				if (!(responseStream is Substream))
+					throw new ApplicationException("!(responseStream is Substream). responseStream is " + (responseStream == null ? "null" : responseStream.GetType().Name));
 				responseStream.Write(bodyContent, 0, bodyContent.Length);
 				FinishSync();
 			}
@@ -716,7 +719,7 @@ namespace BPUtil.SimpleHttp
 			if (bodyContent != null)
 			{
 				if (!(responseStream is Substream))
-					throw new ApplicationException("!(responseStream is Substream)");
+					throw new ApplicationException("!(responseStream is Substream). responseStream is " + (responseStream==null?"null": responseStream.GetType().Name));
 				await responseStream.WriteAsync(bodyContent, 0, bodyContent.Length, cancellationToken).ConfigureAwait(false);
 				await FinishAsync(cancellationToken).ConfigureAwait(false);
 			}
@@ -782,7 +785,7 @@ namespace BPUtil.SimpleHttp
 
 			Stream r = p.tcpStream;
 
-			if (ContentLength != null && ContentLength > 0)
+			if (ContentLength != null && ContentLength >= 0)
 				r = _substream = r.Substream(ContentLength.Value); // This will throw an exception if we write too many bytes, and gives the Cleanup method a way to know if we did not write enough bytes.
 
 			if (compressionType == CompressionType.GZip)
@@ -964,6 +967,16 @@ namespace BPUtil.SimpleHttp
 			PrepareResponseStream(chunkedTransferEncoding);
 			responseStream = this.responseStream;
 			return responseHeader;
+		}
+
+		/// <summary>
+		/// Sets the Server-Timing header if the given <see cref="BasicEventTimer"/> is not null.
+		/// </summary>
+		/// <param name="serverTiming"><see cref="BasicEventTimer"/> containing Server-Timing data, or null.</param>
+		internal void SetServerTiming(BasicEventTimer serverTiming)
+		{
+			if (serverTiming != null)
+				Headers["Server-Timing"] = serverTiming.ToServerTimingHeader();
 		}
 		#endregion
 	}

@@ -176,34 +176,10 @@ namespace BPUtil.SimpleHttp
 				return remoteIPAddressStr;
 			}
 		}
-		private IPAddress remoteIpAddress = null;
 		/// <summary>
 		/// Returns the remote client's IP address, or null if the remote IP address is somehow not available.
 		/// </summary>
-		public IPAddress RemoteIPAddress
-		{
-			get
-			{
-				if (remoteIpAddress != null)
-					return remoteIpAddress;
-
-				try
-				{
-					if (tcpClient != null && tcpClient.Client.RemoteEndPoint is IPEndPoint)
-					{
-						IPEndPoint ipep = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
-						remoteIpAddress = ipep.Address;
-					}
-				}
-				catch (ThreadAbortException) { throw; }
-				catch (SocketException) { throw; }
-				catch (Exception ex)
-				{
-					SimpleHttpLogger.Log(ex);
-				}
-				return remoteIpAddress;
-			}
-		}
+		public IPAddress RemoteIPAddress { get; private set; }
 
 		protected uint remoteIPAddressInt = 0;
 		/// <summary>
@@ -254,11 +230,11 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Gets the remote endpoint.
 		/// </summary>
-		public IPEndPoint RemoteEndPoint => (IPEndPoint)tcpClient.Client.RemoteEndPoint;
+		public IPEndPoint RemoteEndPoint { get; private set; }
 		/// <summary>
 		/// Gets the local endpoint.
 		/// </summary>
-		public IPEndPoint LocalEndPoint => (IPEndPoint)tcpClient.Client.LocalEndPoint;
+		public IPEndPoint LocalEndPoint { get; private set; }
 		private static long _connectionIdCounter = 0;
 		/// <summary>
 		/// A unique auto-incremented identifier of this HttpProcessor instance, guaranteed to be unique for the lifetime of the current process.
@@ -286,6 +262,9 @@ namespace BPUtil.SimpleHttp
 			this.tcpClient = client;
 			this.srv = srv;
 			this.allowedConnectionTypes = allowedConnectionTypes;
+			LocalEndPoint = (IPEndPoint)tcpClient.Client.LocalEndPoint;
+			RemoteEndPoint = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
+			RemoteIPAddress = RemoteEndPoint.Address;
 		}
 
 		/// <summary>
@@ -493,7 +472,7 @@ namespace BPUtil.SimpleHttp
 					{
 						headerValue = headerValue.Trim();
 						if (IPAddress.TryParse(headerValue, out IPAddress addr))
-							remoteIpAddress = addr;
+							RemoteIPAddress = addr;
 					}
 				}
 			}
@@ -511,7 +490,7 @@ namespace BPUtil.SimpleHttp
 						{
 							headerValue = headerValue.Trim();
 							if (IPAddress.TryParse(headerValue, out IPAddress addr))
-								remoteIpAddress = addr;
+								RemoteIPAddress = addr;
 						}
 					}
 				}
@@ -562,12 +541,16 @@ namespace BPUtil.SimpleHttp
 				if (!Response.ResponseHeaderWritten)
 					Response.Simple("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
 			}
+			else if (e.GetExceptionOfType<AuthenticationException>() != null)
+			{
+				// Tls Authentication Failed
+				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+				return true;
+			}
 			else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
 			{
 				// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
 				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-				Response.PreventKeepalive();
-				Response.ResponseHeaderWritten = true;
 				return true;
 			}
 			else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)

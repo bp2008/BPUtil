@@ -758,7 +758,7 @@ namespace BPUtil.SimpleHttp
 			return new
 			{
 				Method = HttpMethod,
-				Url = Url.ToString(),
+				Url = Url.PathAndQuery,
 				Body = GetBodySummary()
 			};
 		}

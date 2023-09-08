@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Security.Authentication;
@@ -261,6 +262,7 @@ namespace BPUtil.SimpleHttp.Client
 					if (options.allowGatewayTimeoutResponse)
 					{
 						p.Response.Simple("504 Gateway Timeout");
+						p.Response.SetServerTiming(proxyTiming);
 						return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
 					}
 					ex.Rethrow();
@@ -268,6 +270,7 @@ namespace BPUtil.SimpleHttp.Client
 				catch (TLSNegotiationFailedException ex)
 				{
 					p.Response.Simple("502 Bad Gateway");
+					p.Response.SetServerTiming(proxyTiming);
 					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, ex.ToHierarchicalString(), false, false);
 				}
 			}
@@ -351,6 +354,7 @@ namespace BPUtil.SimpleHttp.Client
 					if (!didConnect)
 						return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered end of stream reading response status line from the remote server. Should retry with a new connection.", false, true);
 					p.Response.Simple("502 Bad Gateway");
+					p.Response.SetServerTiming(proxyTiming);
 					return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, "ProxyClient encountered end of stream reading response status line from the remote server (this was a new connection).", false, false);
 				}
 
@@ -379,6 +383,7 @@ namespace BPUtil.SimpleHttp.Client
 					return new ProxyResult(ProxyResultErrorCode.ConnectionLost, "ProxyClient encountered unexpected end of stream while reading the response from the remote server. Should retry with a new connection.", false, true);
 				}
 				p.Response.Simple("502 Bad Gateway");
+				p.Response.SetServerTiming(proxyTiming);
 				return new ProxyResult(ProxyResultErrorCode.TLSNegotiationError, "ProxyClient encountered unexpected end of stream while reading the response from the remote server (this was a new connection).", false, false);
 			}
 			catch (TimeoutException ex)
@@ -386,6 +391,7 @@ namespace BPUtil.SimpleHttp.Client
 				if (options.allowGatewayTimeoutResponse)
 				{
 					p.Response.Simple("504 Gateway Timeout");
+					p.Response.SetServerTiming(proxyTiming);
 					return new ProxyResult(ProxyResultErrorCode.GatewayTimeout, ex.ToHierarchicalString(), false, false);
 				}
 				ex.Rethrow();
@@ -603,11 +609,35 @@ namespace BPUtil.SimpleHttp.Client
 					{
 						proxyTiming?.Start("TLS Negotiate");
 						options.bet?.Start("TLS Negotiate");
-						System.Net.Security.RemoteCertificateValidationCallback certCallback = null;
+						RemoteCertificateValidationCallback certCallback = null;
 						if (options.acceptAnyCert)
 							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
-						pStream = new System.Net.Security.SslStream(pStream, false, certCallback, null);
-						((System.Net.Security.SslStream)pStream).AuthenticateAsClient(host, null, TLS.TlsNegotiate.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
+						SslStream ss = new SslStream(pStream, false, certCallback, null);
+						pStream = ss;
+#if NET6_0
+						SslClientAuthenticationOptions sslClientOptions = new SslClientAuthenticationOptions();
+						sslClientOptions.AllowRenegotiation = false; // Client-side renegotiation is viewed as insecure by the industry and is not available in TLS 1.3.
+						sslClientOptions.EnabledSslProtocols = TLS.TlsNegotiate.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls;
+						sslClientOptions.EncryptionPolicy = EncryptionPolicy.RequireEncryption;
+						if (certCallback != null)
+						{
+							sslClientOptions.CertificateRevocationCheckMode = System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck;
+							sslClientOptions.RemoteCertificateValidationCallback = certCallback;
+						}
+						sslClientOptions.TargetHost = host;
+
+						await TaskHelper.DoWithTimeout(ss.AuthenticateAsClientAsync(sslClientOptions, options.cancellationToken), options.connectTimeoutMs,
+						() => throw new GatewayTimeoutException("ProxyClient TLS Client Negotiation attempt timed out.")).ConfigureAwait(false);
+#else
+						Task authTask = ss.AuthenticateAsClientAsync(host, null, TLS.TlsNegotiate.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
+						await TaskHelper.DoWithCancellation(authTask, options.connectTimeoutMs, options.cancellationToken,
+							timedOut =>
+							{
+								if (timedOut)
+									throw new GatewayTimeoutException("ProxyClient TLS Client Negotiation attempt timed out.");
+								throw new OperationCanceledException("ProxyClient TLS Client Negotiation attempt was cancelled.");
+							}).ConfigureAwait(false);
+#endif
 					}
 				}
 				catch (Exception ex)
@@ -817,22 +847,36 @@ namespace BPUtil.SimpleHttp.Client
 				ByteUtil.BufferRecycle(buf);
 			}
 		}
-
+		/// <summary>
+		/// Thrown by ProxyClient in several situations where a timeout occurs attempting to contact the destination server.
+		/// </summary>
 		[Serializable]
 		private class GatewayTimeoutException : Exception
 		{
+			/// <summary>
+			/// Thrown by ProxyClient in several situations where a timeout occurs attempting to contact the destination server.
+			/// </summary>
 			public GatewayTimeoutException()
 			{
 			}
 
+			/// <summary>
+			/// Thrown by ProxyClient in several situations where a timeout occurs attempting to contact the destination server.
+			/// </summary>
 			public GatewayTimeoutException(string message) : base(message)
 			{
 			}
 
+			/// <summary>
+			/// Thrown by ProxyClient in several situations where a timeout occurs attempting to contact the destination server.
+			/// </summary>
 			public GatewayTimeoutException(string message, Exception innerException) : base(message, innerException)
 			{
 			}
 
+			/// <summary>
+			/// Thrown by ProxyClient in several situations where a timeout occurs attempting to contact the destination server.
+			/// </summary>
 			protected GatewayTimeoutException(SerializationInfo info, StreamingContext context) : base(info, context)
 			{
 			}
