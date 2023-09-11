@@ -52,8 +52,7 @@ namespace BPUtil.MVC
 			Controller controller = (Controller)Activator.CreateInstance(ControllerType);
 			controller.Context = context;
 			controller.CancellationToken = cancellationToken;
-			ActionResult result = null;
-			controller.OnAuthorization(ref result);
+			ActionResult result = controller.OnAuthorization();
 			if (result == null)
 				result = await CallActionMethod(controller, methodInfo).ConfigureAwait(false);
 			controller.PreprocessResult(result);

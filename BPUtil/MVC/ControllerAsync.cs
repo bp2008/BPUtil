@@ -42,7 +42,7 @@ namespace BPUtil.MVC
 		/// When overridden in a derived class, this method may allow or disallow access to the controller.  This is called before the client-specified action method is called.  If authorization fails, this should return an appropriate result such as an HTTP 403 Forbidden response. If null, authorization will be assumed to have succeeded.
 		/// </summary>
 		/// <returns>If authorization fails, this should return an appropriate result such as an HTTP 403 Forbidden response. If null, authorization will be assumed to have succeeded.</returns>
-		public virtual Task<ActionResult> OnAuthorization() { return Task.FromResult<ActionResult>(null); }
+		public new virtual Task<ActionResult> OnAuthorization() { return Task.FromResult<ActionResult>(null); }
 
 		/// <summary>
 		/// When overridden in a derived class, this method may modify any ActionResult before it is sent to the client.
