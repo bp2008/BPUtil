@@ -83,7 +83,14 @@ namespace BPUtil
 			MethodInfo m = t.GetMethod(name, instance_flags);
 			if (m == null)
 				throw new ArgumentException("Unable to find method named \"" + name + "\" in type \"" + t.Name + "\" using BindingFlags " + instance_flags.GetAllMatchedFlagsStr());
-			return (T)m.Invoke(obj, param);
+			try
+			{
+				return (T)m.Invoke(obj, param);
+			}
+			catch (TargetInvocationException tex)
+			{
+				throw new ApplicationException("PrivateAccessor.CallMethod failed to invoke " + t.Name + "." + m.Name + "(" + string.Join(", ", param) + ")", tex);
+			}
 		}
 		/// <summary>
 		/// Gets the value of the specified private static field.

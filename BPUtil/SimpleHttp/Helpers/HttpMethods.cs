@@ -46,6 +46,10 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public const string PATCH = "PATCH";
 		/// <summary>
+		/// Gets an array containing all valid HTTP methods.
+		/// </summary>
+		public static string[] AllValidMethods => new string[] { GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH };
+		/// <summary>
 		/// Static HashSet containing all valid HTTP request method strings.
 		/// </summary>
 		private static HashSet<string> validMethods = GetValidMethods();

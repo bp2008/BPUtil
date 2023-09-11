@@ -12,19 +12,36 @@ namespace BPUtil.MVC
 	internal class ControllerInfo
 	{
 		/// <summary>
-		/// Type type of Controller-derived class represented by this ControllerInfo.
+		/// Type type of <see cref="Controller"/>-derived class represented by this ControllerInfo.
 		/// </summary>
 		protected Type ControllerType;
+		/// <summary>
+		/// Collection of custom attributes applied to the <see cref="Controller"/>-derived class represented by this ControllerInfo.
+		/// </summary>
+		protected Attribute[] CustomAttributes;
 		/// <summary>
 		/// A map of ActionResult-returning methods available in the controller.
 		/// </summary>
 		protected SortedList<string, MethodInfo> methodMap = new SortedList<string, MethodInfo>();
+		/// <summary>
+		/// Gets the first custom attribute of the given type that was applied to the <see cref="Controller"/> or one of its superclasses.  Null if no attribute of the given type is found.
+		/// </summary>
+		/// <typeparam name="T">Type of attribute you want to get.</typeparam>
+		/// <returns></returns>
+		private T GetCustomAttribute<T>() where T : Attribute
+		{
+			return this.CustomAttributes?.OfType<T>().FirstOrDefault();
+		}
 		public ControllerInfo(Type controllerType)
 		{
 			if (!controllerType.IsSubclassOf(typeof(Controller)))
 				throw new Exception("Type \"" + controllerType.FullName + "\" does not inherit from \"" + typeof(Controller).FullName + "\".");
 
 			this.ControllerType = controllerType;
+			this.CustomAttributes = controllerType.GetCustomAttributes(true)
+				.Where(a => a is Attribute)
+				.Select(a => a as Attribute)
+				.ToArray();
 
 			IEnumerable<MethodInfo> allMethods = controllerType.GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).Where(IsActionMethod);
 			foreach (MethodInfo methodInfo in allMethods)
@@ -49,6 +66,16 @@ namespace BPUtil.MVC
 				if (!methodMap.TryGetValue(context.ActionName.ToUpper(), out methodInfo))
 					return null;
 			}
+
+			RequiresHttpMethodAttribute rhma = methodInfo.GetCustomAttribute<RequiresHttpMethodAttribute>(true);
+			if (rhma == null)
+				rhma = GetCustomAttribute<RequiresHttpMethodAttribute>();
+			if (rhma != null && !rhma.IsHttpMethodAllowed(context.httpProcessor.Request.HttpMethod))
+			{
+				context.ResponseHeaders.Add("Allow", string.Join(", ", rhma.AllowedHttpMethods));
+				return new StatusCodeResult("405 Method Not Allowed");
+			}
+
 			Controller controller = (Controller)Activator.CreateInstance(ControllerType);
 			controller.Context = context;
 			controller.CancellationToken = cancellationToken;
@@ -59,7 +86,7 @@ namespace BPUtil.MVC
 			return result;
 		}
 		/// <summary>
-		/// Calls the specified method on the controller, getting arguments from the controller's Context property.
+		/// Calls the specified method on the <see cref="Controller"/>, getting arguments from the controller's Context property.
 		/// </summary>
 		/// <param name="controller">A controller instance.</param>
 		/// <param name="mi">Metadata about the method that is to be called.</param>
