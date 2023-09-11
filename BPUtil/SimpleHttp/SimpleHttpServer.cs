@@ -508,66 +508,84 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		private bool HandleCommonExceptionScenarios(Exception e, string errorLogPrefix)
 		{
-			if (e == null)
+			try
 			{
-				SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + "Exception object was null.");
-				SimpleHttpLogger.Log(new System.Diagnostics.StackTrace().ToString());
-				return true;
-			}
-
-			if (IsOrdinaryDisconnectException(e))
-				return true;
-
-			if (shouldLogRequestsToFile())
-				SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, Request?.HttpMethod + ":FAIL", Request?.Url.OriginalString, HostName);
-
-			HttpProcessorException hpex = e.GetExceptionOfType<HttpProcessorException>();
-			if (hpex != null)
-			{
-				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-				Response.PreventKeepalive();
-				if (!Response.ResponseHeaderWritten)
+				if (e == null)
 				{
-					Response.Simple(hpex.StatusString, hpex.ResponseBody);
-					if (hpex.Headers != null)
-						foreach (HttpHeader header in hpex.Headers)
-							Response.Headers.Add(header);
+					SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + "Exception object was null.");
+					SimpleHttpLogger.Log(new System.Diagnostics.StackTrace().ToString());
+					return true;
+				}
+
+				if (IsOrdinaryDisconnectException(e))
+					return true;
+
+				if (shouldLogRequestsToFile())
+					SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, Request?.HttpMethod + ":FAIL", Request?.Url.OriginalString, HostName);
+
+				HttpProcessorException hpex = e.GetExceptionOfType<HttpProcessorException>();
+				if (hpex != null)
+				{
+					SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					ResponseCriticalFail(hpex.StatusString, hpex.ResponseBody, hpex.Headers);
+				}
+				else if (e.GetExceptionOfType<HttpProtocolException>() != null)
+				{
+					SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					ResponseCriticalFail("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
+				}
+				else if (e.GetExceptionOfType<AuthenticationException>() != null)
+				{
+					// Tls Authentication Failed
+					SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					return true;
+				}
+				else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
+				{
+					// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
+					SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					return true;
+				}
+				else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)
+				{
+					SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					ResponseCriticalFail("500 Internal Server Error", "An error occurred while processing this request.");
+				}
+				else
+				{
+					SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					ResponseCriticalFail("500 Internal Server Error", "An error occurred while processing this request.");
+				}
+				return false;
+			}
+			catch (Exception exception)
+			{
+				SimpleHttpLogger.Log(exception, "HandleCommonExceptionScenarios Failed");
+				ResponseCriticalFail("500 Internal Server Error", "An error occurred while processing this request.");
+				return false;
+			}
+		}
+
+		private void ResponseCriticalFail(string statusString, string description, HttpHeaderCollection headers = null)
+		{
+			try
+			{
+				if (Response != null)
+				{
+					Response.PreventKeepalive();
+					if (!Response.ResponseHeaderWritten)
+					{
+						Response.Simple(statusString, description);
+						if (headers != null)
+							foreach (HttpHeader header in headers)
+								Response.Headers.Add(header);
+					}
 				}
 			}
-			else if (e.GetExceptionOfType<HttpProtocolException>() != null)
+			catch (Exception exception)
 			{
-				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-				Response.PreventKeepalive();
-				if (!Response.ResponseHeaderWritten)
-					Response.Simple("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
+				SimpleHttpLogger.Log(exception, "ResponseCriticalFail Failed");
 			}
-			else if (e.GetExceptionOfType<AuthenticationException>() != null)
-			{
-				// Tls Authentication Failed
-				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-				return true;
-			}
-			else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
-			{
-				// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
-				SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-				return true;
-			}
-			else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)
-			{
-				SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-				Response.PreventKeepalive();
-				if (!Response.ResponseHeaderWritten)
-					Response.Simple("500 Internal Server Error", "An error occurred while processing this request.");
-			}
-			else
-			{
-				SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-				Response.PreventKeepalive();
-				if (!Response.ResponseHeaderWritten)
-					Response.Simple("500 Internal Server Error", "An error occurred while processing this request.");
-			}
-			return false;
 		}
 
 		/// <summary>
@@ -591,25 +609,33 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		public static bool IsOrdinaryDisconnectException(Exception ex)
 		{
-			if (ex is SocketException && (ex as SocketException).SocketErrorCode != SocketError.InvalidArgument)
-				return true;
-			if (ex is HttpProcessor.EndOfStreamException)
-				return true;
-			if (ex is System.IO.EndOfStreamException)
-				return true;
-			if (ex is OperationCanceledException)
-				return true;
-			if (ex is AggregateException)
+			try
 			{
-				AggregateException agg = ex as AggregateException;
-				if (agg.InnerExceptions != null)
-					foreach (Exception inner in agg.InnerExceptions)
-						if (IsOrdinaryDisconnectException(inner))
-							return true;
+				if (ex is SocketException && (ex as SocketException).SocketErrorCode != SocketError.InvalidArgument)
+					return true;
+				if (ex is HttpProcessor.EndOfStreamException)
+					return true;
+				if (ex is System.IO.EndOfStreamException)
+					return true;
+				if (ex is OperationCanceledException)
+					return true;
+				if (ex is AggregateException)
+				{
+					AggregateException agg = ex as AggregateException;
+					if (agg.InnerExceptions != null)
+						foreach (Exception inner in agg.InnerExceptions)
+							if (IsOrdinaryDisconnectException(inner))
+								return true;
+				}
+				if (ex.InnerException != null)
+					return IsOrdinaryDisconnectException(ex.InnerException);
+				return false;
 			}
-			if (ex.InnerException != null)
-				return IsOrdinaryDisconnectException(ex.InnerException);
-			return false;
+			catch (Exception exception)
+			{
+				SimpleHttpLogger.Log(exception, "IsOrdinaryDisconnectException Failed");
+				return false;
+			}
 		}
 		private bool shouldLogRequestsToFile()
 		{
@@ -618,7 +644,22 @@ namespace BPUtil.SimpleHttp
 
 		private string GetDebugLogPrefix()
 		{
-			return this.RemoteIPAddressStr + " " + this.Request?.HttpMethod + " " + this.Request?.Url + " - ";
+			try
+			{
+				if (this.Request != null)
+				{
+					return this.RemoteIPAddressStr + " " + this.Request.HttpMethod + " " + this.Request.Url + " - ";
+				}
+				else
+				{
+					return this.RemoteIPAddressStr + " [request not processed yet] - ";
+				}
+			}
+			catch (Exception ex)
+			{
+				SimpleHttpLogger.Log(ex, "GetDebugLogPrefix Failed");
+				return "GetDebugLogPrefix Failed - ";
+			}
 		}
 
 		#region Request Proxy Http(s)
