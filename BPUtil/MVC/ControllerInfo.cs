@@ -75,15 +75,28 @@ namespace BPUtil.MVC
 				context.ResponseHeaders.Add("Allow", string.Join(", ", rhma.AllowedHttpMethods));
 				return new StatusCodeResult("405 Method Not Allowed");
 			}
-
-			Controller controller = (Controller)Activator.CreateInstance(ControllerType);
-			controller.Context = context;
-			controller.CancellationToken = cancellationToken;
-			ActionResult result = controller.OnAuthorization();
-			if (result == null)
-				result = await CallActionMethod(controller, methodInfo).ConfigureAwait(false);
-			controller.PreprocessResult(result);
-			return result;
+			if (ControllerType.IsAssignableTo(typeof(ControllerAsync)))
+			{
+				ControllerAsync controller = (ControllerAsync)Activator.CreateInstance(ControllerType);
+				controller.Context = context;
+				controller.CancellationToken = cancellationToken;
+				ActionResult result = await controller.OnAuthorization();
+				if (result == null)
+					result = await CallActionMethod(controller, methodInfo).ConfigureAwait(false);
+				await controller.PreprocessResult(result);
+				return result;
+			}
+			else
+			{
+				Controller controller = (Controller)Activator.CreateInstance(ControllerType);
+				controller.Context = context;
+				controller.CancellationToken = cancellationToken;
+				ActionResult result = controller.OnAuthorization();
+				if (result == null)
+					result = await CallActionMethod(controller, methodInfo).ConfigureAwait(false);
+				controller.PreprocessResult(result);
+				return result;
+			}
 		}
 		/// <summary>
 		/// Calls the specified method on the <see cref="Controller"/>, getting arguments from the controller's Context property.
