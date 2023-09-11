@@ -408,6 +408,22 @@ namespace BPUtil.SimpleHttp.Client
 			///////////////////////////////
 			// PHASE 5: Process Response //
 			///////////////////////////////
+
+			// Rewrite redirect location to point at this server
+			if (proxyHttpHeaders.ContainsKey("Location"))
+			{
+				if (!string.IsNullOrWhiteSpace(p.HostName)
+					&& Uri.TryCreate(proxyHttpHeaders["Location"], UriKind.Absolute, out Uri redirectUri)
+					&& redirectUri.Host.IEquals(host))
+				{
+					UriBuilder uriBuilder = new UriBuilder(redirectUri);
+					uriBuilder.Scheme = p.secure_https ? "https" : "http";
+					uriBuilder.Host = p.HostName;
+					uriBuilder.Port = ((IPEndPoint)p.tcpClient.Client.LocalEndPoint).Port;
+					proxyHttpHeaders["Location"] = uriBuilder.Uri.ToString();
+				}
+			}
+
 			// Begin populating the Response object
 			options.bet?.Start("Proxy Process Response Headers");
 			p.Response.Reset(responseStatusLine.StatusString);
@@ -477,20 +493,6 @@ namespace BPUtil.SimpleHttp.Client
 
 			options.log.AppendLine("Response will be read as: " + proxyResponseStream?.GetType().Name ?? "[no response body]");
 
-			// Rewrite redirect location to point at this server
-			if (proxyHttpHeaders.ContainsKey("Location"))
-			{
-				if (!string.IsNullOrWhiteSpace(p.HostName)
-					&& Uri.TryCreate(proxyHttpHeaders["Location"], UriKind.Absolute, out Uri redirectUri)
-					&& redirectUri.Host.IEquals(host))
-				{
-					UriBuilder uriBuilder = new UriBuilder(redirectUri);
-					uriBuilder.Scheme = p.secure_https ? "https" : "http";
-					uriBuilder.Host = p.HostName;
-					uriBuilder.Port = ((IPEndPoint)p.tcpClient.Client.LocalEndPoint).Port;
-					proxyHttpHeaders["Location"] = uriBuilder.Uri.ToString();
-				}
-			}
 			options.RaiseBeforeResponseHeadersSent(this, p);
 
 			/////////////////////////////
