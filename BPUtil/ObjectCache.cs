@@ -34,7 +34,7 @@ namespace BPUtil
 		/// Adds the specified key/value pair if the key does not already exist in the cache. Otherwise, updates the existing item.  If an existing item is updated, its "Created" date is not updated.
 		/// </summary>
 		/// <param name="key">The object to use as dictionary key. `null` is not a valid key.</param>
-		/// <param name="value"></param>
+		/// <param name="value">The value to add to the cache.</param>
 		public void Add(TKey key, TValue value)
 		{
 			lock (syncLock)
@@ -71,7 +71,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Returns the value that is cached for the given key, or default(TValue).
+		/// Returns the value that is cached for the given key, or default(<typeparamref name="TValue"/>).
 		/// </summary>
 		/// <param name="key">The object to use as dictionary key. `null` is not a valid key.</param>
 		/// <returns></returns>
@@ -80,7 +80,7 @@ namespace BPUtil
 			return Get(key, out long cacheAgeMs);
 		}
 		/// <summary>
-		/// Returns the value that is cached for the given key, or default(TValue").
+		/// Returns the value that is cached for the given key, or default(<typeparamref name="TValue"/>).
 		/// </summary>
 		/// <param name="key">The object to use as dictionary key. `null` is not a valid key.</param>
 		/// <param name="cacheAgeMs">Milliseconds age of the cached value.  Will be 0 if no item was cached.</param>
@@ -140,8 +140,8 @@ namespace BPUtil
 		/// <summary>
 		/// Calculates the amount of memory, in bytes, of storing this item in the ObjectCache.  Accuracy is not 100% guaranteed.
 		/// </summary>
-		/// <param name="key"></param>
-		/// <param name="item"></param>
+		/// <param name="key">The cache dictionary key.</param>
+		/// <param name="item">The cache dictionary value.</param>
 		/// <returns></returns>
 		private long CalculateItemSize(TKey key, CacheItem item)
 		{
