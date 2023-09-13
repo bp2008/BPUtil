@@ -44,7 +44,7 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// Constructs a new ActionResult with the specified ContentType.
 		/// </summary>
-		/// <param name="contentType">The Content-Type header for an HTTP response.</param>
+		/// <param name="contentType">The Content-Type header for an HTTP response.  Null to have no Content-Type.</param>
 		public ActionResult(string contentType)
 		{
 			this.ContentType = contentType;
@@ -254,15 +254,15 @@ namespace BPUtil.MVC
 		}
 	}
 	/// <summary>
-	/// A result where the body is a plain-text error message and the response status has a custom value.
+	/// A result where there is no body and the response status has a custom value.
 	/// </summary>
-	public class StatusCodeResult : PlainTextResult
+	public class StatusCodeResult : ActionResult
 	{
 		/// <summary>
 		/// Constructs an ErrorResult, which is a PlainTextResult with a custom response status.
 		/// </summary>
 		/// <param name="responseStatus">HTTP response status.</param>
-		public StatusCodeResult(string responseStatus = "500 Internal Server Error") : base(responseStatus)
+		public StatusCodeResult(string responseStatus = "500 Internal Server Error") : base(null)
 		{
 			ResponseStatus = responseStatus;
 		}
