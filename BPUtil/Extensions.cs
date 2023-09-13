@@ -354,6 +354,27 @@ namespace BPUtil
 			return new Substream(stream, length);
 		}
 		#endregion
+		#region System.Type
+#if NETFRAMEWORK
+		/// <summary>
+		/// Determines whether the current type can be assigned to a variable of the specified targetType.
+		/// </summary>
+		/// <param name="currentInstance">This Type.</param>
+		/// <param name="targetType">The type to compare with the current type.</param>
+		/// <returns>
+		/// <para><c>true</c> if any of the following conditions is <c>true</c>:</para>
+		/// <para>* The current instance and <paramref name="targetType"/> represent the same type.</para>
+		/// <para>* The current type is derived either directly or indirectly from <paramref name="targetType"/>. The current type is derived directly from <paramref name="targetType"/> if it inherits from <paramref name="targetType"/>; the current type is derived indirectly from <paramref name="targetType"/> if it inherits from a succession of one or more classes that inherit from <paramref name="targetType"/>.</para>
+		/// <para>* <paramref name="targetType"/> is an interface that the current type implements.</para>
+		/// <para>* The current type is a generic type parameter, and <paramref name="targetType"/> represents one of the constraints of the current type.</para>
+		/// <para><c>false</c> if none of these conditions are <c>true</c>, or if <paramref name="targetType"/> is <c>null</c>.</para>
+		/// </returns>
+		public static bool IsAssignableTo(this Type currentInstance, Type targetType)
+		{
+			return targetType?.IsAssignableFrom(currentInstance) == true;
+		}
+#endif
+		#endregion
 #if NETFRAMEWORK || NET6_0_WIN
 		#region System.Windows.Forms.Form
 		/// <summary>
