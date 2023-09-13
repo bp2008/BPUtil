@@ -274,7 +274,7 @@ namespace BPUtil.SimpleHttp
 		{
 			try
 			{
-				CommonRequestPreprocessing(true);
+				CommonRequestPreprocessing(false);
 
 				if (!TLS.TlsNegotiate.NegotiateSync(this))
 					return;

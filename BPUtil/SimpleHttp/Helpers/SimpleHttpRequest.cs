@@ -60,8 +60,8 @@ namespace BPUtil.SimpleHttp
 
 		/// <summary>
 		/// <para>Gets the Stream containing the request body.</para>
-		/// <para>IMPORTANT: By default, this stream does not support seeking or length querying (it can only be read to the end one time!).  If you require the ability to seek or read multiple times, you must call <see cref="GetRequestBodyMemoryStream"/> at least one time BEFORE reading from RequestBodyStream.</para>
-		/// <para>It will begin positioned at the beginning of the request body and end at the end of the request body.</para>
+		/// <para>IMPORTANT: By default, this stream does not support seeking or length querying (it can only be read to the end one time!).  If you require the ability to seek or read multiple times, you must call <see cref="GetRequestBodyMemoryStreamSync"/> or <see cref="GetRequestBodyMemoryStreamAsync"/> at least one time BEFORE reading from RequestBodyStream.</para>
+		/// <para>At the start of request processing, this stream will be positioned at the beginning of the request body.  The stream will end at the end of the request body.</para>
 		/// <para>For requests that did not provide a body, this will be null.</para>
 		/// </summary>
 		public Stream RequestBodyStream { get; private set; }
@@ -695,9 +695,33 @@ namespace BPUtil.SimpleHttp
 		/// <para>If there is no request body, this method returns null.</para>
 		/// </summary>
 		/// <param name="maxLength">[Default: 10 million] Maximium number of bytes to read before aborting. If the request body is larger, an Exception will be thrown.</param>
+		/// <exception cref="Exception">Throws if the requesty body is larger than the provided limit.</exception>
+		public MemoryStream GetRequestBodyMemoryStreamSync(int maxLength = 10 * 1000 * 1000)
+		{
+			if (RequestBodyStream == null)
+				return null;
+			if (RequestBodyStream is MemoryStream)
+				return (MemoryStream)RequestBodyStream;
+			ByteUtil.ReadToEndResult result = ByteUtil.ReadToEndWithMaxLength(RequestBodyStream, maxLength);
+			if (result.EndOfStream)
+			{
+				MemoryStream ms = new MemoryStream(result.Data);
+				RequestBodyStream = ms;
+				return ms;
+			}
+			else
+				throw new Exception("Request body was too large (max " + StringUtil.FormatNetworkBytes(maxLength) + ").");
+		}
+		/// <summary>
+		/// <para>IMPORTANT: If you call this method, you must do it before reading from <see cref="RequestBodyStream"/>, otherwise you will not get the entire request body.</para>
+		/// <para>The first call to this method reads the remainder of the request body into a <see cref="MemoryStream"/>, seeks it to Position 0, and assigns it to the <see cref="RequestBodyStream"/> property.</para>
+		/// <para>Further calls to this method only return a reference to the existing MemoryStream without changing its seek position.</para>
+		/// <para>If there is no request body, this method returns null.</para>
+		/// </summary>
+		/// <param name="maxLength">[Default: 10 million] Maximium number of bytes to read before aborting. If the request body is larger, an Exception will be thrown.</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <exception cref="Exception">Throws if the requesty body is larger than the provided limit.</exception>
-		public async Task<MemoryStream> GetRequestBodyMemoryStream(int maxLength = 10 * 1000 * 1000, CancellationToken cancellationToken = default)
+		public async Task<MemoryStream> GetRequestBodyMemoryStreamAsync(int maxLength = 10 * 1000 * 1000, CancellationToken cancellationToken = default)
 		{
 			if (RequestBodyStream == null)
 				return null;

@@ -326,7 +326,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Reads all bytes until the end of the stream.  The read data is placed in an output argument byte array.  If maxLength is exceeded while reading, the read data is unavailable and the method returns false.
+		/// Reads all bytes until the end of the stream.  If maxLength is exceeded while reading, the read data is unavailable and the result indicates that <c>EndOfStream</c> is false.
 		/// </summary>
 		/// <param name="stream">The stream to read data from.</param>
 		/// <param name="maxLength">Maximium number of bytes to read before aborting.</param>
@@ -373,7 +373,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Reads all bytes until the end of the stream.  The read data is placed in an output argument byte array.  If maxLength is exceeded while reading, the read data is unavailable and the method returns false.
+		/// Reads all bytes until the end of the stream.  If maxLength is exceeded while reading, the read data is unavailable and the result indicates that <c>EndOfStream</c> is false.
 		/// </summary>
 		/// <param name="stream">The stream to read data from.</param>
 		/// <param name="maxLength">Maximium number of bytes to read before aborting.</param>
