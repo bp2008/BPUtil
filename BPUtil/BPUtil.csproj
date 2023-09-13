@@ -72,6 +72,9 @@
     <Compile Include="Debounce.cs" />
     <Compile Include="IO\ConcatenatedStream.cs" />
     <Compile Include="IO\Substream.cs" />
+    <Compile Include="Linux\PortHelper.cs" />
+    <Compile Include="MVC\ControllerAsync.cs" />
+    <Compile Include="MVC\RequiresHttpMethodAttribute.cs" />
     <Compile Include="ObjectCacheSimple.cs" />
     <Compile Include="RamInfo.cs" />
     <Compile Include="RateOfChange.cs" />
