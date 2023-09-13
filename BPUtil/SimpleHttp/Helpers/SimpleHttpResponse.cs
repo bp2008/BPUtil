@@ -256,21 +256,7 @@ namespace BPUtil.SimpleHttp
 			if (isCacheable)
 			{
 				Headers["ETag"] = MakeETagSync(fi);
-
-				// If-None-Match
-				// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
-				string IfNoneMatch = p.Request.Headers.Get("If-None-Match");
-				if (IfNoneMatch != null)
-				{
-					if (Headers["ETag"] == IfNoneMatch)
-						cacheHit = true;
-				}
-				else
-				{
-					string IfModifiedSince = p.Request.Headers.Get("If-Modified-Since");
-					if (IfModifiedSince != null && IfModifiedSince.IEquals(Headers["Last-Modified"]))
-						cacheHit = true;
-				}
+				cacheHit = CheckStaticFileCacheHit();
 			}
 
 			if (cacheHit)
@@ -279,14 +265,56 @@ namespace BPUtil.SimpleHttp
 			}
 			else
 			{
-				ContentLength = fi.Length;
-				WriteResponseHeaderIfNeededSync();
-				using (FileStream fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-					fs.CopyTo(responseStream, 81920);
+				ByteRange[] ranges = GetRequestedByteRanges(fi.Length);
+				if (ranges == null)
+				{
+					ContentLength = fi.Length;
+					WriteResponseHeaderIfNeededSync();
+					if (p.Request.HttpMethod != "HEAD")
+						using (FileStream fs = OpenReadable(fi))
+							fs.CopyTo(responseStream, 81920);
+				}
+				else if (ranges.Length == 0)
+				{
+					StatusString = "416 Requested Range Not Satisfiable";
+					ContentLength = 0;
+					WriteResponseHeaderIfNeededSync();
+				}
+				else
+				{
+					ByteRangeResponseSetupShared(fi, ranges, out string trueContentType, out bool multiPart, out string boundary);
+
+					WriteResponseHeaderIfNeededSync();
+
+					if (p.Request.HttpMethod != "HEAD")
+					{
+						using (FileStream fs = OpenReadable(fi))
+						{
+							foreach (ByteRange range in ranges)
+							{
+								if (multiPart)
+								{
+									byte[] subHeader = GetMultiPartByteRangeSubHeader(fi, trueContentType, boundary, range);
+									responseStream.Write(subHeader, 0, subHeader.Length);
+								}
+								fs.Seek(range.Start, SeekOrigin.Begin);
+								fs.Substream((range.End - range.Start) + 1).CopyToAsync(responseStream, 81920);
+								if (multiPart)
+									responseStream.Write(ByteUtil.Utf8NoBOM.GetBytes("\r\n"), 0, 2);
+							}
+						}
+						if (multiPart)
+						{
+							byte[] trailer = ByteUtil.Utf8NoBOM.GetBytes("--" + boundary + "--");
+							responseStream.Write(trailer, 0, trailer.Length);
+						}
+					}
+				}
 			}
 
 			FinishSync();
 		}
+
 		/// <summary>
 		/// <para>Asynchronously writes a static file response with built-in caching support.</para>
 		/// <para>This completes the response.</para>
@@ -312,21 +340,7 @@ namespace BPUtil.SimpleHttp
 			if (isCacheable)
 			{
 				Headers["ETag"] = await MakeETagAsync(fi).ConfigureAwait(false);
-
-				// If-None-Match
-				// Succeeds if the ETag of the distant resource is different to each listed in this header. It performs a weak validation.
-				string IfNoneMatch = p.Request.Headers.Get("If-None-Match");
-				if (IfNoneMatch != null)
-				{
-					if (Headers["ETag"] == IfNoneMatch)
-						cacheHit = true;
-				}
-				else
-				{
-					string IfModifiedSince = p.Request.Headers.Get("If-Modified-Since");
-					if (IfModifiedSince != null && IfModifiedSince.IEquals(Headers["Last-Modified"]))
-						cacheHit = true;
-				}
+				cacheHit = CheckStaticFileCacheHit();
 			}
 
 			if (cacheHit)
@@ -335,10 +349,51 @@ namespace BPUtil.SimpleHttp
 			}
 			else
 			{
-				ContentLength = fi.Length;
-				await WriteResponseHeaderIfNeededAsync(cancellationToken).ConfigureAwait(false);
-				using (FileStream fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-					await fs.CopyToAsync(responseStream, 81920, cancellationToken).ConfigureAwait(false);
+				ByteRange[] ranges = GetRequestedByteRanges(fi.Length);
+				if (ranges == null)
+				{
+					ContentLength = fi.Length;
+					await WriteResponseHeaderIfNeededAsync(cancellationToken).ConfigureAwait(false);
+					if (p.Request.HttpMethod != "HEAD")
+						using (FileStream fs = OpenReadable(fi))
+							await fs.CopyToAsync(responseStream, 81920, cancellationToken).ConfigureAwait(false);
+				}
+				else if (ranges.Length == 0)
+				{
+					StatusString = "416 Requested Range Not Satisfiable";
+					ContentLength = 0;
+					await WriteResponseHeaderIfNeededAsync(cancellationToken).ConfigureAwait(false);
+				}
+				else
+				{
+					ByteRangeResponseSetupShared(fi, ranges, out string trueContentType, out bool multiPart, out string boundary);
+
+					await WriteResponseHeaderIfNeededAsync(cancellationToken).ConfigureAwait(false);
+
+					if (p.Request.HttpMethod != "HEAD")
+					{
+						using (FileStream fs = OpenReadable(fi))
+						{
+							foreach (ByteRange range in ranges)
+							{
+								if (multiPart)
+								{
+									byte[] subHeader = GetMultiPartByteRangeSubHeader(fi, trueContentType, boundary, range);
+									await responseStream.WriteAsync(subHeader, 0, subHeader.Length, cancellationToken).ConfigureAwait(false);
+								}
+								fs.Seek(range.Start, SeekOrigin.Begin);
+								await fs.Substream((range.End - range.Start) + 1).CopyToAsync(responseStream, 81920, cancellationToken).ConfigureAwait(false);
+								if (multiPart)
+									await responseStream.WriteAsync(ByteUtil.Utf8NoBOM.GetBytes("\r\n"), 0, 2, cancellationToken).ConfigureAwait(false);
+							}
+						}
+						if (multiPart)
+						{
+							byte[] trailer = ByteUtil.Utf8NoBOM.GetBytes("--" + boundary + "--");
+							await responseStream.WriteAsync(trailer, 0, trailer.Length, cancellationToken).ConfigureAwait(false);
+						}
+					}
+				}
 			}
 
 			await FinishAsync(cancellationToken).ConfigureAwait(false);
@@ -348,6 +403,7 @@ namespace BPUtil.SimpleHttp
 		{
 			Reset("200 OK");
 			Headers["Content-Type"] = contentTypeOverride != null ? contentTypeOverride : Mime.GetMimeType(fi.Extension);
+			Headers["Accept-Ranges"] = "bytes";
 			if (canCache && p.srv.CanCacheFileExtension(fi.Extension))
 			{
 				Headers["Date"] = DateTime.UtcNow.ToString("R");
@@ -362,6 +418,163 @@ namespace BPUtil.SimpleHttp
 				return false;
 			}
 		}
+
+		private bool CheckStaticFileCacheHit()
+		{
+			string IfNoneMatch = p.Request.Headers.Get("If-None-Match");
+			if (IfNoneMatch != null)
+			{
+				if (Headers["ETag"] == IfNoneMatch)
+					return true;
+			}
+			else
+			{
+				string IfModifiedSince = p.Request.Headers.Get("If-Modified-Since");
+				if (IfModifiedSince != null && IfModifiedSince.IEquals(Headers["Last-Modified"]))
+					return true;
+			}
+			return false;
+		}
+
+		class ByteRange
+		{
+			public long Start;
+			public long End;
+			public ByteRange(long start, long end)
+			{
+				Start = start;
+				End = end;
+			}
+		}
+		/// <summary>
+		/// <para>This method has no side-effects, but may throw an exception if the client requested an invalid byte range.</para>
+		/// <para>This method returns an array detailing the byte ranges that were requested in the request's "Range" header.</para>
+		/// <para>The array will be empty if none of the requested byte ranges are valid.</para>
+		/// <para>The array will be null if this is not a byte range request.</para>
+		/// </summary>
+		/// <param name="fileLength">Length of the file, in bytes.</param>
+		/// <returns>Array of byte ranges that were requested.  Empty if all requested ranges were invalid.  Null if this is not a byte range request.</returns>
+		private ByteRange[] GetRequestedByteRanges(long fileLength)
+		{
+			string IfRange = p.Request.Headers.Get("If-Range");
+			if (IfRange != null)
+			{
+				if (Headers["ETag"] == IfRange || IfRange.IEquals(Headers["Last-Modified"]))
+				{
+					// If-Range condition check succeeded.  Proceed normally.
+				}
+				else
+					return null; // If-Range condition check failed.  Return null to indicate that this should not be treated as a byte range request.
+			}
+
+			string rangeHeader = p.Request.Headers.Get("Range");
+
+			if (!string.IsNullOrEmpty(rangeHeader))
+			{
+				List<ByteRange> ranges = new List<ByteRange>();
+				foreach (string rangeStr in rangeHeader.Replace("bytes=", "").Split(','))
+				{
+					string[] parts = rangeStr.Split('-');
+					if (parts.Length >= 1 && long.TryParse(parts[0].Trim(), out long start))
+					{
+						if (start < 0)
+							start = 0;
+						if (start > fileLength - 1)
+							continue;
+						long end;
+						if (parts.Length < 2 || !long.TryParse(parts[1].Trim(), out end))
+							end = long.MaxValue;
+						if (end > fileLength - 1)
+							end = fileLength - 1;
+						if (end < start)
+							throw new HttpProcessor.HttpProcessorException("400 Bad Request", "An invalid byte range was requested.");
+						ranges.Add(new ByteRange(start, end));
+					}
+				}
+
+				ranges.Sort((a, b) => a.Start.CompareTo(b.Start));
+
+				for (int i = 0; i < ranges.Count - 1; i++)
+				{
+					if (ranges[i].End >= ranges[i + 1].Start)
+						throw new HttpProcessor.HttpProcessorException("400 Bad Request", "Overlapping byte ranges were requested.");
+				}
+				return ranges.ToArray();
+			}
+			return null;
+		}
+
+		private void ByteRangeResponseSetupShared(FileInfo fi, ByteRange[] ranges, out string trueContentType, out bool multiPart, out string boundary)
+		{
+			StatusString = "206 Partial Content";
+			trueContentType = ContentType;
+			multiPart = ranges.Length > 1;
+			boundary = multiPart ? DateTime.Now.Ticks.ToString("x") : "";
+			ContentLength = GetRangeRequestContentLength(ranges, fi.Length, trueContentType, boundary);
+
+			if (!multiPart)
+				Headers["Content-Range"] = "bytes " + ranges[0].Start + "-" + ranges[0].End + "/" + fi.Length;
+			else
+				ContentType = "multipart/byteranges; boundary=" + boundary;
+		}
+		private long GetRangeRequestContentLength(ByteRange[] ranges, long fileLength, string contentType, string boundary)
+		{
+			long contentLength = 0;
+			for (int i = 0; i < ranges.Length; i++)
+			{
+				contentLength += (ranges[i].End - ranges[i].Start) + 1;
+				if (ranges.Length > 1)
+				{
+					// This will be a multipart range response, which has a bunch of overhead.
+
+					// A multipart range response body with 2 ranges looks like:
+					// --boundary
+					// Content-Type: contentType
+					// Content-Range: bytes start-end/fileLength
+					// [ ... empty line ... ]
+					// [ ... byte range ... ]
+					// --boundary[\r\n]
+					// Content-Type: contentType[\r\n]
+					// Content-Range: bytes start-end/fileLength[\r\n]
+					// [\r\n]
+					// [ ... byte range ... ][\r\n]
+					// --boundary--
+
+					contentLength += 49 + boundary.Length + contentType.Length + ranges[i].Start.ToString("D").Length + ranges[i].End.ToString("D").Length + fileLength.ToString("D").Length;
+
+					// The lengths of all the constant stuff per byte range adds up to 49, so the code above is optimized.
+					// The following commented code adds it up the slower way, demonstrating how we come up with 49.
+					//contentLength += "--".Length + boundary.Length + "\r\n".Length
+					//	+ "Content-Type: ".Length + contentType.Length + "\r\n".Length
+					//	+ "Content-Range: bytes ".Length
+					//		+ ranges[i].Start.ToString("D").Length
+					//		+ "-".Length
+					//		+ ranges[i].End.ToString("D").Length
+					//		+ "/".Length
+					//		+ fileLength.ToString("D").Length
+					//	+ "\r\n".Length
+					//	+ "\r\n".Length
+					//	/* byte range bytes go here */
+					//	+ "\r\n".Length;
+				}
+			}
+			if (ranges.Length > 1)
+				contentLength += boundary.Length + 4; // Final `--boundary--` end marker for a multipart range response.
+			return contentLength;
+		}
+
+		private static byte[] GetMultiPartByteRangeSubHeader(FileInfo fi, string trueContentType, string boundary, ByteRange range)
+		{
+			return ByteUtil.Utf8NoBOM.GetBytes("--" + boundary + "\r\n"
+					+ "Content-Type: " + trueContentType + "\r\n"
+					+ "Content-Range: bytes " + range.Start + "-" + range.End + "/" + fi.Length + "\r\n\r\n");
+		}
+
+		private static FileStream OpenReadable(FileInfo fi)
+		{
+			return new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+		}
+
 
 		/// <summary>
 		/// Creates an ETag for the given file, which is a string that is expected to be the same when the file content is the same, and different when the file content is different.  If an error occurs, this method will throw an exception, not return null.
@@ -719,7 +932,7 @@ namespace BPUtil.SimpleHttp
 			if (bodyContent != null)
 			{
 				if (!(responseStream is Substream))
-					throw new ApplicationException("!(responseStream is Substream). responseStream is " + (responseStream==null?"null": responseStream.GetType().Name));
+					throw new ApplicationException("!(responseStream is Substream). responseStream is " + (responseStream == null ? "null" : responseStream.GetType().Name));
 				await responseStream.WriteAsync(bodyContent, 0, bodyContent.Length, cancellationToken).ConfigureAwait(false);
 				await FinishAsync(cancellationToken).ConfigureAwait(false);
 			}
