@@ -408,7 +408,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
 				.Select(s => s.Trim())
 				.ToArray();
-			if (connectionHeaderValues == null || !connectionHeaderValues.Contains("Upgrade"))
+			if (connectionHeaderValues == null || !connectionHeaderValues.Contains("upgrade", true))
 				return false;
 			if (string.IsNullOrWhiteSpace(p.Request.Headers.Get("Sec-WebSocket-Key")))
 				return false;
@@ -484,20 +484,27 @@ namespace BPUtil.SimpleHttp.WebSockets
 				else
 					httpHeaders[nameLower] = value;
 			}
-			if (!httpHeaders.TryGetValue("upgrade", out string header_upgrade)
-				|| !httpHeaders.TryGetValue("connection", out string header_connection)
-				|| !httpHeaders.TryGetValue("sec-websocket-key", out string header_sec_websocket_key))
-				throw new Exception("WebSocket handshake could not complete due to missing required http header(s)");
+
+			if (!httpHeaders.TryGetValue("connection", out string header_connection))
+				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Connection\".");
 
 			string[] connectionHeaderValues = header_connection
 				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
 				.Select(s => s.Trim())
 				.ToArray();
 
-			if (header_upgrade != "websocket"
-				|| !connectionHeaderValues.Contains("Upgrade")
-				|| string.IsNullOrWhiteSpace(header_sec_websocket_key))
-				throw new Exception("WebSocket handshake could not complete due to a required http header having an unexpected value");
+			if (!connectionHeaderValues.Contains("upgrade", true))
+				throw new Exception("WebSocket handshake could not complete due to header \"Connection: " + header_connection + "\". Expected: \"Connection: Upgrade\".");
+
+			if (!httpHeaders.TryGetValue("upgrade", out string header_upgrade))
+				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Upgrade\".");
+			if (header_upgrade != "websocket")
+				throw new Exception("WebSocket handshake could not complete due to header \"Upgrade: " + header_upgrade + "\". Expected: \"Upgrade: websocket\".");
+
+			if (!httpHeaders.TryGetValue("sec-websocket-key", out string header_sec_websocket_key))
+				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Sec-Websocket-Key\".");
+			if (string.IsNullOrWhiteSpace(header_sec_websocket_key))
+				throw new Exception("WebSocket handshake could not complete due to header \"Sec-Websocket-Key\" having empty value.");
 
 			// Done reading the client's part of the handshake.
 			// Write the server part of the handshake.

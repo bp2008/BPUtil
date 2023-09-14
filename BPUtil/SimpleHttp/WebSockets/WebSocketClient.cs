@@ -127,15 +127,27 @@ namespace BPUtil.SimpleHttp.WebSockets
 				else
 					httpHeaders[nameLower] = value;
 			}
-			if (!httpHeaders.TryGetValue("upgrade", out string header_upgrade)
-				|| !httpHeaders.TryGetValue("connection", out string header_connection)
-				|| !httpHeaders.TryGetValue("sec-websocket-accept", out string header_sec_websocket_accept))
-				throw new Exception("WebSocket handshake could not complete due to missing required http header(s)");
 
-			if (header_upgrade != "websocket"
-				|| header_connection != "Upgrade"
-				|| header_sec_websocket_accept != CreateSecWebSocketAcceptValue(SecWebsocketKey))
-				throw new Exception("WebSocket handshake could not complete due to a required http header having an unexpected value");
+			if (!httpHeaders.TryGetValue("connection", out string header_connection))
+				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Connection\".");
+
+			string[] connectionHeaderValues = header_connection
+				.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(s => s.Trim())
+				.ToArray();
+
+			if (!connectionHeaderValues.Contains("upgrade", true))
+				throw new Exception("WebSocket handshake could not complete due to header \"Connection: " + header_connection + "\". Expected: \"Connection: Upgrade\".");
+
+			if (!httpHeaders.TryGetValue("upgrade", out string header_upgrade))
+				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Upgrade\".");
+			if (header_upgrade != "websocket")
+				throw new Exception("WebSocket handshake could not complete due to header \"Upgrade: " + header_upgrade + "\". Expected: \"Upgrade: websocket\".");
+
+			if (!httpHeaders.TryGetValue("sec-websocket-accept", out string header_sec_websocket_accept))
+				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Sec-Websocket-Accept\".");
+			if (header_sec_websocket_accept != CreateSecWebSocketAcceptValue(SecWebsocketKey))
+				throw new Exception("WebSocket handshake could not complete due to header \"Sec-Websocket-Accept: " + header_sec_websocket_accept + "\" with unexpected value.");
 
 			// Done reading and validating the response to our handshake.
 		}
