@@ -914,7 +914,14 @@ namespace BPUtil.SimpleHttp
 
 			return "Digest realm=\"" + realm + "\", nonce=\"" + nonce + "\", opaque=\"" + opaque + "\", algorithm=MD5, qop=\"auth\", userhash=true";
 		}
-
+		/// <summary>
+		/// Returns a reference to this HttpProcessor's TcpClient.  Direct access to the TcpClient is dangerous as it can be easy to violate the HTTP protocol or cause other bugs.
+		/// </summary>
+		/// <returns></returns>
+		public TcpClient GetTcpClient()
+		{
+			return tcpClient;
+		}
 		/// <inheritdoc/>
 		public override string ToString()
 		{
@@ -930,6 +937,10 @@ namespace BPUtil.SimpleHttp
 			}
 			return sb.ToString();
 		}
+		/// <summary>
+		/// Gets a dynamic object containing a snapshot of the status of this HttpProcessor, the Request, and the Response.
+		/// </summary>
+		/// <returns>A dynamic object containing a snapshot of the status of this HttpProcessor, the Request, and the Response.</returns>
 		public object GetSummary()
 		{
 			return new
