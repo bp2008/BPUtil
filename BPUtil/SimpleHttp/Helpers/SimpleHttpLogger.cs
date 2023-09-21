@@ -8,7 +8,10 @@ namespace BPUtil.SimpleHttp
 	public static class SimpleHttpLogger
 	{
 		private static ILogger logger = null;
-		private static bool logVerbose = false;
+		/// <summary>
+		/// Must be true for the <c>LogVerbose</c> methods to log anything.  If false, those methods are a no-op.
+		/// </summary>
+		public static bool logVerbose { get; private set; } = false;
 		/// <summary>
 		/// (OPTIONAL) Keeps a static reference to the specified ILogger and uses it for http server error logging.  Only one logger can be registered at a time; attempting to register a second logger simply replaces the first one.
 		/// </summary>

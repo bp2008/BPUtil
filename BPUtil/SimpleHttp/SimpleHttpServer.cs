@@ -244,6 +244,10 @@ namespace BPUtil.SimpleHttp
 		/// Gets the number of requests that have been handled by this HttpProcessor
 		/// </summary>
 		public long RequestsHandled { get; private set; } = 0;
+		/// <summary>
+		/// An exception that was caught but not logged by the last request processing routine.  Null if no exception was caught by the last request processing routine or if the exception was already logged.
+		/// </summary>
+		private Exception _lastUnloggedProcessingException = null;
 		#endregion
 
 		/// <summary>
@@ -429,6 +433,7 @@ namespace BPUtil.SimpleHttp
 		{
 			Request = null;
 			Response = null;
+			_lastUnloggedProcessingException = null;
 
 			// While the server is under low load, a larger buffer is allowed for better write performance.
 			if (this.ServerIsUnderHighLoad)
@@ -526,47 +531,85 @@ namespace BPUtil.SimpleHttp
 				HttpProcessorException hpex = e.GetExceptionOfType<HttpProcessorException>();
 				if (hpex != null)
 				{
-					SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					_logVerbose(e, errorLogPrefix);
 					ResponseCriticalFail(hpex.StatusString, hpex.ResponseBody, hpex.Headers);
 				}
 				else if (e.GetExceptionOfType<HttpProtocolException>() != null)
 				{
-					SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-					ResponseCriticalFail("400 Bad Request", "The request cannot be fulfilled due to bad syntax.");
+					_logVerbose(e, errorLogPrefix);
+					ResponseCriticalFail("400 Bad Request");
 				}
 				else if (e.GetExceptionOfType<AuthenticationException>() != null)
 				{
 					// Tls Authentication Failed
-					SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					_logVerbose(e, errorLogPrefix);
 					return true;
 				}
 				else if (e.GetExceptionWhere(ex => ex.GetType().ToString() == "Interop+OpenSsl+SslException") != null)
 				{
 					// This exception occurs for some requests during https://www.ssllabs.com/ssltest/
-					SimpleHttpLogger.LogVerbose(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+					_logVerbose(e, errorLogPrefix);
 					return true;
 				}
 				else if (e.GetExceptionOfType<HttpRequestBodyNotReadException>() != null)
 				{
-					SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-					ResponseCriticalFail("500 Internal Server Error", "An error occurred while processing this request.");
+					_logNormal(e, errorLogPrefix);
+					ResponseCriticalFail("500 Internal Server Error");
 				}
 				else
 				{
-					SimpleHttpLogger.Log(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
-					ResponseCriticalFail("500 Internal Server Error", "An error occurred while processing this request.");
+					_logNormal(e, errorLogPrefix);
+					ResponseCriticalFail("500 Internal Server Error");
 				}
 				return false;
 			}
 			catch (Exception exception)
 			{
 				SimpleHttpLogger.Log(exception, "HandleCommonExceptionScenarios Failed");
-				ResponseCriticalFail("500 Internal Server Error", "An error occurred while processing this request.");
+				ResponseCriticalFail("500 Internal Server Error");
 				return false;
 			}
 		}
-
-		private void ResponseCriticalFail(string statusString, string description, HttpHeaderCollection headers = null)
+		/// <summary>
+		/// Logs the request if verbose logging is enabled, otherwise saves the exception to be logged later if a more important exception occurs.
+		/// </summary>
+		/// <param name="e">Exception that occurred.</param>
+		/// <param name="errorLogPrefix">A string which should be printed at the start of any error logs.</param>
+		private void _logVerbose(Exception e, string errorLogPrefix)
+		{
+			if (SimpleHttpLogger.logVerbose)
+				SimpleHttpLogger.LogVerbose(_logGetString(errorLogPrefix, e));
+			else
+				_lastUnloggedProcessingException = e;
+		}
+		/// <summary>
+		/// Logs the request.
+		/// </summary>
+		/// <param name="e">Exception that occurred.</param>
+		/// <param name="errorLogPrefix">A string which should be printed at the start of any error logs.</param>
+		private void _logNormal(Exception e, string errorLogPrefix)
+		{
+			SimpleHttpLogger.Log(_logGetString(errorLogPrefix, e));
+		}
+		private string _logGetString(string errorLogPrefix, Exception e)
+		{
+			StringBuilder sb = new StringBuilder();
+			if (_lastUnloggedProcessingException != null)
+			{
+				sb.Append("This exception was caught earlier during request processing, but not logged due to verbose logging being disabled: ");
+				sb.AppendLine(_lastUnloggedProcessingException.ToHierarchicalString());
+				_lastUnloggedProcessingException = null;
+			}
+			sb.Append(errorLogPrefix + GetDebugLogPrefix() + e.ToHierarchicalString());
+			return sb.ToString();
+		}
+		/// <summary>
+		/// Called by <see cref="HandleCommonExceptionScenarios"/> when we should configure the response to indicate that an error occurred, and ensure that the connection is not used for further request processing.  It will not be possible to change the response if the response header has already been written.
+		/// </summary>
+		/// <param name="statusString">HTTP Status String, beginning with the Status Code.</param>
+		/// <param name="description">Optional response body text.</param>
+		/// <param name="headers">Optional headers to assign to the response.</param>
+		private void ResponseCriticalFail(string statusString, string description = null, HttpHeaderCollection headers = null)
 		{
 			try
 			{

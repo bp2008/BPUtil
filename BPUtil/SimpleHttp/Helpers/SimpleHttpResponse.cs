@@ -1038,7 +1038,7 @@ namespace BPUtil.SimpleHttp
 			}
 
 			if (_substream != null && !_substream.EndOfStream)
-				throw new ApplicationException("The HTTP server failed to write all " + ContentLength + " bytes of the response body.");
+				throw new ApplicationException("The HTTP server failed to write all " + ContentLength + " bytes of the response body. bodyContent?.Length: " + bodyContent?.Length);
 
 			p.tcpStream.Flush();
 
