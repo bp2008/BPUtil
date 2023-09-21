@@ -534,5 +534,10 @@ namespace BPUtil.SimpleHttp
 				this.Set(name, value);
 			}
 		}
+		/// <inheritdoc />
+		public override string ToString()
+		{
+			return "{ \r\n" + string.Join("\r\n  ", this.GetHeaderArray().Select(s => s.ToString())) + " \r\n}";
+		}
 	}
 }

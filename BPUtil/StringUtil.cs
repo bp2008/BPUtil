@@ -192,6 +192,19 @@ namespace BPUtil
 		}
 
 		/// <summary>
+		/// Returns true if the character is from the set: A-Z, a-z, 0-9,_.
+		/// </summary>
+		/// <param name="c">Character to test.</param>
+		/// <returns></returns>
+		public static bool IsAlphaNumericOrUnderscore(char c)
+		{
+			return (c >= 'a' && c <= 'z')
+					|| (c >= 'A' && c <= 'Z')
+					|| (c >= '0' && c <= '9')
+					|| c == '_';
+		}
+
+		/// <summary>
 		/// Returns true if the string meets minimum reasonable criteria for a printable display name, meaning it consists of at least one alphanumeric character among any number of spaces or other ASCII-printable characters.
 		/// </summary>
 		/// <param name="str">String to test.</param>
