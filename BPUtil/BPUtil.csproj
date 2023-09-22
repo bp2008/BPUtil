@@ -79,6 +79,7 @@
     <Compile Include="RamInfo.cs" />
     <Compile Include="RateOfChange.cs" />
     <Compile Include="SimpleHttp\Helpers\AllowedConnectionTypes.cs" />
+    <Compile Include="SimpleHttp\Helpers\CompressionMethod.cs" />
     <Compile Include="SimpleHttp\Helpers\Cookies.cs" />
     <Compile Include="SimpleHttp\Helpers\SimpleHttpRequest.cs" />
     <Compile Include="SimpleHttp\Helpers\SimpleHttpExtensions.cs" />

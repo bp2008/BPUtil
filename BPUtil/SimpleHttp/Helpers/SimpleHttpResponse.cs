@@ -1,4 +1,5 @@
 ﻿using BPUtil.IO;
+using BPUtil.SimpleHttp.Helpers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -24,9 +25,9 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		private Stream responseStream;
 		/// <summary>
-		/// The type of compression that will be used for the response stream.
+		/// The type of compression that will be used for the response stream.  Null if no compression will be used.
 		/// </summary>
-		private CompressionType compressionType = CompressionType.None;
+		private CompressionMethod compressionMethod;
 		/// <summary>
 		/// If true, Connection: keep-alive will be prevented.
 		/// </summary>
@@ -40,7 +41,7 @@ namespace BPUtil.SimpleHttp
 		private bool _checkAsyncUsage = true;
 		#region Internal response stream references
 		private Substream _substream;
-		private GZipStream _gzipstream;
+		private Stream _compressionstream;
 		private WritableChunkedTransferEncodingStream _chunkedstream;
 		#endregion
 		#region Public properties
@@ -265,6 +266,7 @@ namespace BPUtil.SimpleHttp
 			}
 			else
 			{
+				SetupStaticFileCompression(fi);
 				ByteRange[] ranges = GetRequestedByteRanges(fi.Length);
 				if (ranges == null)
 				{
@@ -349,6 +351,7 @@ namespace BPUtil.SimpleHttp
 			}
 			else
 			{
+				SetupStaticFileCompression(fi);
 				ByteRange[] ranges = GetRequestedByteRanges(fi.Length);
 				if (ranges == null)
 				{
@@ -417,6 +420,12 @@ namespace BPUtil.SimpleHttp
 				Headers["Cache-Control"] = "no-cache"; // Caching is technically allowed, but the user agent should always revalidate to ensure the cached value is not stale.
 				return false;
 			}
+		}
+
+		private void SetupStaticFileCompression(FileInfo fi)
+		{
+			if (fi.Length > 200 && HttpCompressionHelper.FileTypeShouldBeCompressed(fi.Extension))
+				CompressResponseIfCompatible();
 		}
 
 		private bool CheckStaticFileCacheHit()
@@ -622,7 +631,7 @@ namespace BPUtil.SimpleHttp
 					}
 
 					byte[] hash = sha.ComputeHash(stream);
-					return Base64UrlMod.ToBase64UrlMod(hash);
+					return '"' + Base64UrlMod.ToBase64UrlMod(hash) + '"';
 				}
 			}
 		}
@@ -676,7 +685,7 @@ namespace BPUtil.SimpleHttp
 #else
 					byte[] hash = await TaskHelper.RunBlockingCodeSafely(() => sha.ComputeHash(stream), cancellationToken).ConfigureAwait(false);
 #endif
-					return Base64UrlMod.ToBase64UrlMod(hash);
+					return '"' + Base64UrlMod.ToBase64UrlMod(hash) + '"';
 				}
 			}
 		}
@@ -831,6 +840,9 @@ namespace BPUtil.SimpleHttp
 			if (bodyContent != null)
 				ContentLength = bodyContent.Length;
 
+			if (compressionMethod != null)
+				ContentLength = null; // We're using compression, so clear the Content-Length header because it is almost certainly incorrect.  This will force chunked transfer encoding.
+
 			bool allowResponseBody = HttpServerBase.HttpStatusCodeCanHaveResponseBody(responseStatusInt.Value);
 			if (!allowResponseBody)
 			{
@@ -857,8 +869,8 @@ namespace BPUtil.SimpleHttp
 			chunkedTransferEncoding = allowResponseBody && KeepaliveTimeSeconds > 0 && ContentLength == null;
 			if (chunkedTransferEncoding)
 				WriteReservedHeader(sb, reservedHeaderKeys, "Transfer-Encoding", "chunked");
-			if (compressionType == CompressionType.GZip)
-				WriteReservedHeader(sb, reservedHeaderKeys, "Content-Encoding", "gzip");
+			if (compressionMethod != null)
+				WriteReservedHeader(sb, reservedHeaderKeys, "Content-Encoding", compressionMethod.AlgorithmName);
 			string cookieStr = Cookies.ToString();
 			if (!string.IsNullOrEmpty(cookieStr))
 			{
@@ -908,8 +920,9 @@ namespace BPUtil.SimpleHttp
 
 			if (bodyContent != null)
 			{
-				if (!(responseStream is Substream))
-					throw new ApplicationException("!(responseStream is Substream). responseStream is " + (responseStream == null ? "null" : responseStream.GetType().Name));
+				// bodyContent can be used without Substream since I fixed response compression.
+				//if (!(responseStream is Substream))
+				//	throw new ApplicationException("!(responseStream is Substream). responseStream is " + (responseStream == null ? "null" : responseStream.GetType().Name));
 				responseStream.Write(bodyContent, 0, bodyContent.Length);
 				FinishSync();
 			}
@@ -931,8 +944,9 @@ namespace BPUtil.SimpleHttp
 
 			if (bodyContent != null)
 			{
-				if (!(responseStream is Substream))
-					throw new ApplicationException("!(responseStream is Substream). responseStream is " + (responseStream == null ? "null" : responseStream.GetType().Name));
+				// bodyContent can be used without Substream since I fixed response compression.
+				//if (!(responseStream is Substream))
+				//	throw new ApplicationException("!(responseStream is Substream). responseStream is " + (responseStream == null ? "null" : responseStream.GetType().Name));
 				await responseStream.WriteAsync(bodyContent, 0, bodyContent.Length, cancellationToken).ConfigureAwait(false);
 				await FinishAsync(cancellationToken).ConfigureAwait(false);
 			}
@@ -962,19 +976,19 @@ namespace BPUtil.SimpleHttp
 		#endregion
 		#region Response Compression
 		/// <summary>
-		/// Automatically compresses the response body using gzip encoding, if the client requested it.
+		/// Configures this response so that the response stream will apply compression if a compatible algorithm was requested by the client.
 		/// Must be called BEFORE the response header is written.
-		/// Note that the Content-Length header, if provided, should be the COMPRESSED length, so you likely won't know what value to use.  Omit the header instead.
-		/// Returns true if the response will be compressed, and sets this.compressionType.
+		/// The Content-Length header should be the COMPRESSED length, which you have no way of knowing when using this API.  Therefore the Content-Length header will be cleared when writing the response header, which forces "Transfer-Encoding: chunked" to be used to stream a variable-length response.
+		/// Returns true if the response will be compressed, and sets this.compressionMethod.
 		/// </summary>
 		/// <returns></returns>
 		public virtual bool CompressResponseIfCompatible()
 		{
 			if (ResponseHeaderWritten)
 				return false;
-			if (p.Request.ClientRequestsGZipCompression)
+			if (p.Request.BestCompressionMethod != null)
 			{
-				compressionType = CompressionType.GZip;
+				compressionMethod = p.Request.BestCompressionMethod;
 				return true;
 			}
 			return false;
@@ -1001,11 +1015,11 @@ namespace BPUtil.SimpleHttp
 			if (ContentLength != null && ContentLength >= 0)
 				r = _substream = r.Substream(ContentLength.Value); // This will throw an exception if we write too many bytes, and gives the Cleanup method a way to know if we did not write enough bytes.
 
-			if (compressionType == CompressionType.GZip)
-				r = _gzipstream = new GZipStream(r, CompressionLevel.Optimal, true);
-
 			if (chunkedTransferEncoding)
 				r = _chunkedstream = new WritableChunkedTransferEncodingStream(r);
+
+			if (compressionMethod != null)
+				r = _compressionstream = compressionMethod.CreateCompressionStream(r);
 
 			responseStream = r;
 		}
@@ -1025,16 +1039,16 @@ namespace BPUtil.SimpleHttp
 			if (responseStream == null)
 				return;
 
+			if (_compressionstream != null)
+			{
+				_compressionstream.Dispose();
+				_compressionstream = null;
+			}
+
 			if (_chunkedstream != null)
 			{
 				_chunkedstream.Close();
 				_chunkedstream = null;
-			}
-
-			if (_gzipstream != null)
-			{
-				_gzipstream.Dispose();
-				_gzipstream = null;
 			}
 
 			if (_substream != null && !_substream.EndOfStream)
@@ -1060,21 +1074,21 @@ namespace BPUtil.SimpleHttp
 			if (responseStream == null)
 				return;
 
+			if (_compressionstream != null)
+			{
+				// It is safe to dispose the compression stream because it was created with the leaveOpen option.
+#if NET6_0
+				await _compressionstream.DisposeAsync().ConfigureAwait(false);
+#else
+				_compressionstream.Dispose();
+#endif
+				_compressionstream = null;
+			}
+
 			if (_chunkedstream != null)
 			{
 				await _chunkedstream.CloseAsync(cancellationToken).ConfigureAwait(false);
 				_chunkedstream = null;
-			}
-
-			if (_gzipstream != null)
-			{
-				// It is safe to dispose GZipStream because it was created with the leaveOpen option.
-#if NET6_0
-				await _gzipstream.DisposeAsync().ConfigureAwait(false);
-#else
-				_gzipstream.Dispose();
-#endif
-				_gzipstream = null;
 			}
 
 			if (_substream != null && !_substream.EndOfStream)
@@ -1095,7 +1109,7 @@ namespace BPUtil.SimpleHttp
 			preventKeepalive = true;
 		}
 		/// <summary>
-		/// Assigns a new <see cref="StatusString"/>, unsets <see cref="bodyContent"/>, and clears <see cref="Headers"/>. If the response header was already written, throws ApplicationException. 
+		/// Assigns a new <see cref="StatusString"/>, unsets <see cref="bodyContent"/>, unsets the compression method, and clears <see cref="Headers"/>. If the response header was already written, throws ApplicationException. 
 		/// </summary>
 		/// <param name="httpStatusString">Assigns this value to <see cref="StatusString"/>.</param>
 		/// <exception cref="ApplicationException">Throws if the response header was already written.</exception>
@@ -1105,6 +1119,7 @@ namespace BPUtil.SimpleHttp
 				throw new ApplicationException("The response header was already written.");
 			StatusString = httpStatusString;
 			bodyContent = null;
+			compressionMethod = null;
 			Headers.Clear();
 		}
 		/// <inheritdoc/>
@@ -1135,6 +1150,10 @@ namespace BPUtil.SimpleHttp
 				return StatusString + ", BODY: unknown";
 			return StatusString;
 		}
+		/// <summary>
+		/// Gets a dynamic object containing a summary of the state of this SimpleHttpResponse.
+		/// </summary>
+		/// <returns>A dynamic object containing a summary of the state of this SimpleHttpResponse.</returns>
 		public object GetSummary()
 		{
 			if (!ResponseHeaderWritten)
@@ -1143,7 +1162,10 @@ namespace BPUtil.SimpleHttp
 				return new { Type = "WebSocket", HeaderWritten = true, Status = StatusString };
 			return new { Type = "Regular", HeaderWritten = true, Status = StatusString, Body = GetBodySummary() };
 		}
-
+		/// <summary>
+		/// Gets a dynamic object containing a summary of the state of the response body.
+		/// </summary>
+		/// <returns>A dynamic object containing a summary of the state of the response body.</returns>
 		private object GetBodySummary()
 		{
 			Stream rs = responseStream;

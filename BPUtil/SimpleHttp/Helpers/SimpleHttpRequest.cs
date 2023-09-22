@@ -1,4 +1,5 @@
 ﻿using BPUtil.IO;
+using BPUtil.SimpleHttp.Helpers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -74,20 +75,13 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public Cookies Cookies { get; private set; }
 		/// <summary>
-		/// Returns true if the client has requested gzip compression.
+		/// An array of compression methods requested by the client, in the order of preference (first element is most preferred).  The array may be empty.  Some compression methods in this array may not be supported by SimpleHttp.
 		/// </summary>
-		public bool ClientRequestsGZipCompression
-		{
-			get
-			{
-				string acceptEncoding = Headers.Get("Accept-Encoding") ?? "";
-				string[] types = acceptEncoding.Split(',');
-				foreach (string type in types)
-					if (type.Trim().ToLower() == "gzip")
-						return true;
-				return false;
-			}
-		}
+		public readonly CompressionMethod[] RequestedCompressionMethods;
+		/// <summary>
+		/// Gets the compression method which is determined to be the best to use for the HTTP response.  Null if the client did not request any compression algorithm that is supported by SimpleHttp.
+		/// </summary>
+		public readonly CompressionMethod BestCompressionMethod;
 		/// <summary>
 		/// Constructs a SimpleHttpRequest from a list of text lines that were read from a stream.
 		/// </summary>
@@ -109,6 +103,17 @@ namespace BPUtil.SimpleHttp
 					.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
 					.Select(s => s.Trim())
 					.ToArray();
+
+				RequestedCompressionMethods = Headers.Get("Accept-Encoding")?
+					.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+					.Select(s => new CompressionMethod(s))
+					.OrderBy(s => s.Weight)
+					.ThenBy(s => s.Algorithm)
+					.ToArray();
+				if (RequestedCompressionMethods == null)
+					RequestedCompressionMethods = new CompressionMethod[0];
+				BestCompressionMethod = RequestedCompressionMethods?.FirstOrDefault(m => m.Algorithm != null);
+
 
 				ParseQueryStringArguments(QueryString, Url.Query, true, false);
 

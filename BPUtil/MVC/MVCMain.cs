@@ -111,12 +111,12 @@ namespace BPUtil.MVC
 				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
 				bool addedContentEncoding = false;
 				bool addedContentType = false;
-				if (actionResult.Compress && body.Length >= 32 && httpProcessor.Request.ClientRequestsGZipCompression)
+				if (actionResult.Compress && body.Length >= 200 && httpProcessor.Request.BestCompressionMethod != null)
 				{
-					byte[] compressed = Compression.GZipCompress(body);
+					byte[] compressed = httpProcessor.Request.BestCompressionMethod.Compress(body);
 					if (compressed.Length < body.Length)
 					{
-						additionalHeaders.Add("Content-Encoding", "gzip");
+						additionalHeaders.Add("Content-Encoding", httpProcessor.Request.BestCompressionMethod.AlgorithmName);
 						body = compressed;
 					}
 				}

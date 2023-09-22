@@ -17,10 +17,47 @@ namespace BPUtil
 	/// </summary>
 	public static class Compression
 	{
+#if NET6_0
+		/// <summary>
+		/// Compresses a buffer using Brotli.
+		/// </summary>
+		/// <param name="buffer">Uncompressed data.</param>
+		/// <returns>Compressed data.</returns>
+		public static byte[] BrotliCompress(byte[] buffer)
+		{
+			using (MemoryStream ms = new MemoryStream())
+			{
+				using (BrotliStream stream = new BrotliStream(ms, CompressionLevel.Optimal, true))
+				{
+					stream.Write(buffer, 0, buffer.Length);
+				}
+				return ms.ToArray();
+			}
+		}
+		/// <summary>
+		/// Decompresses a buffer using Brotli.
+		/// </summary>
+		/// <param name="buffer">Brotli-compressed data.</param>
+		/// <returns>Decompressed data.</returns>
+		public static byte[] BrotliDecompress(byte[] buffer)
+		{
+			using (MemoryStream outStream = new MemoryStream())
+			{
+				using (MemoryStream inStream = new MemoryStream(buffer))
+				{
+					using (BrotliStream stream = new BrotliStream(inStream, CompressionMode.Decompress, true))
+					{
+						stream.CopyTo(outStream);
+					}
+				}
+				return outStream.ToArray();
+			}
+		}
+#endif
 		/// <summary>
 		/// Compresses a buffer using GZip.
 		/// </summary>
-		/// <param name="buffer">Uncompressed data</param>
+		/// <param name="buffer">Uncompressed data.</param>
 		/// <returns>Compressed data.</returns>
 		public static byte[] GZipCompress(byte[] buffer)
 		{
@@ -36,7 +73,7 @@ namespace BPUtil
 		/// <summary>
 		/// Decompresses a buffer using GZip.
 		/// </summary>
-		/// <param name="buffer">Compressed data</param>
+		/// <param name="buffer">GZip-compressed data.</param>
 		/// <returns>Decompressed data.</returns>
 		public static byte[] GZipDecompress(byte[] buffer)
 		{
@@ -55,7 +92,7 @@ namespace BPUtil
 		/// <summary>
 		/// Compresses a buffer using DEFLATE.
 		/// </summary>
-		/// <param name="buffer">Uncompressed data</param>
+		/// <param name="buffer">Uncompressed data.</param>
 		/// <returns>Compressed data.</returns>
 		public static byte[] DeflateCompress(byte[] buffer)
 		{
@@ -71,7 +108,7 @@ namespace BPUtil
 		/// <summary>
 		/// Decompresses a buffer using DEFLATE.
 		/// </summary>
-		/// <param name="buffer">Compressed data</param>
+		/// <param name="buffer">DEFLATE-compressed data.</param>
 		/// <returns>Decompressed data.</returns>
 		public static byte[] DeflateDecompress(byte[] buffer)
 		{

@@ -9,8 +9,14 @@ using System.Threading.Tasks;
 
 namespace BPUtil.SimpleHttp
 {
+	/// <summary>
+	/// Provides helper methods for HTTP response compression.
+	/// </summary>
 	public static class HttpCompressionHelper
 	{
+		/// <summary>
+		/// A ConcurrentDictionary mapping file extensions in lower case to a value indicating if the file is likely to benefit from compression.
+		/// </summary>
 		public static ConcurrentDictionary<string, bool> commonlyCompressedExtensions = BuildCommonlyCompressedExtensionsDict();
 		private static ConcurrentDictionary<string, bool> BuildCommonlyCompressedExtensionsDict()
 		{
@@ -35,11 +41,6 @@ namespace BPUtil.SimpleHttp
 			return commonlyCompressedExtensions.TryGetValue(extensionIncludingDot, out compress) ? compress : false;
 		}
 	}
-	public enum CompressionType
-	{
-		None,
-		GZip
-	}
 	/// <summary>
 	/// A class which compresses or does not compress a content body, depending on its type and length.
 	/// </summary>
@@ -50,76 +51,44 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public byte[] body;
 		/// <summary>
-		/// "" or "gzip" depending on whether or not the body was encoded or not.
+		/// "" or "br" or "gzip" or "deflate", etc, depending on whether or not the body was compressed during construction.
 		/// </summary>
 		public string ContentEncoding = "";
 
 		/// <summary>
-		/// An additionalHeaders instance that may have had ["Content-Encoding", "gzip"] added to it.
+		/// An additionalHeaders instance that may have had "Content-Encoding" set in it.
 		/// </summary>
-		public List<KeyValuePair<string, string>> additionalHeaders;
+		public HttpHeaderCollection headers;
+		/// <summary>
+		/// The HTTP Request object.
+		/// </summary>
+		public SimpleHttpRequest Request;
 
-		private string _internal_acceptEncoding;
-		private string AcceptEncoding
+		public HttpCompressionBody(SimpleHttpRequest Request, byte[] uncompressedBody, string extensionIncludingDot)
 		{
-			get
-			{
-				return _internal_acceptEncoding;
-			}
-			set
-			{
-				_internal_acceptEncoding = value;
-				foreach (string s in _internal_acceptEncoding.Split(','))
-					if (s.Trim().ToLower() == "gzip")
-					{
-						CompressionWasRequested = GZipWasRequested = true;
-					}
-			}
-		}
-		private bool CompressionWasRequested = false;
-		private bool GZipWasRequested = false;
-
-		public HttpCompressionBody(byte[] uncompressedBody, string extensionIncludingDot, string acceptEncoding)
-		{
-			this.AcceptEncoding = acceptEncoding;
-			this.additionalHeaders = new List<KeyValuePair<string, string>>();
+			this.Request = Request;
+			headers = new HttpHeaderCollection();
 			Initialize(uncompressedBody, extensionIncludingDot);
 		}
 
-		public HttpCompressionBody(byte[] uncompressedBody, string extensionIncludingDot, string acceptEncoding, ref List<KeyValuePair<string, string>> additionalHeaders)
+		public HttpCompressionBody(SimpleHttpRequest Request, byte[] uncompressedBody, string extensionIncludingDot, HttpHeaderCollection headers)
 		{
-			this.AcceptEncoding = acceptEncoding;
-			this.additionalHeaders = additionalHeaders;
+			this.Request = Request;
+			this.headers = headers;
 			Initialize(uncompressedBody, extensionIncludingDot);
 		}
 
 		private void Initialize(byte[] uncompressedBody, string extensionIncludingDot)
 		{
 			body = uncompressedBody;
-			if (CompressionWasRequested && uncompressedBody.Length > 40 && HttpCompressionHelper.FileTypeShouldBeCompressed(extensionIncludingDot))
+			if (Request.BestCompressionMethod != null && uncompressedBody.Length > 200 && HttpCompressionHelper.FileTypeShouldBeCompressed(extensionIncludingDot))
 			{
-				if (GZipWasRequested)
+				byte[] compressed = Request.BestCompressionMethod.Compress(uncompressedBody);
+				if (compressed.Length < uncompressedBody.Length)
 				{
-					byte[] compressed = GzipCompress(body);
-					if (compressed.Length < uncompressedBody.Length)
-					{
-						body = compressed;
-						ContentEncoding = "gzip";
-						additionalHeaders.Add(new KeyValuePair<string, string>("Content-Encoding", ContentEncoding));
-					}
+					body = compressed;
+					headers["Content-Encoding"] = ContentEncoding = Request.BestCompressionMethod.AlgorithmName;
 				}
-			}
-		}
-
-		private byte[] GzipCompress(byte[] raw)
-		{
-			using (MemoryStream ms = new MemoryStream())
-			{
-				using (GZipStream gzip = new GZipStream(ms, CompressionLevel.Optimal, true))
-				{
-					gzip.Write(raw, 0, raw.Length);
-				}
-				return ms.ToArray();
 			}
 		}
 	}
