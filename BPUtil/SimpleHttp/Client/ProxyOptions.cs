@@ -124,6 +124,20 @@ namespace BPUtil.SimpleHttp.Client
 		/// Cancellation Token.
 		/// </summary>
 		public CancellationToken cancellationToken = default;
+		/// <summary>
+		/// Domain names found in proxy response bodies will be replaced using keys and values from this list.  For each pair, Key is replaced with Value.
+		/// </summary>
+		public List<KeyValuePair<string, string>> responseHostnameSubstitutions = null;
+		/// <summary>
+		/// Regular Expression replacement will be performed on proxy response bodies using patterns and replacement strings from this list.  For each pair, Key is the pattern and Value is the replacement string.
+		/// </summary>
+		public List<KeyValuePair<string, string>> responseRegexReplacements = null;
+		/// <summary>
+		/// Gets a value indicating if this options instance is currently configured to fully buffer HTTP response bodies for processing before the body is transmitted to the client.  Doing this increases system resource usage and can add latency to affected requests.
+		/// </summary>
+		public bool requiresFullResponseBuffering =>
+			(responseHostnameSubstitutions != null && responseHostnameSubstitutions.Count > 0)
+			|| (responseRegexReplacements != null && responseRegexReplacements.Count > 0);
 
 		/// <summary>
 		/// Raises the BeforeRequestHeadersSent event.

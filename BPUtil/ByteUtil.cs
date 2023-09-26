@@ -288,8 +288,9 @@ namespace BPUtil
 		/// Reads all bytes until the end of the stream, then returns the read data as a byte array.
 		/// </summary>
 		/// <param name="stream">The stream to read data from.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <returns>All bytes from the current position to the end of the stream.</returns>
-		public static async Task<byte[]> ReadToEndAsync(Stream stream)
+		public static async Task<byte[]> ReadToEndAsync(Stream stream, CancellationToken cancellationToken = default)
 		{
 			if (stream == null)
 				throw new ArgumentNullException(nameof(stream));
@@ -297,7 +298,7 @@ namespace BPUtil
 				return ((MemoryStream)stream).ToArray();
 			using (MemoryStream memoryStream = new MemoryStream())
 			{
-				await stream.CopyToAsync(memoryStream).ConfigureAwait(false);
+				await stream.CopyToAsync(memoryStream, 81920, cancellationToken).ConfigureAwait(false);
 				return memoryStream.ToArray();
 			}
 		}

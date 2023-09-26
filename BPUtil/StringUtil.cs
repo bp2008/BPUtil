@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -791,6 +792,120 @@ namespace BPUtil
 			}
 			parts.Add(sb.ToString());
 			return parts.ToArray();
+		}
+
+		/// <summary>
+		/// <para>Attempts to discover the character encoding of the data in the given stream.</para>
+		/// <para>For the most dependable result, files without a byte order mark (BOM) will be read fully, possibly multiple times as different encodings are tried.  The stream will always be seeked to the beginning before returning.</para>
+		/// <para>UTF-7 encoding will be converted to UTF-8.</para>
+		/// <para>If the file data is not formatted using any known text encoding, returns null.</para>
+		/// </summary>
+		/// <param name="stream">A MemoryStream containing text data with an unknown encoding.</param>
+		/// <param name="fullString">(output) the full string form of the data in the stream. May be null if the full string was not read.</param>
+		/// <returns>The detected character encoding of the data in the stream, or null.</returns>
+		public static Encoding DetectTextEncodingFromStream(MemoryStream stream, out string fullString)
+		{
+			byte[] fileData = stream.ToArray();
+			fullString = null;
+
+			// Read the BOM
+			byte[] bom = new byte[4];
+			stream.Seek(0, SeekOrigin.Begin);
+			stream.Read(bom, 0, 4);
+			stream.Seek(0, SeekOrigin.Begin);
+
+			// Analyze the BOM
+			Encoding detectedEncoding = GetEncodingFromBOM(bom);
+
+			if (detectedEncoding != null)
+			{
+				fullString = detectedEncoding.GetString(fileData);
+				if (detectedEncoding.CodePage == 65000)
+					detectedEncoding = new UTF8Encoding(false);
+				return detectedEncoding;
+			}
+
+			// Attempt to decode using various encodings
+			foreach (Encoding enc in _EncodingDetection_GetEncodingsToTry())
+			{
+				try
+				{
+					if (enc != null)
+					{
+						fullString = enc.GetString(fileData);
+						return enc;
+					}
+				}
+				catch { }
+			}
+			return null;
+
+			//			Encoding Utf8EncodingVerifier = Encoding.GetEncoding("utf-8", new EncoderExceptionFallback(), new DecoderExceptionFallback());
+			//			using (StreamReader reader = new StreamReader(stream, Utf8EncodingVerifier, true, 8 * 1024, true))
+			//			{
+			//				try
+			//				{
+			//					fullString = reader.ReadToEnd();
+			//					detectedEncoding = reader.CurrentEncoding;
+			//					fullString = detectedEncoding.GetString(stream.ToArray());
+			//				}
+			//				catch
+			//				{
+			//					// Failed to decode the file using the BOM/UT8. 
+			//					// Assume it's local ANSI
+			//#if NET6_0
+			//					detectedEncoding = CodePagesEncodingProvider.Instance.GetEncoding(1252);
+			//#else
+			//					detectedEncoding = Encoding.GetEncoding("windows-1252");
+			//#endif
+			//					if (detectedEncoding == null)
+			//						detectedEncoding = Encoding.GetEncoding("ISO-8859-1");
+			//					if (detectedEncoding == null)
+			//						detectedEncoding = Encoding.Default;
+			//					try
+			//					{
+			//						fullString = detectedEncoding.GetString(stream.ToArray());
+			//					}
+			//					catch { return null; }
+			//				}
+			//				finally
+			//				{
+			//					stream.Seek(0, SeekOrigin.Begin);
+			//				}
+			//				return detectedEncoding;
+			//			}
+		}
+		private static IEnumerable<Encoding> _EncodingDetection_GetEncodingsToTry()
+		{
+			yield return new UTF32Encoding(true, false, true);
+			yield return new UTF32Encoding(false, false, true);
+			yield return new UnicodeEncoding(false, false, true);
+			yield return new UnicodeEncoding(true, false, true);
+			yield return new UTF8Encoding(false, true);
+#if NET6_0
+			yield return CodePagesEncodingProvider.Instance.GetEncoding(1252);
+#else
+			yield return Encoding.GetEncoding("windows-1252");
+#endif
+			yield return Encoding.GetEncoding("ISO-8859-1");
+			yield return Encoding.Default;
+		}
+		/// <summary>
+		/// Determines a text file's encoding by analyzing its byte order mark (BOM).  If there is no identifiable BOM, returns null.
+		/// </summary>
+		/// <param name="bom">The byte order mark (BOM) to analyze (4 bytes).</param>
+		/// <returns>The detected encoding.</returns>
+		private static Encoding GetEncodingFromBOM(byte[] bom)
+		{
+#pragma warning disable SYSLIB0001
+			if (bom[0] == 0x2b && bom[1] == 0x2f && bom[2] == 0x76) return Encoding.UTF7;
+#pragma warning restore
+			if (bom[0] == 0xef && bom[1] == 0xbb && bom[2] == 0xbf) return Encoding.UTF8;
+			if (bom[0] == 0xff && bom[1] == 0xfe && bom[2] == 0 && bom[3] == 0) return Encoding.UTF32; //UTF-32LE
+			if (bom[0] == 0xff && bom[1] == 0xfe) return Encoding.Unicode; //UTF-16LE
+			if (bom[0] == 0xfe && bom[1] == 0xff) return Encoding.BigEndianUnicode; //UTF-16BE
+			if (bom[0] == 0 && bom[1] == 0 && bom[2] == 0xfe && bom[3] == 0xff) return new UTF32Encoding(true, true);  //UTF-32BE
+			return null;
 		}
 	}
 }

@@ -1,4 +1,5 @@
 ﻿using BPUtil.IO;
+using BPUtil.SimpleHttp.Helpers;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -10,6 +11,7 @@ using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Security.Authentication;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -221,6 +223,9 @@ namespace BPUtil.SimpleHttp.Client
 			HashSet<string> doNotProxyHeaders = new HashSet<string>(new string[] {
 				"keep-alive", "transfer-encoding", "te", "connection", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate", "host"
 			});
+			HashSet<string> doNotProxyRequestHeaders = new HashSet<string>(new string[] {
+				"accept-encoding"
+			});
 
 			// Figure out the Connection header
 			bool ourClientWantsConnectionUpgrade = false;
@@ -244,6 +249,10 @@ namespace BPUtil.SimpleHttp.Client
 			bool ourClientWantsWebsocket = ourClientWantsConnectionUpgrade && "websocket".IEquals(p.Request.Headers.Get("Upgrade"));
 
 			string requestHeader_Upgrade = ourClientWantsWebsocket ? "websocket" : null;
+
+			string requestHeader_AcceptEncoding = p.Request.Headers.Get("Accept-Encoding");
+			if (options.requiresFullResponseBuffering)
+				requestHeader_AcceptEncoding = "gzip, deflate, br";
 
 			//////////////////////
 			// PHASE 2: CONNECT //
@@ -298,13 +307,14 @@ namespace BPUtil.SimpleHttp.Client
 			bool sendRequestChunked = p.Request.RequestBodyStream is ReadableChunkedTransferEncodingStream;
 			if (sendRequestChunked)
 				sbRequestText.AppendLineRN("Transfer-Encoding: chunked");
+			sbRequestText.AppendLineRN("Accept-Encoding: " + requestHeader_AcceptEncoding);
 			ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
 
 			options.RaiseBeforeRequestHeadersSent(this, p);
 
 			foreach (HttpHeader header in p.Request.Headers)
 			{
-				if (!doNotProxyHeaders.Contains(header.Key, true))
+				if (!doNotProxyHeaders.Contains(header.Key, true) && !doNotProxyRequestHeaders.Contains(header.Key, true))
 					sbRequestText.AppendLineRN(header.Key + ": " + header.Value);
 			}
 			// Now a blank line to indicate the end of the request headers.
@@ -338,9 +348,9 @@ namespace BPUtil.SimpleHttp.Client
 
 			await proxyStream.FlushAsync(options.cancellationToken).ConfigureAwait(false);
 
-			////////////////////////////
-			// PHASE 4: READ RESPONSE //
-			////////////////////////////
+			///////////////////////////////////
+			// PHASE 4: READ RESPONSE HEADER //
+			///////////////////////////////////
 			// Read response from remote server
 			proxyTiming?.Start("Read Response Header");
 			options.bet?.Start("Read Response Header");
@@ -485,12 +495,19 @@ namespace BPUtil.SimpleHttp.Client
 					{
 						proxyResponseStream = null;
 						remoteServerWantsKeepalive = false;
+						options.log.AppendLine("Destination server response uses keep-alive did not specify \"Content-Length\" or \"Transfer-Encoding: chunked\". This connection will be dropped without reading the response body.");
 					}
 				}
 			}
 			if (p.Request.HttpMethod == "HEAD")
 				proxyResponseStream = null;
-
+			else
+			{
+				if (proxyResponseStream != null && options.requiresFullResponseBuffering)
+				{
+					proxyResponseStream = await BufferAndProcessTextResponse(p, uri, proxyHttpHeaders, proxyResponseStream, options).ConfigureAwait(false);
+				}
+			}
 			options.log.AppendLine("Response will be read as: " + proxyResponseStream?.GetType().Name ?? "[no response body]");
 
 			options.RaiseBeforeResponseHeadersSent(this, p);
@@ -560,6 +577,7 @@ namespace BPUtil.SimpleHttp.Client
 			lastRequestDetails = p.TrueRemoteIPAddress + " -> " + p.HostName + " " + requestLine;
 			return new ProxyResult(ProxyResultErrorCode.Success, null, remoteServerWantsKeepalive && options.allowConnectionKeepalive && !p.ServerIsUnderHighLoad, false);
 		}
+
 		/// <summary>
 		/// Connects to the given URI and sets the <see cref="proxyClient"/> and <see cref="proxyStream"/> fields of this ProxyClient.
 		/// </summary>
@@ -849,6 +867,176 @@ namespace BPUtil.SimpleHttp.Client
 				ByteUtil.BufferRecycle(buf);
 			}
 		}
+
+		/// <summary>
+		/// If necessary, reads and processes the response body and returns a new stream that contains the (possibly modified) response body.
+		/// </summary>
+		/// <param name="p"></param>
+		/// <param name="uri"></param>
+		/// <param name="responseHeadersFromServer"></param>
+		/// <param name="proxyResponseStream"></param>
+		/// <param name="options"></param>
+		/// <returns></returns>
+		private static async Task<Stream> BufferAndProcessTextResponse(HttpProcessor p, Uri uri, HttpHeaderCollection responseHeadersFromServer, Stream proxyResponseStream, ProxyOptions options)
+		{
+			if (proxyResponseStream == null || !options.requiresFullResponseBuffering)
+				return proxyResponseStream;
+			if (!DiscoverTextEncodingFromHeaders(responseHeadersFromServer, out Encoding encoding))
+				return proxyResponseStream;
+			int maxMiB = 50;
+			if (proxyResponseStream is Substream && (proxyResponseStream as Substream).Length > maxMiB * 1024 * 1024)
+			{
+				SimpleHttpLogger.Log("ProxyClient: Response from \"" + uri.ToString() + "\" is too long to be buffered for processing: \"" + (proxyResponseStream as Substream).Length + "\" bytes (max " + maxMiB + " MiB).  The response will be streamed normally without processing, which may result in unexpected behavior.");
+				return proxyResponseStream;
+			}
+
+			// Read entire response body
+			options.log.AppendLine("Buffer entire response body");
+			options.bet?.Start("Buffer entire response body");
+			ByteUtil.ReadToEndResult readResult = await ByteUtil.ReadToEndWithMaxLengthAsync(proxyResponseStream, maxMiB * 1024 * 1024, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+			if (!readResult.EndOfStream)
+				throw new ApplicationException("ProxyClient: Response from \"" + uri.ToString() + "\" exceeded 50 MiB while trying to buffer it for text processing.  The request is being aborted.");
+
+			MemoryStream msResponseBody = new MemoryStream(readResult.Data);
+
+			options.bet?.Start("Decompress, detect character encoding");
+			byte[] bytesResponseBody = msResponseBody.ToArray();
+
+			// Decompress if necessary
+			string compressionAlgorithmID = responseHeadersFromServer.Get("Content-Encoding");
+			CompressionMethod compressionMethod = compressionAlgorithmID == null ? null : new CompressionMethod(compressionAlgorithmID);
+			if (compressionMethod != null)
+			{
+				bytesResponseBody = await compressionMethod.DecompressAsync(bytesResponseBody, options.cancellationToken).ConfigureAwait(false);
+				msResponseBody = new MemoryStream(bytesResponseBody);
+			}
+
+			// Convert to string
+			string responseText;
+			if (encoding != null)
+				responseText = encoding.GetString(bytesResponseBody);
+			else
+				encoding = StringUtil.DetectTextEncodingFromStream(msResponseBody, out responseText);
+			bytesResponseBody = null;
+			msResponseBody = null;
+
+			options.log.AppendLine("Process response body text. Encoding: " + encoding.BodyName);
+
+			// Convert to string
+
+			// Process the response body text
+
+			if (options.responseHostnameSubstitutions?.Count > 0)
+			{
+				options.bet?.Start("Hostname Substitution");
+				// This regex will match most common boundary characters that can be found before or after a hostname: [/{}<>"'`=()\[\]\s:;,|\\]
+				// Limiting the search to require one of these boundary characters before and after the hostname helps ensure that hostnames are not replaced in inappropriate situations, such as when they are part of a longer domain name.  E.g. if we are replacing `foo.com` with `bar.com`, we do not want to accidentally replace `subdomain.foo.com` with `subdomain.bar.com`.  Likewise we shouldn't replace "snafoo.comma" with "snabar.comma".
+				// We explicitly do not consider `@` to be a boundary character as it would match email addresses.  `.` would match subdomains. `-` and `_` would match longer domains.
+				string patternBoundaryChar = "[/{}<>\"'`=()\\[\\]\\s:;,|\\\\]";
+				foreach (KeyValuePair<string, string> kvp in options.responseHostnameSubstitutions)
+				{
+					string original = kvp.Key;
+					string replacement = kvp.Value;
+					string pattern = "(^|" + patternBoundaryChar + ")" + Regex.Escape(original) + "(" + patternBoundaryChar + "|$)";
+					responseText = Regex.Replace(responseText, pattern, "$1" + replacement + "$2", RegexOptions.IgnoreCase);
+				}
+			}
+
+			if (options.responseRegexReplacements?.Count > 0)
+			{
+				options.bet?.Start("Regex Replacement in Response");
+				foreach (KeyValuePair<string, string> kvp in options.responseRegexReplacements)
+					responseText = Regex.Replace(responseText, kvp.Key, kvp.Value);
+			}
+
+			// End processing the response body text
+			options.bet?.Start("Re-encode and compress as necessary");
+
+			// Convert to bytes
+			byte[] responseBodyNew = encoding.GetBytes(responseText);
+
+			// Write the character encoding we've actually used into the Content-Type header.
+			string contentType = p.Response.Headers.Get("Content-Type");
+			p.Response.Headers["Content-Type"] = ModifyCharsetInContentType(contentType, encoding);
+
+			// Re-compress if necessary
+			if (p.Request.BestCompressionMethod != null)
+			{
+				responseBodyNew = await p.Request.BestCompressionMethod.CompressAsync(responseBodyNew, options.cancellationToken).ConfigureAwait(false);
+				p.Response.Headers["Content-Encoding"] = p.Request.BestCompressionMethod.AlgorithmName;
+			}
+			else
+				p.Response.Headers.Remove("Content-Encoding");
+
+			p.Response.Headers["Content-Length"] = responseBodyNew.Length.ToString();
+			p.Response.Headers.Remove("Transfer-Encoding");
+
+			options.bet?.Stop();
+			return new MemoryStream(responseBodyNew);
+		}
+		/// <summary>
+		/// Returns true if the response body likely contains text.  Sets the output variable [encoding] to the appropriate encoding, if known.  If [encoding] is null after this method returns true, it means the encoding could not be determined without looking at the actual response body data.
+		/// </summary>
+		/// <param name="headers">HTTP header collection</param>
+		/// <param name="encoding">(output) Encoding instance to use for decoding and re-encoding the response body.  May be null if it could not be determined from the HTTP response headers.</param>
+		/// <returns>True if the response body likely contains text.</returns>
+		private static bool DiscoverTextEncodingFromHeaders(HttpHeaderCollection headers, out Encoding encoding)
+		{
+			if (headers.ContainsKey("Content-Type"))
+			{
+				var contentType = headers.GetValues("Content-Type").FirstOrDefault();
+				if (contentType != null)
+				{
+					// Extract the character encoding from the content type
+					Match m = Regex.Match(contentType, @"charset=([\w-]+)");
+					if (m.Success)
+					{
+						try
+						{
+							encoding = Encoding.GetEncoding(m.Groups[1].Value);
+						}
+						catch (ArgumentException)
+						{
+							// The character encoding is not recognized by .NET
+							encoding = null;
+						}
+						return true;
+					}
+
+					// If no charset is specified, check if the content type is text-based
+					if (contentType.StartsWith("text/") || contentType.Contains("application/json") || contentType.Contains("application/xml"))
+					{
+						encoding = null;
+						return true;
+					}
+				}
+			}
+
+			// Return false if there is no content type header, or if it's not a text-based media type
+			encoding = null;
+			return false;
+		}
+
+		/// <summary>
+		/// Modifies the charset value in the Content-Type header to match the given Encoding.
+		/// </summary>
+		/// <param name="contentType">The Content-Type header value.</param>
+		/// <param name="encoding">The Encoding instance.</param>
+		/// <returns>The modified Content-Type header value.</returns>
+		public static string ModifyCharsetInContentType(string contentType, Encoding encoding)
+		{
+			if (contentType.Contains("charset="))
+			{
+				Regex regex = new Regex("charset=\\S+");
+				return regex.Replace(contentType, "charset=" + encoding.WebName);
+			}
+			else
+			{
+				return contentType + "; " + "charset=" + encoding.WebName;
+			}
+		}
+
+
 		/// <summary>
 		/// Thrown by ProxyClient in several situations where a timeout occurs attempting to contact the destination server.
 		/// </summary>

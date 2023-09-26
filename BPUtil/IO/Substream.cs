@@ -133,7 +133,9 @@ namespace BPUtil.IO
 		public override bool CanSeek => _stream.CanSeek;
 		/// <inheritdoc />
 		public override bool CanWrite => _stream.CanWrite;
-		/// <inheritdoc />
+		/// <summary>
+		/// Gets the length of this Substream, in bytes.
+		/// </summary>
 		public override long Length => _length;
 
 		/// <inheritdoc />
@@ -149,7 +151,9 @@ namespace BPUtil.IO
 			get => _stream.WriteTimeout;
 			set => _stream.WriteTimeout = value;
 		}
-		/// <inheritdoc />
+		/// <summary>
+		/// Gets the current position of this Substream, in bytes (the current position in the underlying stream may be different).
+		/// </summary>
 		public override long Position
 		{
 			get => _position;

@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BPUtil.SimpleHttp.Helpers
@@ -18,7 +19,7 @@ namespace BPUtil.SimpleHttp.Helpers
 		/// </summary>
 		public readonly CompressionAlgorithm? Algorithm;
 		/// <summary>
-		/// Gets the name of the Algorithm represented by this object.  It may be an unsupported algorithm.  See <see cref="Algorithm"/>.
+		/// Gets the name of the Algorithm represented by this object suitable to be put into a "Content-Encoding" header.  It may be an unsupported algorithm.  See <see cref="Algorithm"/>.
 		/// </summary>
 		public readonly string AlgorithmName;
 		/// <summary>
@@ -111,19 +112,59 @@ namespace BPUtil.SimpleHttp.Helpers
 			}
 		}
 		/// <summary>
+		/// Compresses the given payload using the configured <see cref="Algorithm"/>.
+		/// </summary>
+		/// <param name="uncompressedBody">Uncompressed payload.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <returns>Compressed payload.</returns>
+		public async Task<byte[]> CompressAsync(byte[] uncompressedBody, CancellationToken cancellationToken)
+		{
+			using (MemoryStream ms = new MemoryStream())
+			{
+				using (Stream comp = CreateCompressionStream(ms))
+				{
+					await comp.WriteAsync(uncompressedBody, 0, uncompressedBody.Length, cancellationToken).ConfigureAwait(false);
+				}
+				return ms.ToArray();
+			}
+		}
+		/// <summary>
 		/// Decompresses the given payload using the configured <see cref="Algorithm"/>.
 		/// </summary>
 		/// <param name="compressedBody">Compressed payload.</param>
 		/// <returns>Decompressed payload.</returns>
 		public byte[] Decompress(byte[] compressedBody)
 		{
-			using (MemoryStream ms = new MemoryStream())
+			using (MemoryStream outStream = new MemoryStream())
 			{
-				using (Stream comp = CreateDecompressionStream(ms))
+				using (MemoryStream inStream = new MemoryStream(compressedBody))
 				{
-					comp.Write(compressedBody, 0, compressedBody.Length);
+					using (Stream comp = CreateDecompressionStream(inStream))
+					{
+						comp.CopyTo(outStream);
+					}
 				}
-				return ms.ToArray();
+				return outStream.ToArray();
+			}
+		}
+		/// <summary>
+		/// Decompresses the given payload using the configured <see cref="Algorithm"/>.
+		/// </summary>
+		/// <param name="compressedBody">Compressed payload.</param>
+		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <returns>Decompressed payload.</returns>
+		public async Task<byte[]> DecompressAsync(byte[] compressedBody, CancellationToken cancellationToken)
+		{
+			using (MemoryStream outStream = new MemoryStream())
+			{
+				using (MemoryStream inStream = new MemoryStream(compressedBody))
+				{
+					using (Stream comp = CreateDecompressionStream(inStream))
+					{
+						await comp.CopyToAsync(outStream, 81920, cancellationToken).ConfigureAwait(false);
+					}
+				}
+				return outStream.ToArray();
 			}
 		}
 		/// <summary>
@@ -137,7 +178,7 @@ namespace BPUtil.SimpleHttp.Helpers
 	}
 	/// <summary>
 	/// <para>Enumeration of HTTP compression algorithms supported by SimpleHttp.</para>
-	/// <para>The algorithm names are the exact strings expected to be found in an HTTP "Accept-Encoding" header.</para>
+	/// <para>The algorithm names are the exact strings expected to be found in an HTTP "Accept-Encoding" header or "Content-Encoding" header.</para>
 	/// <para>Values are ordered by the server's preference, most-preferred first.</para>
 	/// </summary>
 	public enum CompressionAlgorithm

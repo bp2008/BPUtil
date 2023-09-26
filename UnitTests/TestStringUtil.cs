@@ -442,5 +442,53 @@ namespace UnitTests
 			Assert.AreEqual(s3, string.Join(" ", r3));
 			Assert.AreEqual(s4, string.Join(" ", r4));
 		}
+		[TestMethod]
+		public void TestDetectionOfTextEncodings()
+		{
+			_TestDetectionOfTextEncodings(new UTF32Encoding(true, true));
+			_TestDetectionOfTextEncodings(new UTF32Encoding(false, true));
+			_TestDetectionOfTextEncodings(new UTF32Encoding(true, false));
+			_TestDetectionOfTextEncodings(new UTF32Encoding(false, false));
+			_TestDetectionOfTextEncodings(new UnicodeEncoding(true, true));
+			_TestDetectionOfTextEncodings(new UnicodeEncoding(false, true));
+			_TestDetectionOfTextEncodings(new UnicodeEncoding(false, false));
+			_TestDetectionOfTextEncodings(new UTF8Encoding(true));
+			_TestDetectionOfTextEncodings(new UTF8Encoding(false));
+			_TestDetectionOfTextEncodings(new UTF32Encoding(true, true), "Hello, World!");
+			_TestDetectionOfTextEncodings(new UTF32Encoding(false, true), "Hello, World!");
+			_TestDetectionOfTextEncodings(new UTF32Encoding(true, false), "Hello, World!");
+			_TestDetectionOfTextEncodings(new UTF32Encoding(false, false), "Hello, World!");
+			_TestDetectionOfTextEncodings(new UnicodeEncoding(true, true), "Hello, World!");
+			_TestDetectionOfTextEncodings(new UnicodeEncoding(false, true), "Hello, World!");
+			_TestDetectionOfTextEncodings(new UnicodeEncoding(false, false), "Hello, World!");
+			_TestDetectionOfTextEncodings(new UTF8Encoding(true), "Hello, World!");
+			_TestDetectionOfTextEncodings(new UTF8Encoding(false), "Hello, World!");
+			try
+			{
+				_TestDetectionOfTextEncodings(Encoding.GetEncoding("windows-1252"), "Hello, World!");
+				Assert.Fail("Expected exception: \"Hello, World!\" is indistinguishable between Windows-1252 and UTF-8 encodings, so the detector should have chosen UTF-8.");
+			}
+			catch { }
+			// A character that encodes correctly in Windows-1252 but not in UTF-8 is the character "Û" (U+00DB). In Windows-1252 encoding, this character is represented by the byte 0xFB. However, in UTF-8, this byte sequence does not represent a valid character, leading to incorrect encoding.
+			_TestDetectionOfTextEncodings(Encoding.GetEncoding("windows-1252"), "Hello, Û!");
+		}
+		private void _TestDetectionOfTextEncodings(Encoding encoding, string originalStr = "Hello, 世界! 👋")
+		{
+			string resultStr;
+			Encoding result = StringUtil.DetectTextEncodingFromStream(MakeTestEncodingData(originalStr, encoding), out resultStr);
+			Assert.IsTrue(originalStr.CompareTo(resultStr) == 0, "\"" + originalStr + "\" != \"" + resultStr + "\"");
+			Assert.AreEqual(encoding.EncodingName, result.EncodingName);
+		}
+		private MemoryStream MakeTestEncodingData(string str, Encoding encoding)
+		{
+			byte[] preamble = encoding.GetPreamble();
+			byte[] data = encoding.GetBytes(str);
+			if (preamble == null || preamble.Length == 0)
+				return new MemoryStream(data);
+			MemoryStream ms = new MemoryStream(preamble.Length + data.Length);
+			ms.Write(preamble, 0, preamble.Length);
+			ms.Write(data, 0, data.Length);
+			return ms;
+		}
 	}
 }
