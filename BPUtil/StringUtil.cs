@@ -877,11 +877,11 @@ namespace BPUtil
 		}
 		private static IEnumerable<Encoding> _EncodingDetection_GetEncodingsToTry()
 		{
+			yield return new UTF8Encoding(false, true);
 			yield return new UTF32Encoding(true, false, true);
 			yield return new UTF32Encoding(false, false, true);
 			yield return new UnicodeEncoding(false, false, true);
 			yield return new UnicodeEncoding(true, false, true);
-			yield return new UTF8Encoding(false, true);
 #if NET6_0
 			yield return CodePagesEncodingProvider.Instance.GetEncoding(1252);
 #else

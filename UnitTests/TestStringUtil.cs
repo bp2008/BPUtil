@@ -456,11 +456,11 @@ namespace UnitTests
 			_TestDetectionOfTextEncodings(new UTF8Encoding(false));
 			_TestDetectionOfTextEncodings(new UTF32Encoding(true, true), "Hello, World!");
 			_TestDetectionOfTextEncodings(new UTF32Encoding(false, true), "Hello, World!");
-			_TestDetectionOfTextEncodings(new UTF32Encoding(true, false), "Hello, World!");
-			_TestDetectionOfTextEncodings(new UTF32Encoding(false, false), "Hello, World!");
+			//_TestDetectionOfTextEncodings(new UTF32Encoding(true, false), "Hello, World!"); // Disabled because of false-positive UTF-16 detections in CSS files; UTF8 is now the default if there is no byte order mark.
+			//_TestDetectionOfTextEncodings(new UTF32Encoding(false, false), "Hello, World!"); // Disabled because of false-positive UTF-16 detections in CSS files; UTF8 is now the default if there is no byte order mark.
 			_TestDetectionOfTextEncodings(new UnicodeEncoding(true, true), "Hello, World!");
 			_TestDetectionOfTextEncodings(new UnicodeEncoding(false, true), "Hello, World!");
-			_TestDetectionOfTextEncodings(new UnicodeEncoding(false, false), "Hello, World!");
+			//_TestDetectionOfTextEncodings(new UnicodeEncoding(false, false), "Hello, World!"); // Disabled because of false-positive UTF-16 detections in CSS files; UTF8 is now the default if there is no byte order mark.
 			_TestDetectionOfTextEncodings(new UTF8Encoding(true), "Hello, World!");
 			_TestDetectionOfTextEncodings(new UTF8Encoding(false), "Hello, World!");
 			try
