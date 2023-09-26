@@ -867,7 +867,8 @@ namespace BPUtil.SimpleHttp.Client
 				ByteUtil.BufferRecycle(buf);
 			}
 		}
-
+		#endregion
+		#region Response Processing
 		/// <summary>
 		/// If necessary, reads and processes the response body and returns a new stream that contains the (possibly modified) response body.
 		/// </summary>
