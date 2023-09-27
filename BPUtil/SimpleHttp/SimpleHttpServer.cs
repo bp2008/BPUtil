@@ -887,7 +887,7 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 		/// <summary>
-		/// Tests the "Authorization" header and returns the NetworkCredential that the client authenticated with, or null if authentication was not successful. Only "Digest" authentication is supported at this time.  SimpleHttpServer does not guard against replay attacks.
+		/// Tests the "Authorization" header and returns the NetworkCredential that the client authenticated with, or null if authentication was not successful. "Digest" and "Basic" authentication are supported.  SimpleHttpServer does not guard against replay attacks.
 		/// </summary>
 		/// <param name="realm">Name of the system that is requesting authentication.  This string is shown to the user to help them understand which credential is being requested e.g. "example.com".</param>
 		/// <param name="validCredentials">A collection of valid credentials which must be tested one at a time against the client's Authorization header.</param>
@@ -921,6 +921,16 @@ namespace BPUtil.SimpleHttp
 						string expectedResponse = Hash.GetMD5Hex(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2);
 
 						if (response == expectedResponse)
+							return cred;
+					}
+				}
+				else if (authHeaderValue.Scheme.IEquals("Basic"))
+				{
+					string parameter = Utf8NoBOM.GetString(Convert.FromBase64String(authHeaderValue.Parameter));
+					foreach (NetworkCredential cred in validCredentials)
+					{
+						string expected = cred.UserName + ":" + cred.Password;
+						if (expected == parameter)
 							return cred;
 					}
 				}
