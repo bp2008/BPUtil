@@ -170,9 +170,10 @@ namespace BPUtil.SimpleHttp
 			FullResponseUTF8(Description, Description != "" ? "text/plain; charset=utf-8" : null, StatusString);
 		}
 		#endregion
-		#region Redirect
+		#region Redirect Permanent (302)
 		/// <summary>
 		/// <para>Resets the response, then synchronously writes a redirect header instructing the remote user's browser to load the URL you specify.</para>
+		/// <para>Uses a 302 status code which should cause the client to repeat the request using GET with no request body.</para>
 		/// <para>This completes the response.</para>
 		/// </summary>
 		/// <param name="redirectToUrl">URL to redirect to.</param>
@@ -183,6 +184,7 @@ namespace BPUtil.SimpleHttp
 		}
 		/// <summary>
 		/// <para>Resets the response, then asynchronously writes a redirect header instructing the remote user's browser to load the URL you specify.</para>
+		/// <para>Uses a 302 status code which should cause the client to repeat the request using GET with no request body.</para>
 		/// <para>This completes the response.</para>
 		/// </summary>
 		/// <param name="redirectToUrl">URL to redirect to.</param>
@@ -195,6 +197,37 @@ namespace BPUtil.SimpleHttp
 		private void _Prep_Redirect(string redirectToUrl)
 		{
 			Reset("302 Found");
+			Headers["Location"] = redirectToUrl;
+			this.PreventKeepalive();
+		}
+		#endregion
+		#region Redirect Temporary (307)
+		/// <summary>
+		/// <para>Resets the response, then synchronously writes a redirect header instructing the remote user's browser to load the URL you specify.</para>
+		/// <para>Uses a 307 status code which should cause the client to repeat the request to the new URL with the original method and body.</para>
+		/// <para>This completes the response.</para>
+		/// </summary>
+		/// <param name="redirectToUrl">URL to redirect to.</param>
+		public void RedirectTemporary(string redirectToUrl)
+		{
+			_Prep_RedirectTemporary(redirectToUrl);
+			FinishSync();
+		}
+		/// <summary>
+		/// <para>Resets the response, then asynchronously writes a redirect header instructing the remote user's browser to load the URL you specify.</para>
+		/// <para>Uses a 307 status code which should cause the client to repeat the request to the new URL with the original method and body.</para>
+		/// <para>This completes the response.</para>
+		/// </summary>
+		/// <param name="redirectToUrl">URL to redirect to.</param>
+		/// <param name="cancellationToken">Cancellation Token.</param>
+		public Task RedirectTemporaryAsync(string redirectToUrl, CancellationToken cancellationToken = default)
+		{
+			_Prep_RedirectTemporary(redirectToUrl);
+			return FinishAsync(cancellationToken);
+		}
+		private void _Prep_RedirectTemporary(string redirectToUrl)
+		{
+			Reset("307 Temporary Redirect");
 			Headers["Location"] = redirectToUrl;
 			this.PreventKeepalive();
 		}
