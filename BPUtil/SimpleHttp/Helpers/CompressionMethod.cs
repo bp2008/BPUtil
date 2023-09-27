@@ -28,7 +28,7 @@ namespace BPUtil.SimpleHttp.Helpers
 		public float Weight
 		{
 			get { return _weight; }
-			set { Weight = value.Clamp(0, 1); }
+			set { _weight = value.Clamp(0, 1); }
 		}
 		private float _weight = 1.0f;
 
