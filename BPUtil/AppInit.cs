@@ -203,7 +203,7 @@ namespace BPUtil
 			}
 			else if (args.Length > 1 && args[1] == "install")
 			{
-				InstallLinuxSystemdService(serviceName);
+				InstallLinuxSystemdService(serviceName, options);
 			}
 			else if (args.Length > 1 && args[1] == "uninstall")
 			{
@@ -253,7 +253,8 @@ namespace BPUtil
 		/// Installs this application as a service in the systemd service manager.  Writes console output explaining the result.
 		/// </summary>
 		/// <param name="serviceName">Name of the service.  If not provided, the entry assembly's name will be converted to lower case and used as the name.</param>
-		public static void InstallLinuxSystemdService(string serviceName = null)
+		/// <param name="options">Optional options object so that an "LinuxOnInstall" callback can be called.</param>
+		public static void InstallLinuxSystemdService(string serviceName = null, WindowsServiceInitOptions options = null)
 		{
 			GetServiceInfo(ref serviceName, out string servicePath);
 
@@ -301,6 +302,8 @@ WantedBy=multi-user.target";
 					c.Yellow("sudo systemctl stop " + serviceName).Line();
 					c.Yellow("sudo systemctl restart " + serviceName).Line();
 					c.Line("----------------------------");
+
+					options?.LinuxOnInstall?.Invoke();
 				}
 				catch (Exception ex)
 				{
@@ -620,5 +623,9 @@ WantedBy=multi-user.target";
 		/// If provided, this action is called by AppInit and is expected to operate a command-line interface to the service.  The action is responsible for all console input and output and will be called when it is time for the service to run in command-line mode.  Once the action returns, the service is stopped and the program will exit.
 		/// </summary>
 		public Action LinuxCommandLineInterface;
+		/// <summary>
+		/// Callback to call when the service is installed on Linux via the "install" command.
+		/// </summary>
+		public Action LinuxOnInstall;
 	}
 }

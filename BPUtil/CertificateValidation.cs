@@ -116,7 +116,7 @@ namespace BPUtil
 			return true;
 		}
 		/// <summary>
-		/// An example validation callback which approves the certificate without looking at it, if the target hostname is exactly "127.0.0.1".
+		/// An example validation callback which approves the certificate without looking at it, if the target hostname is exactly "127.0.0.1" or "::1" or "localhost" case-insensitive.
 		/// </summary>
 		/// <param name="sender"></param>
 		/// <param name="certificate"></param>
@@ -128,7 +128,7 @@ namespace BPUtil
 			if (sender is HttpWebRequest)
 			{
 				HttpWebRequest request = (HttpWebRequest)sender;
-				return request.Host == "127.0.0.1";
+				return request.Host == "127.0.0.1" || request.Host == "::1" || "localhost".IEquals(request.Host);
 			}
 			return false;
 		}

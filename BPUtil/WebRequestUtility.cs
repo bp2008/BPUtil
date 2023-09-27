@@ -172,6 +172,31 @@ namespace BPUtil
 				httpClientHandler.AllowAutoRedirect = value;
 			}
 		}
+#if NET6_0
+		/// <summary>
+		/// Gets or sets a value indicating if this WebRequestUtility will accept all TLS certificates, even invalid ones.  May throw a <see cref="PlatformNotSupportedException"/> on some platforms.
+		/// </summary>
+		public bool AcceptAnyCertificate
+		{
+			get
+			{
+				return _acceptAnyCert;
+			}
+			set
+			{
+				if (value)
+				{
+					httpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+				}
+				else
+				{
+					httpClientHandler.ServerCertificateCustomValidationCallback = null;
+				}
+				_acceptAnyCert = value;
+			}
+		}
+		private bool _acceptAnyCert = false;
+#endif
 
 		protected HttpClient client;
 		protected HttpClientHandler httpClientHandler;
