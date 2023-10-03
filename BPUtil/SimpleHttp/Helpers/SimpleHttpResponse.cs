@@ -161,7 +161,7 @@ namespace BPUtil.SimpleHttp
 		/// <para>Does not perform any I/O.  The response will be written later.</para>
 		/// </summary>
 		/// <param name="StatusString">The HTTP Status String, e.g. "404 Not Found".</param>
-		/// <param name="Description">Optional simple text body. If null, the status string will be written again as the response body.</param>
+		/// <param name="Description">Optional simple text body. If null, there will be no response body.</param>
 		public void Simple(string StatusString, string Description = null)
 		{
 			if (Description == null)
