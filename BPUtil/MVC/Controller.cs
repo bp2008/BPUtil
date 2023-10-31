@@ -85,9 +85,10 @@ namespace BPUtil.MVC
 		/// </summary>
 		/// <param name="data">File data.</param>
 		/// <param name="compress">If true, the response should be compressed.</param>
-		protected virtual FileDownloadResult FileDownload(byte[] data, bool compress)
+		/// <param name="fileNameForBrowser">File name that the file should be downloaded as.  If null, a web browser will get the file name from the current URL.</param>
+		protected virtual FileDownloadResult FileDownload(byte[] data, bool compress, string fileNameForBrowser = null)
 		{
-			return new FileDownloadResult(data, compress);
+			return new FileDownloadResult(data, compress, fileNameForBrowser);
 		}
 
 		/// <summary>
@@ -95,9 +96,10 @@ namespace BPUtil.MVC
 		/// </summary>
 		/// <param name="filePath">File path. The entire file will be loaded into memory.</param>
 		/// <param name="compress">If true, the response should be compressed.</param>
-		protected virtual FileDownloadResult FileDownload(string filePath, bool compress)
+		/// <param name="fileNameForBrowser">File name that the file should be downloaded as.  If null, a web browser will get the file name from the current URL.</param>
+		protected virtual FileDownloadResult FileDownload(string filePath, bool compress, string fileNameForBrowser = null)
 		{
-			return new FileDownloadResult(filePath, compress);
+			return new FileDownloadResult(filePath, compress, fileNameForBrowser);
 		}
 
 		/// <summary>

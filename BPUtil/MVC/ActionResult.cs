@@ -74,17 +74,38 @@ namespace BPUtil.MVC
 	public class FileDownloadResult : BinaryResult
 	{
 		/// <summary>
+		/// Sets the file name that the file should be downloaded as.  If null, a web browser will get the file name from the current URL.
+		/// </summary>
+		private string FileNameForBrowser
+		{
+			set
+			{
+				if (value == null)
+					headers.Remove("Content-Disposition");
+				else
+					headers["Content-Disposition"] = "attachment; filename=\"" + value + "\"";
+			}
+		}
+		/// <summary>
 		/// Constructs a FileDownloadResult from a byte array.
 		/// </summary>
 		/// <param name="data">File data.</param>
 		/// <param name="compress">If true, the response should be compressed.</param>
-		public FileDownloadResult(byte[] data, bool compress) : base(data, "application/octet-stream", compress) { }
+		/// <param name="fileNameForBrowser">File name that the file should be downloaded as.  If null, a web browser will get the file name from the current URL.</param>
+		public FileDownloadResult(byte[] data, bool compress, string fileNameForBrowser = null) : base(data, "application/octet-stream", compress)
+		{
+			FileNameForBrowser = fileNameForBrowser;
+		}
 		/// <summary>
 		/// Constructs a FileDownloadResult from a file path.  This constructor loads the entire file into memory.
 		/// </summary>
 		/// <param name="filePath">File path. The entire file will be loaded into memory.</param>
 		/// <param name="compress">If true, the response should be compressed.</param>
-		public FileDownloadResult(string filePath, bool compress) : base(File.ReadAllBytes(filePath), "application/octet-stream", compress) { }
+		/// <param name="fileNameForBrowser">File name that the file should be downloaded as.  If null, a web browser will get the file name from the current URL.</param>
+		public FileDownloadResult(string filePath, bool compress, string fileNameForBrowser = null) : base(File.ReadAllBytes(filePath), "application/octet-stream", compress)
+		{
+			FileNameForBrowser = fileNameForBrowser;
+		}
 	}
 	/// <summary>
 	/// A result where the body is a JPEG image.

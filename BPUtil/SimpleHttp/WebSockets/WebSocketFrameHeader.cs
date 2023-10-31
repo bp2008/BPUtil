@@ -115,7 +115,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 		}
 
 		/// <summary>
-		/// Writes the frame header to the specified stream.  After writing the header, you must separately write the payload.  Fragmented messages are not supported by this library.
+		/// Writes the frame header to the specified stream.  After writing the header, you must separately write the payload.  Fragmented messages are not writable by this library.
 		/// </summary>
 		/// <param name="stream">The stream to write the frame header to.</param>
 		internal void Write(Stream stream)

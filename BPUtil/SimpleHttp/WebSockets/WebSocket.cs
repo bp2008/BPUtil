@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace BPUtil.SimpleHttp.WebSockets
 {
 	/// <summary>
-	/// A WebSocket server connection providing synchronous access methods. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
+	/// A WebSocket server connection providing synchronous access methods. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection. Also set <see cref="MAX_PAYLOAD_BYTES"/> if you expect to receive larger single payloads than 20,000,000 bytes.
 	/// </summary>
 	public class WebSocket
 	{
@@ -192,7 +192,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 						// Validate Payload Length
 						totalLength += head.payloadLength;
 						if (totalLength > (ulong)MAX_PAYLOAD_BYTES)
-							throw new WebSocketException(WebSocketCloseCode.MessageTooBig, "Host does not accept payloads larger than " + WebSocket.MAX_PAYLOAD_BYTES + ". Payload length is now " + totalLength + ".");
+							throw new WebSocketException(WebSocketCloseCode.MessageTooBig, "Host does not accept payloads larger than " + WebSocket.MAX_PAYLOAD_BYTES + ". Payload length was " + totalLength + ".");
 
 						// Keep track of the frame that started each set of fragments
 						if (fragmentStart == null)
@@ -249,25 +249,23 @@ namespace BPUtil.SimpleHttp.WebSockets
 						}
 					}
 				}
-				closeFrame = new WebSocketCloseFrame(isClient());
-				closeFrame.CloseCode = WebSocketCloseCode.GoingAway;
+				closeFrame = new WebSocketCloseFrame(isClient(), WebSocketCloseCode.GoingAway);
 				Try.Swallow(() =>
 				{
 					tcpClient.SendTimeout = Math.Min(tcpClient.SendTimeout, 1000);
-					Send(closeFrame.CloseCode);
+					Send(closeFrame.CloseCode, closeFrame.Message);
 				});
 			}
 			catch (ThreadAbortException)
 			{
 				if (closeFrame == null)
 				{
-					closeFrame = new WebSocketCloseFrame(isClient());
-					closeFrame.CloseCode = WebSocketCloseCode.GoingAway;
+					closeFrame = new WebSocketCloseFrame(isClient(), WebSocketCloseCode.GoingAway);
 				}
 				Try.Swallow(() =>
 				{
 					tcpClient.SendTimeout = Math.Min(tcpClient.SendTimeout, 1000);
-					Send(closeFrame.CloseCode);
+					Send(closeFrame.CloseCode, closeFrame.Message);
 				});
 			}
 			catch (WebSocketException ex)
@@ -275,27 +273,25 @@ namespace BPUtil.SimpleHttp.WebSockets
 				SimpleHttpLogger.LogVerbose(ex);
 				if (closeFrame == null)
 				{
-					closeFrame = new WebSocketCloseFrame(isClient());
 					if (ex.closeCode != null)
-						closeFrame.CloseCode = ex.closeCode.Value;
+						closeFrame = new WebSocketCloseFrame(isClient(), ex.closeCode.Value, ex.CloseReason);
 					else
-						closeFrame.CloseCode = WebSocketCloseCode.InternalError;
-					closeFrame.Message = ex.CloseReason;
+						closeFrame = new WebSocketCloseFrame(isClient(), WebSocketCloseCode.InternalError, ex.CloseReason);
 				}
-				Try.Swallow(() => { Send(closeFrame.CloseCode); });
+				Try.Swallow(() => { Send(closeFrame.CloseCode, closeFrame.Message); });
 			}
 			catch (Exception ex)
 			{
 				bool isDisconnect = HttpProcessor.IsOrdinaryDisconnectException(ex);
 				if (!isDisconnect)
 					SimpleHttpLogger.LogVerbose(ex);
+				SimpleHttpLogger.Log(ex);
 
 				if (closeFrame == null)
 				{
-					closeFrame = new WebSocketCloseFrame(isClient());
-					closeFrame.CloseCode = isDisconnect ? WebSocketCloseCode.ConnectionLost : WebSocketCloseCode.InternalError;
+					closeFrame = new WebSocketCloseFrame(isClient(), isDisconnect ? WebSocketCloseCode.ConnectionLost : WebSocketCloseCode.InternalError);
 				}
-				Try.Swallow(() => { Send(closeFrame.CloseCode); });
+				Try.Swallow(() => { Send(closeFrame.CloseCode, closeFrame.Message); });
 			}
 			finally
 			{
@@ -304,8 +300,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 					if (closeFrame == null)
 					{
 						// This should not happen, but it is possible that further development could leave a code path where closeFrame did not get set.
-						closeFrame = new WebSocketCloseFrame(isClient());
-						closeFrame.CloseCode = WebSocketCloseCode.InternalError;
+						closeFrame = new WebSocketCloseFrame(isClient(), WebSocketCloseCode.InternalError, "Unexpected code path.");
 					}
 					onClose(closeFrame);
 				}
@@ -333,7 +328,6 @@ namespace BPUtil.SimpleHttp.WebSockets
 		{
 			SendFrame(WebSocketOpcode.Binary, dataBody);
 		}
-
 		/// <summary>
 		/// Sends a close frame to the remote endpoint.  After calling this, you should close the underlying TCP connection.
 		/// </summary>
@@ -349,11 +343,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 				msgBytes = new byte[0];
 			else
 			{
-				if (message.Length > 125)
-					message = message.Remove(125);
+				if (message.Length > 123)
+					message = message.Remove(123);
 
 				msgBytes = ByteUtil.Utf8NoBOM.GetBytes(message);
-				while (msgBytes.Length > 125 && message.Length > 0)
+				while (msgBytes.Length > 123 && message.Length > 0)
 				{
 					message = message.Remove(message.Length - 1);
 					msgBytes = ByteUtil.Utf8NoBOM.GetBytes(message);
@@ -366,9 +360,12 @@ namespace BPUtil.SimpleHttp.WebSockets
 			ByteUtil.WriteUInt16((ushort)closeCode, payload, 0);
 			Array.Copy(msgBytes, 0, payload, 2, msgBytes.Length);
 
-			SendFrame(WebSocketOpcode.Close, payload);
-
-			sentCloseCode = true;
+			lock (sendLock)
+			{
+				SendFrame(WebSocketOpcode.Close, payload);
+				tcpStream.Flush();
+				sentCloseCode = true;
+			}
 		}
 		/// <summary>
 		/// Sends a ping frame to the remote endpoint to help prevent the underlying socket/protocol from timing out.
@@ -379,8 +376,12 @@ namespace BPUtil.SimpleHttp.WebSockets
 		}
 		internal void SendFrame(WebSocketOpcode opcode, byte[] data)
 		{
+			if (sentCloseCode)
+				return;
 			lock (sendLock)
 			{
+				if (sentCloseCode)
+					return;
 				// Write frame header
 				WebSocketFrameHeader head = new WebSocketFrameHeader(opcode, data.Length, isClient());
 				head.Write(tcpStream);

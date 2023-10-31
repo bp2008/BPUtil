@@ -82,19 +82,30 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <summary>
 		/// A status code indicating the reason the WebSocket was closed.
 		/// </summary>
-		public WebSocketCloseCode CloseCode;
+		public readonly WebSocketCloseCode CloseCode;
 
 		/// <summary>
 		/// An optional message further describing the reason the WebSocket was closed.
 		/// </summary>
-		public string Message;
+		public readonly string Message;
 
 		/// <summary>
 		/// Constructs a WebSocketCloseFrame.
 		/// </summary>
 		/// <param name="iAmClient">Pass true if this frame is being created by a WebSocketClient with the intent to send the frame to a server.</param>
-		internal WebSocketCloseFrame(bool iAmClient) : base(new WebSocketFrameHeader(WebSocketOpcode.Close, 0, iAmClient), new byte[0]) { }
+		/// <param name="closeCode">A status code indicating the reason the WebSocket was closed.</param>
+		/// <param name="message">An optional message further describing the reason the WebSocket was closed. Will be automatically truncated to no more than 123 UTF-8 bytes.</param>
+		internal WebSocketCloseFrame(bool iAmClient, WebSocketCloseCode closeCode = WebSocketCloseCode.GoingAway, string message = null) : base(new WebSocketFrameHeader(WebSocketOpcode.Close, 0, iAmClient), new byte[0])
+		{
+			this.CloseCode = closeCode;
+			this.Message = message;
+		}
 
+		/// <summary>
+		/// Constructs a WebSocketCloseFrame to represent a closeFrame that was received over the network.
+		/// </summary>
+		/// <param name="head">Frame header.</param>
+		/// <param name="stream">Network stream.</param>
 		internal WebSocketCloseFrame(WebSocketFrameHeader head, Stream stream) : base(head, stream)
 		{
 			if (Data.Length > 1)
