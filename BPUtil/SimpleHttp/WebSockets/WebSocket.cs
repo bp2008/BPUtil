@@ -45,9 +45,16 @@ namespace BPUtil.SimpleHttp.WebSockets
 		protected object sendLock = new object();
 		protected object startStopLock = new object();
 		protected bool handshakePerformed = false;
-		protected bool sentCloseCode = false;
+		protected bool sentCloseFrame = false;
+		protected bool receivedCloseFrame = false;
+		/// <summary>
+		/// When this is true, the WebSocket will silently refuse to send additional data.
+		/// </summary>
 		protected bool isClosing = false;
-		private volatile bool abort = false;
+		/// <summary>
+		/// When this is set to false, the WebSocket's read thread will begin exiting.
+		/// </summary>
+		private volatile bool expectingMoreMessages = true;
 
 		#region Constructors and Initialization
 		/// <summary>
@@ -125,16 +132,13 @@ namespace BPUtil.SimpleHttp.WebSockets
 			}
 		}
 		/// <summary>
-		/// Attempts to close this WebSocket.
+		/// Instructs the WebSocket to close gracefully.  This method returns as soon as we've sent a Close Frame, but the connection may remain open for several seconds while a background thread waits for a close frame from the remote host.  To use a custom close code, call <see cref="Send(WebSocketCloseCode, string)"/> instead of Close.
 		/// </summary>
-		public void Close()
+		/// <param name="closeCode">The reason for the close. Note that some of the <see cref="WebSocketCloseCode"/> values are not intended to be sent.</param>
+		/// <param name="message">A message to include in the close frame.  You can assume this message will not be shown to the user.  The message may be truncated to ensure the UTF8-Encoded length is 125 bytes or less.</param>
+		public void Close(WebSocketCloseCode closeCode = WebSocketCloseCode.Normal, string message = null)
 		{
-			lock (startStopLock)
-			{
-				isClosing = true;
-				abort = true;
-				this.tcpClient.Close();
-			}
+			SendCloseFrame(closeCode, message);
 		}
 		/// <summary>
 		/// Returns true if this WebSocket is acting as a client.
@@ -156,142 +160,146 @@ namespace BPUtil.SimpleHttp.WebSockets
 				WebSocketFrameHeader fragmentStart = null;
 				List<byte[]> fragments = new List<byte[]>();
 				ulong totalLength = 0;
-				while (!abort)
+				while (expectingMoreMessages)
 				{
-					WebSocketFrameHeader head = new WebSocketFrameHeader(tcpStream, isClient());
+					try
+					{
+						WebSocketFrameHeader head = new WebSocketFrameHeader(tcpStream, isClient());
 
-					if (head.opcode == WebSocketOpcode.Close)
-					{
-						closeFrame = new WebSocketCloseFrame(head, tcpStream);
-						Send(WebSocketCloseCode.Normal);
-						//SimpleHttpLogger.LogVerbose("WebSocket connection closed with code: "
-						//	+ (ushort)closeFrame.CloseCode
-						//	+ " (" + closeFrame.CloseCode + ")"
-						//	 + (!string.IsNullOrEmpty(closeFrame.Message) ? " -- \"" + closeFrame.Message + "\"" : ""));
-						return;
-					}
-					else if (head.opcode == WebSocketOpcode.Ping)
-					{
-						WebSocketPingFrame pingFrame = new WebSocketPingFrame(head, tcpStream);
-						SendFrame(WebSocketOpcode.Pong, pingFrame.Data);
-						continue;
-					}
-					else if (head.opcode == WebSocketOpcode.Pong)
-					{
-						WebSocketPongFrame pongFrame = new WebSocketPongFrame(head, tcpStream);
-						continue;
-					}
-					else if (head.opcode == WebSocketOpcode.Continuation || head.opcode == WebSocketOpcode.Text || head.opcode == WebSocketOpcode.Binary)
-					{
-						// The WebSocket protocol supports payload fragmentation, which is the 
-						// reason for much of the complexity to follow.
-						// (The primary purpose of fragmentation is to allow sending a message
-						// that is of unknown size when the message is started without having to
-						// buffer that message.)
-
-						// Validate Payload Length
-						totalLength += head.payloadLength;
-						if (totalLength > (ulong)MAX_PAYLOAD_BYTES)
-							throw new WebSocketException(WebSocketCloseCode.MessageTooBig, "Host does not accept payloads larger than " + WebSocket.MAX_PAYLOAD_BYTES + ". Payload length was " + totalLength + ".");
-
-						// Keep track of the frame that started each set of fragments
-						if (fragmentStart == null)
+						if (head.opcode == WebSocketOpcode.Close)
 						{
-							if (head.opcode == WebSocketOpcode.Continuation)
-								throw new WebSocketException(WebSocketCloseCode.ProtocolError, "Continuation frame did not follow a Text or Binary frame.");
-							fragmentStart = head;
+							isClosing = true;
+							expectingMoreMessages = false;
+							receivedCloseFrame = true;
+							closeFrame = new WebSocketCloseFrame(head, tcpStream);
+							//SimpleHttpLogger.LogVerbose("WebSocket connection closed with code: "
+							//	+ (ushort)closeFrame.CloseCode
+							//	+ " (" + closeFrame.CloseCode + ")"
+							//	 + (!string.IsNullOrEmpty(closeFrame.Message) ? " -- \"" + closeFrame.Message + "\"" : ""));
+							continue;
 						}
-
-						// Read the Frame's Payload
-						fragments.Add(ByteUtil.ReadNBytes(tcpStream, (int)head.payloadLength));
-
-						if (head.fin)
+						else if (head.opcode == WebSocketOpcode.Ping)
 						{
-							// This ends a set of 1 or more fragments.
+							WebSocketPingFrame pingFrame = new WebSocketPingFrame(head, tcpStream);
+							SendFrame(WebSocketOpcode.Pong, pingFrame.Data);
+							continue;
+						}
+						else if (head.opcode == WebSocketOpcode.Pong)
+						{
+							WebSocketPongFrame pongFrame = new WebSocketPongFrame(head, tcpStream);
+							continue;
+						}
+						else if (head.opcode == WebSocketOpcode.Continuation || head.opcode == WebSocketOpcode.Text || head.opcode == WebSocketOpcode.Binary)
+						{
+							// The WebSocket protocol supports payload fragmentation, which is the 
+							// reason for much of the complexity to follow.
+							// (The primary purpose of fragmentation is to allow sending a message
+							// that is of unknown size when the message is started without having to
+							// buffer that message.)
 
-							// Assemble the final payload.
-							byte[] payload;
-							if (fragments.Count == 1)
-								payload = fragments[0];
-							else
+							// Validate Payload Length
+							totalLength += head.payloadLength;
+							if (totalLength > (ulong)MAX_PAYLOAD_BYTES)
+								throw new WebSocketException(WebSocketCloseCode.MessageTooBig, "Host does not accept payloads larger than " + WebSocket.MAX_PAYLOAD_BYTES + ". Payload length was " + totalLength + ".");
+
+							// Keep track of the frame that started each set of fragments
+							if (fragmentStart == null)
 							{
-								// We must assemble a fragmented payload.
-								payload = new byte[(int)totalLength];
-								int soFar = 0;
-								for (int i = 0; i < fragments.Count; i++)
-								{
-									byte[] part = fragments[i];
-									fragments[i] = null;
-									Array.Copy(part, 0, payload, soFar, part.Length);
-									soFar += part.Length;
-								}
+								if (head.opcode == WebSocketOpcode.Continuation)
+									throw new WebSocketException(WebSocketCloseCode.ProtocolError, "Continuation frame did not follow a Text or Binary frame.");
+								fragmentStart = head;
 							}
 
-							// Call onMessageReceived callback
-							try
+							// Read the Frame's Payload
+							fragments.Add(ByteUtil.ReadNBytes(tcpStream, (int)head.payloadLength));
+
+							if (head.fin)
 							{
-								if (fragmentStart.opcode == WebSocketOpcode.Text)
-									onMessageReceived(new WebSocketTextFrame(fragmentStart, payload));
+								// This ends a set of 1 or more fragments.
+
+								// Assemble the final payload.
+								byte[] payload;
+								if (fragments.Count == 1)
+									payload = fragments[0];
 								else
-									onMessageReceived(new WebSocketBinaryFrame(fragmentStart, payload));
-							}
-							catch (ThreadAbortException) { }
-							catch (Exception ex)
-							{
-								if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
-									SimpleHttpLogger.Log(ex);
-							}
+								{
+									// We must assemble a fragmented payload.
+									payload = new byte[(int)totalLength];
+									int soFar = 0;
+									for (int i = 0; i < fragments.Count; i++)
+									{
+										byte[] part = fragments[i];
+										fragments[i] = null;
+										Array.Copy(part, 0, payload, soFar, part.Length);
+										soFar += part.Length;
+									}
+								}
 
-							// Reset fragmentation state
-							fragmentStart = null;
-							fragments.Clear();
-							totalLength = 0;
+								// Call onMessageReceived callback
+								try
+								{
+									if (fragmentStart.opcode == WebSocketOpcode.Text)
+										onMessageReceived(new WebSocketTextFrame(fragmentStart, payload));
+									else
+										onMessageReceived(new WebSocketBinaryFrame(fragmentStart, payload));
+								}
+								catch (Exception ex)
+								{
+									if (!HttpProcessor.IsOrdinaryDisconnectException(ex))
+										SimpleHttpLogger.Log(ex);
+								}
+
+								// Reset fragmentation state
+								fragmentStart = null;
+								fragments.Clear();
+								totalLength = 0;
+							}
+						}
+					}
+					catch (WebSocketException ex)
+					{
+						SimpleHttpLogger.LogVerbose(ex);
+						if (closeFrame == null)
+							closeFrame = new WebSocketCloseFrame(isClient(), ex.closeCode ?? WebSocketCloseCode.InternalError, ex.CloseReason);
+					}
+					catch (Exception ex)
+					{
+						bool isDisconnect = HttpProcessor.IsOrdinaryDisconnectException(ex);
+						if (isDisconnect)
+						{
+							// Don't wait for a close frame.
+							isClosing = true;
+							expectingMoreMessages = false;
+							receivedCloseFrame = true;
+							sentCloseFrame = true;
+						}
+						else
+							SimpleHttpLogger.LogVerbose(ex);
+						//SimpleHttpLogger.Log(ex);
+
+						if (closeFrame == null)
+							closeFrame = new WebSocketCloseFrame(isClient(), isDisconnect ? WebSocketCloseCode.ConnectionLost : WebSocketCloseCode.InternalError);
+					}
+					finally
+					{
+						if (closeFrame != null)
+						{
+							// A close frame was generated.  Send it if we haven't sent one yet.
+							SendCloseFrame(closeFrame.CloseCode, closeFrame.Message);
+							// Wait for a close frame from the remote endpoint, then trigger termination of this thread.
+							if (!receivedCloseFrame)
+							{
+								tcpClient.ReceiveTimeout = Math.Min(tcpClient.ReceiveTimeout, 5000);
+								SetTimeout.OnBackground(() =>
+								{
+									IntervalSleeper sleeper = new IntervalSleeper(10);
+									sleeper.SleepUntil(5000, () => receivedCloseFrame);
+									expectingMoreMessages = false;
+								}, 0);
+							}
 						}
 					}
 				}
-				closeFrame = new WebSocketCloseFrame(isClient(), WebSocketCloseCode.GoingAway);
-				Try.Swallow(() =>
-				{
-					tcpClient.SendTimeout = Math.Min(tcpClient.SendTimeout, 1000);
-					Send(closeFrame.CloseCode, closeFrame.Message);
-				});
-			}
-			catch (ThreadAbortException)
-			{
-				if (closeFrame == null)
-				{
-					closeFrame = new WebSocketCloseFrame(isClient(), WebSocketCloseCode.GoingAway);
-				}
-				Try.Swallow(() =>
-				{
-					tcpClient.SendTimeout = Math.Min(tcpClient.SendTimeout, 1000);
-					Send(closeFrame.CloseCode, closeFrame.Message);
-				});
-			}
-			catch (WebSocketException ex)
-			{
-				SimpleHttpLogger.LogVerbose(ex);
-				if (closeFrame == null)
-				{
-					if (ex.closeCode != null)
-						closeFrame = new WebSocketCloseFrame(isClient(), ex.closeCode.Value, ex.CloseReason);
-					else
-						closeFrame = new WebSocketCloseFrame(isClient(), WebSocketCloseCode.InternalError, ex.CloseReason);
-				}
-				Try.Swallow(() => { Send(closeFrame.CloseCode, closeFrame.Message); });
-			}
-			catch (Exception ex)
-			{
-				bool isDisconnect = HttpProcessor.IsOrdinaryDisconnectException(ex);
-				if (!isDisconnect)
-					SimpleHttpLogger.LogVerbose(ex);
-				SimpleHttpLogger.Log(ex);
-
-				if (closeFrame == null)
-				{
-					closeFrame = new WebSocketCloseFrame(isClient(), isDisconnect ? WebSocketCloseCode.ConnectionLost : WebSocketCloseCode.InternalError);
-				}
-				Try.Swallow(() => { Send(closeFrame.CloseCode, closeFrame.Message); });
 			}
 			finally
 			{
@@ -301,11 +309,15 @@ namespace BPUtil.SimpleHttp.WebSockets
 					{
 						// This should not happen, but it is possible that further development could leave a code path where closeFrame did not get set.
 						closeFrame = new WebSocketCloseFrame(isClient(), WebSocketCloseCode.InternalError, "Unexpected code path.");
+						SimpleHttpLogger.Log("An unexpected code path resulted in a closeFrame being generated in WebSocketRead()'s finally block.");
 					}
-					onClose(closeFrame);
+					SendCloseFrame(closeFrame.CloseCode, closeFrame.Message);
 				}
-				catch (ThreadAbortException) { }
-				catch (Exception) { }
+				catch { }
+				// Close the underlying connection.
+				try { this.tcpClient.Close(); } catch { }
+				// Notify the caller that the WebSocket is closed.
+				try { onClose(closeFrame); } catch { }
 			}
 		}
 		#endregion
@@ -318,7 +330,8 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <param name="textBody">Body text.</param>
 		public void Send(string textBody)
 		{
-			SendFrame(WebSocketOpcode.Text, ByteUtil.Utf8NoBOM.GetBytes(textBody));
+			if (!isClosing)
+				SendFrame(WebSocketOpcode.Text, ByteUtil.Utf8NoBOM.GetBytes(textBody));
 		}
 		/// <summary>
 		/// Sends a binary frame to the remote endpoint.
@@ -326,45 +339,61 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <param name="dataBody">Body text.</param>
 		public void Send(byte[] dataBody)
 		{
-			SendFrame(WebSocketOpcode.Binary, dataBody);
+			if (!isClosing)
+				SendFrame(WebSocketOpcode.Binary, dataBody);
 		}
 		/// <summary>
-		/// Sends a close frame to the remote endpoint.  After calling this, you should close the underlying TCP connection.
+		/// <para>Sends a close frame to the remote endpoint, only if a close frame has not already been sent.</para>
+		/// <para>Prevents further writing to the WebSocket.</para>
+		/// <para>After calling this, the connection may remain open for a while as we wait to receive a close frame from the remote endpoint (unless it has already been received).  Eventually, the underlying TCP connection will be closed.</para>
 		/// </summary>
 		/// <param name="closeCode">The reason for the close. Note that some of the <see cref="WebSocketCloseCode"/> values are not intended to be sent.</param>
 		/// <param name="message">A message to include in the close frame.  You can assume this message will not be shown to the user.  The message may be truncated to ensure the UTF8-Encoded length is 125 bytes or less.</param>
-		public void Send(WebSocketCloseCode closeCode, string message = null)
+		private void SendCloseFrame(WebSocketCloseCode closeCode, string message = null)
 		{
-			if (sentCloseCode || closeCode == WebSocketCloseCode.None || closeCode == WebSocketCloseCode.TLSHandshakeFailed || closeCode == WebSocketCloseCode.ConnectionLost)
+			if (sentCloseFrame || closeCode == WebSocketCloseCode.None || closeCode == WebSocketCloseCode.TLSHandshakeFailed || closeCode == WebSocketCloseCode.ConnectionLost)
 				return;
-
-			byte[] msgBytes;
-			if (message == null)
-				msgBytes = new byte[0];
-			else
+			try
 			{
-				if (message.Length > 123)
-					message = message.Remove(123);
-
-				msgBytes = ByteUtil.Utf8NoBOM.GetBytes(message);
-				while (msgBytes.Length > 123 && message.Length > 0)
+				tcpClient.SendTimeout = Math.Min(tcpClient.SendTimeout, 5000);
+				lock (startStopLock)
 				{
-					message = message.Remove(message.Length - 1);
-					msgBytes = ByteUtil.Utf8NoBOM.GetBytes(message);
+					isClosing = true;
+					byte[] msgBytes;
+					if (message == null)
+						msgBytes = new byte[0];
+					else
+					{
+						if (message.Length > 123)
+							message = message.Remove(123);
+
+						msgBytes = ByteUtil.Utf8NoBOM.GetBytes(message);
+						while (msgBytes.Length > 123 && message.Length > 0)
+						{
+							message = message.Remove(message.Length - 1);
+							msgBytes = ByteUtil.Utf8NoBOM.GetBytes(message);
+						}
+						if (message.Length == 0)
+							msgBytes = new byte[0];
+					}
+
+					byte[] payload = new byte[2 + msgBytes.Length];
+					ByteUtil.WriteUInt16((ushort)closeCode, payload, 0);
+					Array.Copy(msgBytes, 0, payload, 2, msgBytes.Length);
+
+					lock (sendLock)
+					{
+						if (sentCloseFrame)
+							return;
+						SendFrame(WebSocketOpcode.Close, payload);
+						tcpStream.Flush();
+						sentCloseFrame = true;
+					}
 				}
-				if (message.Length == 0)
-					msgBytes = new byte[0];
 			}
-
-			byte[] payload = new byte[2 + msgBytes.Length];
-			ByteUtil.WriteUInt16((ushort)closeCode, payload, 0);
-			Array.Copy(msgBytes, 0, payload, 2, msgBytes.Length);
-
-			lock (sendLock)
+			catch (Exception ex)
 			{
-				SendFrame(WebSocketOpcode.Close, payload);
-				tcpStream.Flush();
-				sentCloseCode = true;
+				SimpleHttpLogger.LogVerbose(ex);
 			}
 		}
 		/// <summary>
@@ -372,15 +401,16 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// </summary>
 		public void SendPing()
 		{
-			SendFrame(WebSocketOpcode.Ping, ByteUtil.GenerateRandomBytes(4));
+			if (!isClosing)
+				SendFrame(WebSocketOpcode.Ping, ByteUtil.GenerateRandomBytes(4));
 		}
 		internal void SendFrame(WebSocketOpcode opcode, byte[] data)
 		{
-			if (sentCloseCode)
+			if (sentCloseFrame)
 				return;
 			lock (sendLock)
 			{
-				if (sentCloseCode)
+				if (sentCloseFrame)
 					return;
 				// Write frame header
 				WebSocketFrameHeader head = new WebSocketFrameHeader(opcode, data.Length, isClient());
