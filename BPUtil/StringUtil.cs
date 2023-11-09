@@ -13,6 +13,13 @@ namespace BPUtil
 	/// </summary>
 	public static class StringUtil
 	{
+		static StringUtil()
+		{
+#if NET6_0_LINUX
+			// This, along with the nuget package `System.Text.Encoding.CodePages`, allows windows-1252 to be loadable in Linux.
+			Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+#endif
+		}
 		/// <summary>
 		/// Gets a random character from the ranges 0-9, A-Z, a-z. There are 62 possible characters this method will return.
 		/// </summary>
@@ -882,11 +889,7 @@ namespace BPUtil
 			yield return new UTF32Encoding(false, false, true);
 			yield return new UnicodeEncoding(false, false, true);
 			yield return new UnicodeEncoding(true, false, true);
-#if NET6_0
-			yield return CodePagesEncodingProvider.Instance.GetEncoding(1252);
-#else
 			yield return Encoding.GetEncoding("windows-1252");
-#endif
 			yield return Encoding.GetEncoding("ISO-8859-1");
 			yield return Encoding.Default;
 		}
