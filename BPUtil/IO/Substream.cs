@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -58,7 +59,8 @@ namespace BPUtil.IO
 			_length = length;
 			try
 			{
-				_offset = _stream.Position; // If this fails, _offset remains 0 and seeking is expected to be unsupported.
+				if (!(stream is NetworkStream) && _stream.CanSeek)
+					_offset = _stream.Position; // If this fails, _offset remains 0 and seeking is expected to be unsupported.
 			}
 			catch { }
 		}
