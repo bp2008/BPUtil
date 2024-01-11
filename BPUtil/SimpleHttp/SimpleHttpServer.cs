@@ -1870,7 +1870,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public SimpleThreadPool pool = new SimpleThreadPool("SimpleHttp.HttpServer", 6, 48, 5000);
 		/// <summary>
-		/// Gets or sets maximum number of connections that should be allowed simultaneously.
+		/// Gets or sets maximum number of connections that should be allowed simultaneously. A minimum of 1 is required.
 		/// </summary>
 		public override int MaxConnections
 		{
@@ -1880,7 +1880,9 @@ namespace BPUtil.SimpleHttp
 			}
 			set
 			{
-				pool.MaxThreads = value;
+				if (value < 1)
+					throw new ArgumentException("MaxConnections value must be greater than 0.  Value of " + value + " is invalid.");
+				pool.SetThreadLimits(Math.Min(6, value), value);
 			}
 		}
 		/// <summary>

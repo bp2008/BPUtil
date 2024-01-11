@@ -75,7 +75,7 @@ namespace BPUtil
 			set
 			{
 				if (value < 1 || MinThreads > value)
-					throw new Exception("MaxThreads must be >= 1 and >= MinThreads");
+					throw new ArgumentException("MaxThreads must be >= 1 and >= MinThreads");
 				Interlocked.Exchange(ref _currentMaxThreads, value);
 			}
 		}
@@ -91,8 +91,27 @@ namespace BPUtil
 			set
 			{
 				if (value < 0 || value > MaxThreads)
-					throw new Exception("MinThreads must be >= 0 and <= MaxThreads");
+					throw new ArgumentException("MinThreads must be >= 0 and <= MaxThreads");
 				Interlocked.Exchange(ref _currentMinThreads, value);
+			}
+		}
+		/// <summary>
+		/// Sets the minimum and maximum thread limits in a way that you don't need to worry about the order of changing the min and max.
+		/// </summary>
+		/// <param name="minThreads">Minimum thread count.  Must be greater than 0.  Must not be larger than maxThreads.</param>
+		/// <param name="maxThreads">Maximum thread count.  Must be greater than 1.  Must not be smaller than minThreads.</param>
+		public void SetThreadLimits(int minThreads, int maxThreads)
+		{
+			if (minThreads < 0)
+				throw new ArgumentException("minThreads " + minThreads + " is too low");
+			else if (maxThreads < 1)
+				throw new ArgumentException("maxThreads " + maxThreads + " is too low");
+			else if (minThreads > maxThreads)
+				throw new ArgumentException("minThreads must be less than or equal to maxThreads (minThreads: " + minThreads + ", maxThreads: " + maxThreads + ")");
+			else
+			{
+				Interlocked.Exchange(ref _currentMinThreads, minThreads);
+				Interlocked.Exchange(ref _currentMaxThreads, maxThreads);
 			}
 		}
 		/// <summary>
