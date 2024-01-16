@@ -214,6 +214,66 @@ namespace BPUtil.NativeWin
 			public int biClrImportant;
 		}
 		#endregion
+		#region NativeMethods for Window Management
+		/// <summary>
+		/// A Rectangle usable with certain Windows API methods.
+		/// </summary>
+		public struct Rect
+		{
+			public int Left { get; set; }
+			public int Top { get; set; }
+			public int Right { get; set; }
+			public int Bottom { get; set; }
+		}
+		/// <summary>
+		/// Returns the Handle of the topmost window at the given point.
+		/// </summary>
+		/// <param name="Point">Point at which to look for a window.</param>
+		/// <returns></returns>
+		[DllImport("user32.dll")]
+		public static extern IntPtr WindowFromPoint(POINT Point);
+		/// <summary>
+		/// Returns the Handle of the foreground window.
+		/// </summary>
+		/// <returns></returns>
+		[DllImport("user32.dll")]
+		public static extern IntPtr GetForegroundWindow();
+		/// <summary>
+		/// Gets the bounds of the window with the given Handle.
+		/// </summary>
+		/// <param name="hwnd">Window Handle</param>
+		/// <param name="rectangle">The bounds of the window with the given Handle are placed into this object.</param>
+		/// <returns>Returns true if the window was found and the bounds rectangle has been populated.</returns>
+		[DllImport("user32.dll")]
+		public static extern bool GetWindowRect(HandleRef hwnd, ref Rect rectangle);
+		/// <summary>
+		/// Gets the bounds of the window with the given Handle. If the window is not found, the returned Rectangle will have all 0 for all property values.
+		/// </summary>
+		/// <param name="windowHandle">Window Handle</param>
+		/// <returns>A Rectangle representing the window's bounds.</returns>
+		public static Rectangle GetWindowBounds(IntPtr windowHandle)
+		{
+			Rect rect = new Rect();
+			NativeMethods.GetWindowRect(new HandleRef(null, windowHandle), ref rect);
+			return new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+		}
+		/// <summary>
+		/// Gets the bounds of the currently focused window. If the window is not found, the returned Rectangle will have all 0 for all property values.
+		/// </summary>
+		/// <returns>A Rectangle representing the window's bounds.</returns>
+		public static Rectangle GetBoundsOfFocusedWindow()
+		{
+			return GetWindowBounds(GetForegroundWindow());
+		}
+		/// <summary>
+		/// Gets the process ID that created the given Window Handle as an out parameter, and the thread ID that created the window as the return value.
+		/// </summary>
+		/// <param name="hWnd">Window Handle</param>
+		/// <param name="lpdwProcessId">Process ID</param>
+		/// <returns>Thread ID</returns>
+		[DllImport("user32.dll")]
+		public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+		#endregion
 		#region NativeMethods for Desktops/Threads
 
 		/// <summary>
