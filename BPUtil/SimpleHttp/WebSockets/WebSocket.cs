@@ -132,7 +132,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 			}
 		}
 		/// <summary>
-		/// Instructs the WebSocket to close gracefully.  This method returns as soon as we've sent a Close Frame, but the connection may remain open for several seconds while a background thread waits for a close frame from the remote host.  To use a custom close code, call <see cref="Send(WebSocketCloseCode, string)"/> instead of Close.
+		/// Instructs the WebSocket to close gracefully.  This method returns as soon as we've sent a Close Frame, but the connection may remain open for several seconds while a background thread waits for a close frame from the remote host.  To use a custom close code, call <see cref="SendCloseFrame(WebSocketCloseCode, string)"/> instead of Close.
 		/// </summary>
 		/// <param name="closeCode">The reason for the close. Note that some of the <see cref="WebSocketCloseCode"/> values are not intended to be sent.</param>
 		/// <param name="message">A message to include in the close frame.  You can assume this message will not be shown to the user.  The message may be truncated to ensure the UTF8-Encoded length is 125 bytes or less.</param>

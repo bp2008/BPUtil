@@ -152,6 +152,7 @@ namespace BPUtil
 		}
 		/// <summary>
 		/// <para>Reads the object from a FileStream.  The default implementation in SerializableObjectBase uses XML.</para>
+		/// <para>Must return a type inheriting from SerializableObjectBase.</para>
 		/// </summary>
 		protected virtual SerializableObjectBase DeserializeObject(FileStream stream)
 		{
@@ -196,8 +197,9 @@ namespace BPUtil
 		/// <summary>
 		/// <para>Converts a JSON string to an object. Must be implemented by classes deriving from SerializableObjectJson.</para>
 		/// <para>e.g.JsonConvert.DeserializeObject</para>
+		/// <para>You must deserialize to an object of the derived type.</para>
 		/// </summary>
-		protected abstract object DeserializeFromJson(string str);
+		protected abstract SerializableObjectJson DeserializeFromJson(string str);
 	}
 	/// <summary>
 	/// Annotate the serializable object with this in order to load serialized properties (otherwise only fields are loaded from file).

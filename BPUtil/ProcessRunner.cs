@@ -43,11 +43,10 @@ namespace BPUtil
 		/// <returns>The exit code of the process that ran.</returns>
 		public static int RunProcessAndWait(string fileName, string arguments, out string std, out string err, ref bool bThreadAbort, ProcessRunnerOptions options = null)
 		{
+			if (options == null)
+				options = new ProcessRunnerOptions();
+
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
-			psi.UseShellExecute = false;
-			psi.CreateNoWindow = true;
-			psi.RedirectStandardOutput = true;
-			psi.RedirectStandardError = true;
 
 			StringBuilder sbOutput = new StringBuilder();
 			StringBuilder sbError = new StringBuilder();
@@ -57,16 +56,20 @@ namespace BPUtil
 			using (Process p = Process.Start(psi))
 			{
 				options?.Apply(p);
-				p.OutputDataReceived += (sender, e) =>
+
+				if (options == null || !options.RunAsAdministrator)
 				{
-					sbOutput.AppendLine(e.Data);
-				};
-				p.ErrorDataReceived += (sender, e) =>
-				{
-					sbError.AppendLine(e.Data);
-				};
-				p.BeginOutputReadLine();
-				p.BeginErrorReadLine();
+					p.OutputDataReceived += (sender, e) =>
+					{
+						sbOutput.AppendLine(e.Data);
+					};
+					p.ErrorDataReceived += (sender, e) =>
+					{
+						sbError.AppendLine(e.Data);
+					};
+					p.BeginOutputReadLine();
+					p.BeginErrorReadLine();
+				}
 
 				while (!bThreadAbort && !p.HasExited)
 				{
@@ -102,32 +105,35 @@ namespace BPUtil
 		/// <returns>The exit code of the process that ran.</returns>
 		public static int RunProcessAndWait(string fileName, string arguments, Action<ProcessRunnerOutputEventArgs> std, Action<ProcessRunnerOutputEventArgs> err, ProcessRunnerOptions options = null)
 		{
+			if (options == null)
+				options = new ProcessRunnerOptions();
+
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
-			psi.UseShellExecute = false;
-			psi.CreateNoWindow = true;
-			psi.RedirectStandardOutput = true;
-			psi.RedirectStandardError = true;
 
 			options?.Apply(psi);
 			using (Process p = Process.Start(psi))
 			{
 				options?.Apply(p);
-				Action abortCallback = () =>
+
+				if (options == null || !options.RunAsAdministrator)
 				{
-					p.CloseMainWindow();
-					if (!p.WaitForExit(500))
-						p.Kill();
-				};
-				p.OutputDataReceived += (sender, e) =>
-				{
-					std(new ProcessRunnerOutputEventArgs(e.Data, abortCallback));
-				};
-				p.ErrorDataReceived += (sender, e) =>
-				{
-					err(new ProcessRunnerOutputEventArgs(e.Data, abortCallback));
-				};
-				p.BeginOutputReadLine();
-				p.BeginErrorReadLine();
+					Action abortCallback = () =>
+					{
+						p.CloseMainWindow();
+						if (!p.WaitForExit(500))
+							p.Kill();
+					};
+					p.OutputDataReceived += (sender, e) =>
+					{
+						std(new ProcessRunnerOutputEventArgs(e.Data, abortCallback));
+					};
+					p.ErrorDataReceived += (sender, e) =>
+					{
+						err(new ProcessRunnerOutputEventArgs(e.Data, abortCallback));
+					};
+					p.BeginOutputReadLine();
+					p.BeginErrorReadLine();
+				}
 
 				while (!p.HasExited)
 					p.WaitForExit(500);
@@ -149,26 +155,28 @@ namespace BPUtil
 		/// <returns>An object containing the Process instance and helper functions.</returns>
 		public static ProcessRunnerHandle RunProcess(string fileName, string arguments, Action<string> std, Action<string> err, ProcessRunnerOptions options = null)
 		{
+			if (options == null)
+				options = new ProcessRunnerOptions();
+
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
-			psi.UseShellExecute = false;
-			psi.CreateNoWindow = true;
-			psi.RedirectStandardOutput = true;
-			psi.RedirectStandardError = true;
 
 			options?.Apply(psi);
 			Process p = Process.Start(psi);
 			options?.Apply(p);
 
-			p.OutputDataReceived += (sender, e) =>
+			if (options == null || !options.RunAsAdministrator)
 			{
-				std(e.Data);
-			};
-			p.ErrorDataReceived += (sender, e) =>
-			{
-				err(e.Data);
-			};
-			p.BeginOutputReadLine();
-			p.BeginErrorReadLine();
+				p.OutputDataReceived += (sender, e) =>
+				{
+					std(e.Data);
+				};
+				p.ErrorDataReceived += (sender, e) =>
+				{
+					err(e.Data);
+				};
+				p.BeginOutputReadLine();
+				p.BeginErrorReadLine();
+			}
 
 			return new ProcessRunnerHandle(p);
 		}
@@ -185,25 +193,27 @@ namespace BPUtil
 		/// <returns>An object containing the Process instance and helper functions.</returns>
 		public static ProcessRunnerHandle RunProcess_StdBinary_ErrString(string fileName, string arguments, Action<byte[]> std, Action<string> err, ProcessRunnerOptions options = null)
 		{
+			if (options == null)
+				options = new ProcessRunnerOptions();
+
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
-			psi.UseShellExecute = false;
-			psi.CreateNoWindow = true;
-			psi.RedirectStandardOutput = true;
-			psi.RedirectStandardError = true;
 
 			options?.Apply(psi);
 			Process p = Process.Start(psi);
 			options?.Apply(p);
 
-			p.ErrorDataReceived += (sender, e) =>
+			if (options == null || !options.RunAsAdministrator)
 			{
-				err(e.Data);
-			};
-			p.BeginErrorReadLine();
+				p.ErrorDataReceived += (sender, e) =>
+				{
+					err(e.Data);
+				};
+				p.BeginErrorReadLine();
+			}
 
 			return new ProcessRunnerHandle(p)
 			{
-				stdoutReader = new ProcessStreamBinaryReader(p.StandardOutput.BaseStream, std)
+				stdoutReader = new ProcessStreamBinaryReader(p.StandardOutput.BaseStream, std, options)
 			};
 		}
 
@@ -219,25 +229,27 @@ namespace BPUtil
 		/// <returns>An object containing the Process instance and helper functions.</returns>
 		public static ProcessRunnerHandle RunProcess_StdString_ErrBinary(string fileName, string arguments, Action<string> std, Action<byte[]> err, ProcessRunnerOptions options = null)
 		{
+			if (options == null)
+				options = new ProcessRunnerOptions();
+
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
-			psi.UseShellExecute = false;
-			psi.CreateNoWindow = true;
-			psi.RedirectStandardOutput = true;
-			psi.RedirectStandardError = true;
 
 			options?.Apply(psi);
 			Process p = Process.Start(psi);
 			options?.Apply(p);
 
-			p.OutputDataReceived += (sender, e) =>
+			if (options == null || !options.RunAsAdministrator)
 			{
-				std(e.Data);
-			};
-			p.BeginOutputReadLine();
+				p.OutputDataReceived += (sender, e) =>
+				{
+					std(e.Data);
+				};
+				p.BeginOutputReadLine();
+			}
 
 			return new ProcessRunnerHandle(p)
 			{
-				stderrReader = new ProcessStreamBinaryReader(p.StandardError.BaseStream, err)
+				stderrReader = new ProcessStreamBinaryReader(p.StandardError.BaseStream, err, options)
 			};
 		}
 
@@ -253,11 +265,10 @@ namespace BPUtil
 		/// <returns>An object containing the Process instance and helper functions.</returns>
 		public static ProcessRunnerHandle RunProcess_StdBinary_ErrBinary(string fileName, string arguments, Action<byte[]> std, Action<byte[]> err, ProcessRunnerOptions options = null)
 		{
+			if (options == null)
+				options = new ProcessRunnerOptions();
+
 			ProcessStartInfo psi = new ProcessStartInfo(fileName, arguments);
-			psi.UseShellExecute = false;
-			psi.CreateNoWindow = true;
-			psi.RedirectStandardOutput = true;
-			psi.RedirectStandardError = true;
 
 			options?.Apply(psi);
 			Process p = Process.Start(psi);
@@ -265,8 +276,8 @@ namespace BPUtil
 
 			return new ProcessRunnerHandle(p)
 			{
-				stdoutReader = new ProcessStreamBinaryReader(p.StandardOutput.BaseStream, std),
-				stderrReader = new ProcessStreamBinaryReader(p.StandardError.BaseStream, err)
+				stdoutReader = new ProcessStreamBinaryReader(p.StandardOutput.BaseStream, std, options),
+				stderrReader = new ProcessStreamBinaryReader(p.StandardError.BaseStream, err, options)
 			};
 		}
 		/// <summary>
@@ -323,6 +334,12 @@ namespace BPUtil
 		/// If not null, the <see cref="ProcessStartInfo.StandardErrorEncoding"/> property will be set to this.
 		/// </summary>
 		public Encoding StandardErrorEncoding = null;
+		/// <summary>
+		/// <para>If true, the process will be run as administrator, which typically causes a UAC prompt.</para>
+		/// <para>Running as administrator prevents accessing the Standard Input/Output/Error streams of the process.</para>
+		/// <para>Running as administrator forces <see cref="UseShellExecute"/> to be set to true.</para>
+		/// </summary>
+		public bool RunAsAdministrator = false;
 
 		/// <summary>
 		/// Constructs an empty ProcessRunnerOptions.
@@ -346,12 +363,25 @@ namespace BPUtil
 				psi.EnvironmentVariables[v.Key] = v.Value;
 			if (workingDirectory != null)
 				psi.WorkingDirectory = workingDirectory;
-			psi.UseShellExecute = UseShellExecute;
 			psi.CreateNoWindow = CreateNoWindow;
-			if (StandardOutputEncoding != null)
-				psi.StandardErrorEncoding = StandardOutputEncoding;
-			if (StandardErrorEncoding != null)
-				psi.StandardErrorEncoding = StandardErrorEncoding;
+			if (RunAsAdministrator)
+			{
+				psi.Verb = "runas";
+				psi.RedirectStandardInput = false;
+				psi.RedirectStandardOutput = false;
+				psi.RedirectStandardError = false;
+				psi.UseShellExecute = UseShellExecute = true;
+			}
+			else
+			{
+				psi.UseShellExecute = UseShellExecute;
+				psi.RedirectStandardOutput = true;
+				psi.RedirectStandardError = true;
+				if (StandardOutputEncoding != null)
+					psi.StandardErrorEncoding = StandardOutputEncoding;
+				if (StandardErrorEncoding != null)
+					psi.StandardErrorEncoding = StandardErrorEncoding;
+			}
 		}
 
 		/// <summary>
@@ -479,14 +509,19 @@ namespace BPUtil
 		private Stream stream;
 		private Action<byte[]> callback;
 		private Thread thrReadStream;
-		public ProcessStreamBinaryReader(Stream stream, Action<byte[]> callback)
+		public readonly bool Enabled;
+		public ProcessStreamBinaryReader(Stream stream, Action<byte[]> callback, ProcessRunnerOptions options)
 		{
-			this.stream = stream;
-			this.callback = callback;
-			thrReadStream = new Thread(ReadFromStream);
-			thrReadStream.Name = "ProcessStreamBinaryReader";
-			thrReadStream.IsBackground = true;
-			thrReadStream.Start();
+			Enabled = options == null || !options.RunAsAdministrator;
+			if (Enabled)
+			{
+				this.stream = stream;
+				this.callback = callback;
+				thrReadStream = new Thread(ReadFromStream);
+				thrReadStream.Name = "ProcessStreamBinaryReader";
+				thrReadStream.IsBackground = true;
+				thrReadStream.Start();
+			}
 		}
 		private void ReadFromStream()
 		{

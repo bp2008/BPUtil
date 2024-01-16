@@ -68,6 +68,7 @@
     <Compile Include="BPQueue.cs" />
     <Compile Include="CertificateValidation.cs" />
     <Compile Include="Compass.cs" />
+    <Compile Include="Cooldown.cs" />
     <Compile Include="CountdownStopwatch.cs" />
     <Compile Include="Debounce.cs" />
     <Compile Include="IO\ConcatenatedStream.cs" />
