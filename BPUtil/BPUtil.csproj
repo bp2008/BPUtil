@@ -71,6 +71,13 @@
     <Compile Include="Cooldown.cs" />
     <Compile Include="CountdownStopwatch.cs" />
     <Compile Include="Debounce.cs" />
+    <Compile Include="Forms\TrayIconAppHiddenForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\TrayIconAppHiddenForm.Designer.cs">
+      <DependentUpon>TrayIconAppHiddenForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Forms\TrayIconApplication2.cs" />
     <Compile Include="IO\ConcatenatedStream.cs" />
     <Compile Include="IO\Substream.cs" />
     <Compile Include="Linux\PortHelper.cs" />
@@ -297,6 +304,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Forms\InputDialog.resx">
       <DependentUpon>InputDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forms\TrayIconAppHiddenForm.resx">
+      <DependentUpon>TrayIconAppHiddenForm.cs</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup />

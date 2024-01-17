@@ -1,10 +1,13 @@
-﻿using System;
+﻿using BPUtil.MVC;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -12,11 +15,12 @@ namespace BPUtil.Forms
 {
 	/// <summary>
 	/// <para>
-	/// An application context you can use when you want to develop a Windows Forms application that "runs in the system tray" and normally has no form open.
+	/// First-generation application context you can use when you want to develop a Windows Forms application that "runs in the system tray" and normally has no form open.
 	/// </para>
 	/// <para>
 	/// Example: Application.Run(new TrayIconApplicationContext(...));
 	/// </para>
+	/// <para>See also <see cref="TrayIconApplication2"/></para>
 	/// </summary>
 	public class TrayIconApplicationContext : ApplicationContext
 	{
@@ -45,6 +49,8 @@ namespace BPUtil.Forms
 			if (trayIcon == null)
 				throw new ArgumentException("An icon is required in order to use this class!");
 
+			Application.Idle += new EventHandler(this.OnApplicationIdle);
+
 			this.onCreateContextMenu = onCreateContextMenu;
 			this.onDoubleClick = onDoubleClick;
 
@@ -63,9 +69,82 @@ namespace BPUtil.Forms
 			else
 				notifyIcon.MouseUp += notifyIcon_MouseUp;
 
+			// The first context menu show will fail, so do it now, and the menu will be opened but canceled on the first attempt.
 			DoShowContextMenu();
 		}
+		#region UI Thread Invoker
+		private TaskScheduler taskScheduler = null;
+		private object taskSchedulerLock = new object();
+		private ConcurrentQueue<Action> uiThreadWorkQueue = new ConcurrentQueue<Action>();
+		private void OnApplicationIdle(object sender, EventArgs e)
+		{
+			// prevent duplicate initialization on each Idle event
+			if (taskScheduler == null)
+				lock (taskSchedulerLock)
+					if (taskScheduler == null)
+					{
+						taskScheduler = TaskScheduler.FromCurrentSynchronizationContext();
+						RunOneUiThreadQueuedTask();
+					}
+		}
+		private void RunOneUiThreadQueuedTask()
+		{
+			if (uiThreadWorkQueue.TryDequeue(out Action action))
+			{
+				Task.Factory.StartNew(
+					  () =>
+					  {
+						  lock (taskSchedulerLock)
+						  {
+							  try
+							  {
+								  action();
+							  }
+							  finally
+							  {
+								  RunOneUiThreadQueuedTask();
+							  }
+						  }
+					  },
+					  CancellationToken.None,
+					  TaskCreationOptions.None,
+					  taskScheduler);
+			}
+		}
+		/// <summary>
+		/// <para>Runs the given code on the UI thread, optionally blocking the current thread until the UI thread work has completed.</para>
+		/// <para>DO NOT USE THIS METHOD FROM THE UI THREAD.</para>
+		/// </summary>
+		/// <param name="action">Action to run on the UI thread.</param>
+		/// <param name="blockUntilFinished">If true, the current thread will block until the action has finished executing.</param>
+		public void RunOnUiThread(Action action, bool blockUntilFinished)
+		{
+			Action myAction = action;
+			EventWaitHandle ewhWaiter = null;
+			if (blockUntilFinished)
+			{
+				ewhWaiter = new EventWaitHandle(false, EventResetMode.ManualReset);
+				myAction = () =>
+				{
+					try
+					{
+						action();
+					}
+					finally
+					{
+						ewhWaiter.Set();
+					}
+				};
+			}
+			uiThreadWorkQueue.Enqueue(myAction);
 
+			if (taskScheduler != null)
+				RunOneUiThreadQueuedTask();
+
+			if (blockUntilFinished)
+				ewhWaiter.WaitOne();
+		}
+		#endregion
 		private void NotifyIcon_DoubleClick(object sender, EventArgs e)
 		{
 			onDoubleClick();
@@ -131,6 +210,12 @@ namespace BPUtil.Forms
 			notifyIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 		}
 
+		public void ShowForm(Form form)
+		{
+			components.Add(form);
+			form.Show();
+		}
+
 		/// <summary>
 		/// A list of components to dispose when the context is disposed.
 		/// </summary>
@@ -146,7 +231,11 @@ namespace BPUtil.Forms
 		/// <param name="disposing"></param>
 		protected override void Dispose(bool disposing)
 		{
-			if (disposing && components != null) { components.Dispose(); }
+			if (disposing)
+			{
+				components?.Dispose();
+				Application.Idle -= new EventHandler(this.OnApplicationIdle);
+			}
 		}
 		/// <summary>
 		/// When the exit menu item is clicked, make a call to terminate the ApplicationContext.

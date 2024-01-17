@@ -273,6 +273,52 @@ namespace BPUtil.NativeWin
 		/// <returns>Thread ID</returns>
 		[DllImport("user32.dll")]
 		public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+		/// <summary>
+		/// Checks Extended Window Styles for the given window handle.
+		/// </summary>
+		/// <param name="hWnd">Window Handle</param>
+		/// <param name="nIndex">Identifier of the style to query.</param>
+		/// <returns></returns>
+		[DllImport("user32.dll", SetLastError = true)]
+		public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+		/// <summary>
+		/// Returns true if the window with the given Handle has the "TopMost" style.
+		/// </summary>
+		/// <param name="hWnd"Window Handle></param>
+		/// <returns></returns>
+		public static bool IsWindowTopMost(IntPtr hWnd)
+		{
+			const int GWL_EXSTYLE = -20;
+			const int WS_EX_TOPMOST = 0x0008;
+
+			int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+			return (exStyle & WS_EX_TOPMOST) == WS_EX_TOPMOST;
+		}
+		/// <summary>
+		/// Sets a Window's position and flags.
+		/// </summary>
+		/// <param name="hWnd">Window Handle</param>
+		/// <param name="hWndInsertAfter"></param>
+		/// <param name="X"></param>
+		/// <param name="Y"></param>
+		/// <param name="cx"></param>
+		/// <param name="cy"></param>
+		/// <param name="uFlags"></param>
+		/// <returns></returns>
+		[DllImport("user32.dll")]
+		public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+		/// <summary>
+		/// Sets a window to be above all other windows.
+		/// </summary>
+		/// <param name="hWnd"></param>
+		public static void SetWindowTopmost(IntPtr hWnd)
+		{
+			IntPtr HWND_TOPMOST = new IntPtr(-1);
+			const UInt32 SWP_NOSIZE = 0x0001;
+			const UInt32 SWP_NOMOVE = 0x0002;
+			const UInt32 SWP_SHOWWINDOW = 0x0040;
+			SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+		}
 		#endregion
 		#region NativeMethods for Desktops/Threads
 
