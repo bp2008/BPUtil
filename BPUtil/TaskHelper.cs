@@ -279,5 +279,36 @@ namespace BPUtil
 				}
 			}
 		}
+		/// <summary>
+		/// <para>Runs an action that performs a synchronous operation, but does it on a background thread.</para>
+		/// <para>Returns an EventWaitHandle that can be waited on to block until the action has completed.</para>
+		/// <para>This method is meant to be called from a synchronous context.</para>
+		/// </summary>
+		/// <param name="action">Action to run on a background thread.</param>
+		/// <param name="errorHandler">Error handling method.</param>
+		/// <returns></returns>
+		public static EventWaitHandle RunSynchronousOperationOnBackgroundThread(Action action, Action<Exception> errorHandler = null)
+		{
+			EventWaitHandle ewh = new EventWaitHandle(false, EventResetMode.ManualReset);
+			synchronousOperationPool.Enqueue(() =>
+			{
+				try
+				{
+					action();
+				}
+				catch (Exception ex)
+				{
+					if (errorHandler != null)
+						errorHandler(ex);
+					else
+						Logger.Debug(ex);
+				}
+				finally
+				{
+					ewh.Set();
+				}
+			});
+			return ewh;
+		}
 	}
 }
