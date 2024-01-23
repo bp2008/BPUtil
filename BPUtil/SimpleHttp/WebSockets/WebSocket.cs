@@ -289,13 +289,21 @@ namespace BPUtil.SimpleHttp.WebSockets
 							// Wait for a close frame from the remote endpoint, then trigger termination of this thread.
 							if (!receivedCloseFrame)
 							{
-								tcpClient.ReceiveTimeout = Math.Min(tcpClient.ReceiveTimeout, 5000);
-								SetTimeout.OnBackground(() =>
+								try
 								{
-									IntervalSleeper sleeper = new IntervalSleeper(10);
-									sleeper.SleepUntil(5000, () => receivedCloseFrame);
+									tcpClient.ReceiveTimeout = Math.Min(tcpClient.ReceiveTimeout, 5000);
+									SetTimeout.OnBackground(() =>
+									{
+										IntervalSleeper sleeper = new IntervalSleeper(10);
+										sleeper.SleepUntil(5000, () => receivedCloseFrame);
+										expectingMoreMessages = false;
+									}, 0);
+								}
+								catch (ObjectDisposedException)
+								{
+									// The above access to ReceiveTimeout can throw an ObjectDisposedException because the underlying Socket was disposed already.
 									expectingMoreMessages = false;
-								}, 0);
+								}
 							}
 						}
 					}

@@ -281,15 +281,14 @@ namespace BPUtil
 		}
 		/// <summary>
 		/// <para>Runs an action that performs a synchronous operation, but does it on a background thread.</para>
-		/// <para>Returns an EventWaitHandle that can be waited on to block until the action has completed.</para>
+		/// <para>Returns a SynchronousOperationHandle that can be waited on to block until the action has completed.</para>
 		/// <para>This method is meant to be called from a synchronous context.</para>
 		/// </summary>
 		/// <param name="action">Action to run on a background thread.</param>
-		/// <param name="errorHandler">Error handling method.</param>
 		/// <returns></returns>
-		public static EventWaitHandle RunSynchronousOperationOnBackgroundThread(Action action, Action<Exception> errorHandler = null)
+		public static SynchronousOperationHandle RunSynchronousOperationOnBackgroundThread(Action action)
 		{
-			EventWaitHandle ewh = new EventWaitHandle(false, EventResetMode.ManualReset);
+			SynchronousOperationHandle handle = new SynchronousOperationHandle();
 			synchronousOperationPool.Enqueue(() =>
 			{
 				try
@@ -298,17 +297,73 @@ namespace BPUtil
 				}
 				catch (Exception ex)
 				{
-					if (errorHandler != null)
-						errorHandler(ex);
-					else
-						Logger.Debug(ex);
+					handle.Error = ex;
 				}
 				finally
 				{
-					ewh.Set();
+					handle.End();
 				}
 			});
-			return ewh;
+			return handle;
+		}
+		/// <summary>
+		/// An object that allows you to check the status of a synchronous operation executing on a background thread, and wait for the result.
+		/// </summary>
+		public class SynchronousOperationHandle
+		{
+			private EventWaitHandle ewh = new EventWaitHandle(false, EventResetMode.ManualReset);
+			/// <summary>
+			/// Gets the error that was thrown by the operation, or null if none was thrown.
+			/// </summary>
+			public Exception Error { get; internal set; } = null;
+			/// <summary>
+			/// Gets a value indicating if the operation has ended.
+			/// </summary>
+			public bool Ended => ewh.WaitOne(0);
+			/// <summary>
+			/// Marks the SynchronousOperation as ended.
+			/// </summary>
+			public void End()
+			{
+				ewh.Set();
+			}
+			/// <summary>
+			/// Waits indefinitely for the operation to end, and if an exception occurred during execution of the operation, the exeption is thrown by this method.
+			/// </summary>
+			/// <returns></returns>
+			public void WaitUntilEnded()
+			{
+				ewh.WaitOne();
+				if (Error != null)
+					throw Error;
+			}
+			/// <summary>
+			/// Waits indefinitely for the operation to end.  Does not throw an exception if one occurred during execution of the operation.  See <see cref="Error"/>.
+			/// </summary>
+			/// <returns></returns>
+			public void WaitUntilEndedNoThrow()
+			{
+				ewh.WaitOne();
+			}
+			/// <summary>
+			/// Waits for the operation to end, with a timeout. Returns true if the operation ended, false if the timeout was reached.  If an exception occurred during execution of the operation, the exeption is thrown by this method.
+			/// </summary>
+			/// <returns></returns>
+			public bool WaitUntilEnded(TimeSpan timeout)
+			{
+				bool result = ewh.WaitOne(timeout);
+				if (Error != null)
+					throw Error;
+				return result;
+			}
+			/// <summary>
+			/// Waits for the operation to end, with a timeout. Returns true if the operation ended, false if the timeout was reached.  Does not throw an exception if one occurred during execution of the operation.  See <see cref="Error"/>.
+			/// </summary>
+			/// <returns></returns>
+			public bool WaitUntilEndedNoThrow(TimeSpan timeout)
+			{
+				return ewh.WaitOne(timeout);
+			}
 		}
 	}
 }
