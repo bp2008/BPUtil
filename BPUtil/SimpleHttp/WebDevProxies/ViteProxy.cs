@@ -108,6 +108,7 @@ namespace BPUtil.SimpleHttp
 					allowConnectionKeepalive = true,
 					connectTimeoutMs = 5000,
 					networkTimeoutMs = 15000,
+					longReadTimeoutMinutes = 1440,
 					cancellationToken = cancellationToken
 				}).ConfigureAwait(false);
 				return null;

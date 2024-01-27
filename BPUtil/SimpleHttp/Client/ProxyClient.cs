@@ -340,7 +340,7 @@ namespace BPUtil.SimpleHttp.Client
 				if (sendRequestChunked)
 					streamToWrite = new WritableChunkedTransferEncodingStream(proxyStream);
 
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.Request.RequestBodyStream, streamToWrite, snoopy, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.Request.RequestBodyStream, streamToWrite, snoopy, options.networkTimeoutMs, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
 
 				if (sendRequestChunked)
 					await ((WritableChunkedTransferEncodingStream)streamToWrite).CloseAsync(options.cancellationToken).ConfigureAwait(false);
@@ -522,6 +522,7 @@ namespace BPUtil.SimpleHttp.Client
 
 			// Write the response header.
 			await _ProxyDataAsync(ProxyDataDirection.ResponseFromServer, p.tcpStream, responseHeaderBytes, responseHeaderBytes.Length, snoopy, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+			options.log.AppendLine("Response header written");
 
 			// Flush the tcpStream to ensure that future writes to outgoingStream are not out of order.
 			if (outgoingStream != p.tcpStream)
@@ -530,12 +531,17 @@ namespace BPUtil.SimpleHttp.Client
 			if (p.Response.Headers["Upgrade"] == "websocket")
 			{
 				// Asynchronously proxy additional incoming data to the remote server (do not await)
-				_ = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.tcpStream, proxyStream, snoopy, options.networkTimeoutMs, options.cancellationToken);
+				options.log.AppendLine("This is a WebSocket. Asynchronously beginning to proxy additional request stream data.");
+				_ = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.tcpStream, proxyStream, snoopy, options.longReadTimeoutMinutes * 60000, options.networkTimeoutMs, options.cancellationToken);
 				// Later code will handle proxying the response from the remote server to our client.
 			}
 			if (proxyResponseStream != null)
-				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+			{
+				options.log.AppendLine("Proxying response to client.");
+				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, options.longReadTimeoutMinutes * 60000, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+			}
 
+			options.log.AppendLine("Ensuring HTTP response is finished.");
 			await p.Response.FinishAsync(options.cancellationToken).ConfigureAwait(false);
 
 			//////////////////////
@@ -849,7 +855,7 @@ namespace BPUtil.SimpleHttp.Client
 				await target.WriteAsync(buf, 0, length, cts.Token).ConfigureAwait(false);
 		}
 
-		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy, int ioTimeoutMilliseconds, CancellationToken cancellationToken = default)
+		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy, int readTimeoutMilliseconds, int writeTimeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			byte[] buf = ByteUtil.BufferGet();
 			try
@@ -857,9 +863,9 @@ namespace BPUtil.SimpleHttp.Client
 				int read = 1;
 				while (read > 0)
 				{
-					read = await source.ReadAsync(buf, 0, buf.Length, cancellationToken).ConfigureAwait(false);
+					read = await ByteUtil.ReadAsyncWithTimeout(source, buf, 0, buf.Length, readTimeoutMilliseconds, cancellationToken).ConfigureAwait(false);
 					if (read > 0)
-						await _ProxyDataAsync(Direction, target, buf, read, snoopy, ioTimeoutMilliseconds, cancellationToken).ConfigureAwait(false);
+						await _ProxyDataAsync(Direction, target, buf, read, snoopy, writeTimeoutMilliseconds, cancellationToken).ConfigureAwait(false);
 				}
 			}
 			finally

@@ -24,6 +24,7 @@ namespace BPUtil.SimpleHttp.Client
 		/// <para>[Default: 15000] The connection timeout, in milliseconds.</para>
 		/// <para>Clamped to the range [1000, 60000].</para>
 		/// <para>This timeout applies only to the Connect operation (when connecting to the destination server to faciliate proxying).</para>
+		/// <para>See also <see cref="networkTimeoutMs"/>, <see cref="longReadTimeoutMinutes"/>.</para>
 		/// </summary>
 		public int connectTimeoutMs
 		{
@@ -38,14 +39,14 @@ namespace BPUtil.SimpleHttp.Client
 		}
 		private int _networkTimeoutMs = 60000;
 		/// <summary>
-		/// <para>[Default: 60000] The send and receive timeout to set for both TcpClients (incoming and outgoing), in milliseconds.</para>
+		/// <para>[Default: 60000] The send and receive timeout, in milliseconds.</para>
 		/// <para>Clamped to the range [1000, 600000].</para>
 		/// <para>This timeout applies to:</para>
 		/// <para>* Reading the HTTP request body from the client.</para>
-		/// <para>* Reading the HTTP response header from the destination server.</para>
+		/// <para>* Reading the HTTP response header from the destination server (which may at a later time be moved into its own timeout setting).</para>
 		/// <para>* All other proxy operations that send data on a network socket.</para>
 		/// <para>If a destination sometimes has slow time-to-first-byte, you may need to increase this timeout.</para>
-		/// <para>This timeout does not apply when reading a response body or WebSocket data because these actions often sit idle for extended periods of time.</para>
+		/// <para>See also <see cref="connectTimeoutMs"/>, <see cref="longReadTimeoutMinutes"/>.</para>
 		/// </summary>
 		public int networkTimeoutMs
 		{
@@ -56,6 +57,26 @@ namespace BPUtil.SimpleHttp.Client
 			set
 			{
 				_networkTimeoutMs = value.Clamp(1000, 600000);
+			}
+		}
+		private int _longReadTimeoutMinutes = 15;
+		/// <summary>
+		/// <para>[Default: 15] The "long read" timeout, in minutes.</para>
+		/// <para>Clamped to the range [1, 1440].</para>
+		/// <para>This timeout applies to read operations where the remote endpoint may legitimately not have anything to send for an extended period of time, including:</para>
+		/// <para>* Reading an HTTP response body</para>
+		/// <para>* Reading WebSocket data from either end of a proxied connection.</para>
+		/// <para>See also <see cref="connectTimeoutMs"/>, <see cref="networkTimeoutMs"/>.</para>
+		/// </summary>
+		public int longReadTimeoutMinutes
+		{
+			get
+			{
+				return _longReadTimeoutMinutes;
+			}
+			set
+			{
+				_longReadTimeoutMinutes = value.Clamp(1, 1440);
 			}
 		}
 		/// <summary>

@@ -34,16 +34,13 @@ namespace BPUtil
 		/// <param name="newValue">The new value to add.</param>
 		public void Add(double newValue)
 		{
-			if (newValue != null)
-			{
-				ticksum -= ticklist[tickindex];  // subtract value falling off
-				ticksum += newValue;             // add new value
-				ticklist[tickindex] = newValue;  // save new value so it can be subtracted later
-				if (++tickindex == MAXSAMPLES)   // inc buffer index
-					tickindex = 0;
-				if (numTicks < MAXSAMPLES)
-					numTicks++;
-			}
+			ticksum -= ticklist[tickindex];  // subtract value falling off
+			ticksum += newValue;             // add new value
+			ticklist[tickindex] = newValue;  // save new value so it can be subtracted later
+			if (++tickindex == MAXSAMPLES)   // inc buffer index
+				tickindex = 0;
+			if (numTicks < MAXSAMPLES)
+				numTicks++;
 		}
 
 		/// <summary>

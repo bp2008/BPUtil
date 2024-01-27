@@ -248,6 +248,10 @@ namespace BPUtil.SimpleHttp
 		/// An exception that was caught but not logged by the last request processing routine.  Null if no exception was caught by the last request processing routine or if the exception was already logged.
 		/// </summary>
 		private Exception _lastUnloggedProcessingException = null;
+		/// <summary>
+		/// Gets the proxyOptions being used by the active request, or null if this HttpProcessor is not currently handling a an async proxy request.
+		/// </summary>
+		public ProxyOptions proxyOptions { get; private set; } = null;
 		#endregion
 
 		/// <summary>
@@ -433,6 +437,7 @@ namespace BPUtil.SimpleHttp
 		{
 			Request = null;
 			Response = null;
+			proxyOptions = null;
 			_lastUnloggedProcessingException = null;
 
 			// While the server is under low load, a larger buffer is allowed for better write performance.
@@ -844,13 +849,17 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 		/// <summary>
-		/// Acts as a proxy server, sending the request to a different URL.  This method starts a new (and unpooled) thread to handle the response from the remote server.
-		/// The "Host" header is rewritten (or added) and output as the first header.
+		/// <para>Acts as a proxy server, sending the request to a different URL.</para>
+		/// <para>The "Host" header is rewritten (or added) and output as the first header.</para>
+		/// <para>This method is fully asynchronous, so long-running proxy operations do not tie up a thread.</para>
 		/// </summary>
 		/// <param name="newUrl">The URL to proxy the original request to.</param>
 		/// <param name="options">Optional options to control the behavior of the proxy request.</param>
 		public async Task ProxyToAsync(string newUrl, Client.ProxyOptions options = null)
 		{
+			if (options == null)
+				options = new ProxyOptions();
+			proxyOptions = options;
 			options?.bet?.Start("Entering ProxyToAsync");
 			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), options).ConfigureAwait(false);
 			options?.bet?.Stop();
