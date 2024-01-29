@@ -78,7 +78,8 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/> that has already read the request headers.  The WebSocket handshake will be completed automatically.  It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
 		/// </summary>
 		/// <param name="p">An <see cref="HttpProcessor"/> to bind to the new WebSocket instance.</param>
-		public WebSocket(HttpProcessor p) : this(p.tcpClient)
+		/// <param name="additionalResponseHeaders">Optional collection of HTTP headers to include in the HTTP response.</param>
+		public WebSocket(HttpProcessor p, HttpHeaderCollection additionalResponseHeaders = null) : this(p.tcpClient)
 		{
 			if (!IsWebSocketRequest(p))
 				throw new Exception("Unable to create a WebSocket from a connection that did not request a websocket upgrade.");
@@ -92,7 +93,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 				headers.Set("Sec-WebSocket-Version", "13");
 				throw new HttpProcessor.HttpProcessorException("400 Bad Request", "An unsupported web socket version was requested (\"" + version + "\").", headers);
 			}
-			p.Response.WebSocketUpgradeSync();
+			p.Response.WebSocketUpgradeSync(additionalResponseHeaders);
 		}
 
 		/// <summary>
@@ -101,7 +102,8 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <param name="p">An <see cref="HttpProcessor"/> to bind to the new WebSocket instance.</param>
 		/// <param name="onMessageReceived">A callback method which is called whenever a message is received from the WebSocket.</param>
 		/// <param name="onClose">A callback method which is called when the WebSocket is closed by the remote endpoint.</param>
-		public WebSocket(HttpProcessor p, Action<WebSocketFrame> onMessageReceived, Action<WebSocketCloseFrame> onClose) : this(p)
+		/// <param name="additionalResponseHeaders">Optional collection of HTTP headers to include in the HTTP response.</param>
+		public WebSocket(HttpProcessor p, Action<WebSocketFrame> onMessageReceived, Action<WebSocketCloseFrame> onClose, HttpHeaderCollection additionalResponseHeaders = null) : this(p, additionalResponseHeaders)
 		{
 			StartReading(onMessageReceived, onClose);
 		}

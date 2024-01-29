@@ -534,6 +534,15 @@ namespace BPUtil.SimpleHttp
 				this.Set(name, value);
 			}
 		}
+		/// <summary>
+		/// Adds all headers from another HttpHeaderCollection to this HttpHeaderCollection.
+		/// </summary>
+		/// <param name="additionalResponseHeaders">Headers to add to this collection.</param>
+		public void Merge(HttpHeaderCollection additionalResponseHeaders)
+		{
+			foreach (HttpHeader header in additionalResponseHeaders)
+				this.Add(header);
+		}
 		/// <inheritdoc />
 		public override string ToString()
 		{

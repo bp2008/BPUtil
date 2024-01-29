@@ -760,10 +760,11 @@ namespace BPUtil.SimpleHttp
 		/// <para>Resets the response, then writes response headers to finish the WebSocket handshake with the client. No extensions are supported (such as compression) at this time.</para>
 		/// <para>Afterward, the tcpStream will be ready to hand over to the WebSocket, and this Response object will be finished.</para>
 		/// </summary>
-		public void WebSocketUpgradeSync()
+		/// <param name="additionalResponseHeaders">Optional collection of HTTP headers to include in the HTTP response.</param>
+		public void WebSocketUpgradeSync(HttpHeaderCollection additionalResponseHeaders = null)
 		{
 			_checkAsyncUsage = false;
-			_Prep_WebSocketUpgrade();
+			_Prep_WebSocketUpgrade(additionalResponseHeaders);
 			FinishSync();
 		}
 
@@ -771,17 +772,20 @@ namespace BPUtil.SimpleHttp
 		/// <para>Resets the response, then writes response headers to finish the WebSocket handshake with the client. No extensions are supported (such as compression) at this time.</para>
 		/// <para>Afterward, the tcpStream will be ready to hand over to the WebSocket, and this Response object will be finished.</para>
 		/// </summary>
+		/// <param name="additionalResponseHeaders">Optional collection of HTTP headers to include in the HTTP response.</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
-		public Task WebSocketUpgradeAsync(CancellationToken cancellationToken = default)
+		public Task WebSocketUpgradeAsync(HttpHeaderCollection additionalResponseHeaders = null, CancellationToken cancellationToken = default)
 		{
 			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");
-			_Prep_WebSocketUpgrade();
+			_Prep_WebSocketUpgrade(additionalResponseHeaders);
 			return FinishAsync(cancellationToken);
 		}
-		private void _Prep_WebSocketUpgrade()
+		private void _Prep_WebSocketUpgrade(HttpHeaderCollection additionalResponseHeaders)
 		{
 			Reset("101 Switching Protocols");
+			if (additionalResponseHeaders != null)
+				Headers.Merge(additionalResponseHeaders);
 			Headers["Upgrade"] = "websocket";
 			Headers["Sec-WebSocket-Accept"] = WebSockets.WebSocket.CreateSecWebSocketAcceptValue(p.Request.Headers.Get("sec-websocket-key"));
 		}

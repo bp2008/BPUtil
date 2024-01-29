@@ -25,6 +25,10 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// </summary>
 		public readonly string SecWebsocketKey;
 		/// <summary>
+		/// The collection of HTTP headers sent by the WebSocket server.
+		/// </summary>
+		public HttpHeaderCollection ResponseHeaders { get; private set; }
+		/// <summary>
 		/// Creates a new WebSocket and connects it to the specified URL. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
 		/// </summary>
 		/// <param name="url">A URL to connect to.</param>
@@ -105,7 +109,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 			}
 
 			// Read HTTP Headers
-			Dictionary<string, string> httpHeaders = new Dictionary<string, string>();
+			ResponseHeaders = new HttpHeaderCollection();
 			string line;
 			while ((line = ByteUtil.ReadPrintableASCIILine(tcpStream)) != "")
 			{
@@ -118,17 +122,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 				int pos = separator + 1;
 				while (pos < line.Length && line[pos] == ' ')
 					pos++; // strip any spaces
-
 				string value = line.Substring(pos, line.Length - pos);
-
-				string nameLower = name.ToLower();
-				if (httpHeaders.TryGetValue(nameLower, out string existingValue))
-					httpHeaders[nameLower] = existingValue + "," + value;
-				else
-					httpHeaders[nameLower] = value;
+				ResponseHeaders.Add(name, value);
 			}
 
-			if (!httpHeaders.TryGetValue("connection", out string header_connection))
+			if (!ResponseHeaders.TryGetValue("Connection", out string header_connection))
 				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Connection\".");
 
 			string[] connectionHeaderValues = header_connection
@@ -139,12 +137,12 @@ namespace BPUtil.SimpleHttp.WebSockets
 			if (!connectionHeaderValues.Contains("upgrade", true))
 				throw new Exception("WebSocket handshake could not complete due to header \"Connection: " + header_connection + "\". Expected: \"Connection: Upgrade\".");
 
-			if (!httpHeaders.TryGetValue("upgrade", out string header_upgrade))
+			if (!ResponseHeaders.TryGetValue("Upgrade", out string header_upgrade))
 				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Upgrade\".");
 			if (header_upgrade != "websocket")
 				throw new Exception("WebSocket handshake could not complete due to header \"Upgrade: " + header_upgrade + "\". Expected: \"Upgrade: websocket\".");
 
-			if (!httpHeaders.TryGetValue("sec-websocket-accept", out string header_sec_websocket_accept))
+			if (!ResponseHeaders.TryGetValue("Sec-Websocket-Accept", out string header_sec_websocket_accept))
 				throw new Exception("WebSocket handshake could not complete due to missing required http header \"Sec-Websocket-Accept\".");
 			if (header_sec_websocket_accept != CreateSecWebSocketAcceptValue(SecWebsocketKey))
 				throw new Exception("WebSocket handshake could not complete due to header \"Sec-Websocket-Accept: " + header_sec_websocket_accept + "\" with unexpected value.");

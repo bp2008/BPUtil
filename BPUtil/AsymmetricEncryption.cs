@@ -42,7 +42,7 @@ namespace BPUtil
 		/// </summary>
 		public static int keySize = 4096;
 		/// <summary>
-		/// Generates new 4096-bit RSA keys without persisting them in the operating system's keystore.
+		/// Generates new RSA keys (see <see cref="keySize"/>) without persisting them in the operating system's keystore.
 		/// </summary>
 		/// <param name="publicKeyBase64">CspBlob containing public key information, base64 encoded. Can be used for encrypting using <see cref="EncryptWithKey"/>.</param>
 		/// <param name="privateKeyBase64">The private (and public) components of the RSA key, base64 encoded. Can be used for encrypting using <see cref="EncryptWithKey"/> and decrypting using <see cref="DecryptWithKey"/>.</param>
@@ -55,7 +55,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// <para>Generates new 4096-bit RSA keys, saving them in a key container in the operating system's keystore. Any existing key container with this name is deleted first.</para>
+		/// <para>Generates new RSA keys (see <see cref="keySize"/>), saving them in a key container in the operating system's keystore. Any existing key container with this name is deleted first.</para>
 		/// <para>The public key is exported via an out string parameter, but the private key information is not exported.</para>
 		/// <para>If you need to export the private key, you shouldn't bother using the operating system's keystore.</para>
 		/// </summary>
@@ -154,7 +154,7 @@ namespace BPUtil
 				rsa.Dispose();
 			}
 		}
-#region Encrypt/Decrypt With Given Key
+		#region Encrypt/Decrypt With Given Key
 		/// <summary>
 		/// Encrypts the given data using the public key from the given base64-encoded CspBlob.
 		/// </summary>
@@ -185,8 +185,8 @@ namespace BPUtil
 				return rsa.Decrypt(data, true);
 			}
 		}
-#endregion
-#region Encrypt/Decrypt With Keystore
+		#endregion
+		#region Encrypt/Decrypt With Keystore
 		/// <summary>
 		/// Encrypts the given data using a public key from the operating system's keystore. If the key does not already exist, a new one is created.
 		/// </summary>
@@ -217,8 +217,8 @@ namespace BPUtil
 				return rsa.Decrypt(data, true);
 			}
 		}
-#endregion
-#region Sign/Verify With Given Key
+		#endregion
+		#region Sign/Verify With Given Key
 		/// <summary>
 		/// Verifies the given signature against a hash of the data using the public key from the given base64-encoded CspBlob. Returns true if the signature is verified.
 		/// </summary>
@@ -254,8 +254,8 @@ namespace BPUtil
 				return rsa.SignHash(data, hashAlg.ToString());
 			}
 		}
-#endregion
-#region Sign/Verify With Keystore
+		#endregion
+		#region Sign/Verify With Keystore
 		/// <summary>
 		/// Verifies the given signature against a hash of the data using a public key from the operating system's keystore. If the key does not already exist, verification will fail. Returns true if the signature is verified.
 		/// </summary>
@@ -314,7 +314,7 @@ namespace BPUtil
 					throw new Exception("Unimplemented HashAlgSelector value: " + hashAlg);
 			}
 		}
-#endregion
+		#endregion
 		/// <summary>
 		/// Returns a new CspParameters object configured for the specified keystore and key container name.
 		/// </summary>
