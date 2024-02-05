@@ -108,6 +108,25 @@ namespace UnitTests
 				+ "Z[1] = \"\"" + Environment.NewLine
 				+ "Z[2] = null", map.ToString());
 		}
+		[TestMethod]
+		public void TestLoop_LoopObject()
+		{
+
+			COLoopA loopedA = new COLoopA();
+			COLoopB loopedB = new COLoopB();
+			loopedA.child = loopedB;
+			loopedB.child = loopedA;
+
+			// Test that ObjectFieldMap does not process loops.  If it does, this method will either infinite loop or will stack overflow.
+
+			ObjectFieldMap map = new ObjectFieldMap(loopedA);
+			Assert.AreEqual("name = \"A\"" + Environment.NewLine
+				+ "child.name = \"B\"", map.ToString());
+
+			map = new ObjectFieldMap(loopedB);
+			Assert.AreEqual("name = \"B\"" + Environment.NewLine
+				+ "child.name = \"A\"", map.ToString());
+		}
 		class SO
 		{
 			public int A { get; set; }
@@ -132,6 +151,16 @@ namespace UnitTests
 			public double[] Y;
 			public string[] Z;
 			public CO4(SO x, double[] y, string[] z) { X = x; Y = y; Z = z; }
+		}
+		class COLoopA
+		{
+			public string name = "A";
+			public COLoopB child;
+		}
+		class COLoopB
+		{
+			public string name = "B";
+			public COLoopA child;
 		}
 	}
 }
