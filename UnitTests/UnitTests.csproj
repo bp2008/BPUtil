@@ -58,6 +58,7 @@
     <Compile Include="TestChunkedTransferEncodingStreams.cs" />
     <Compile Include="TestConcatenatedStream.cs" />
     <Compile Include="TestHttpHeaderCollection.cs" />
+    <Compile Include="TestObjectFieldMap.cs" />
     <Compile Include="TestObjectChangeHelper.cs" />
     <Compile Include="TestSubstream.cs" />
     <Compile Include="TestThrottle.cs" />
