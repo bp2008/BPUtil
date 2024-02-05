@@ -7,7 +7,9 @@ using System.Threading.Tasks;
 namespace BPUtil
 {
 	/// <summary>
-	/// A class which scans two objects to determine what changed, then replays the changes on a third object.
+	/// <para>A class which scans two objects to determine what changed, then replays the changes on a third object which may be different from the "Original" object.</para>
+	/// <para>This behaves like a 3-way merge where any merge conflicts are automatically resolved by using your version of the data.</para>
+	/// <para>WARNING: This can result in undesired behavior in certain cases, especially when arrays or lists are involved, as items may have been reordered such that your changes apply to the wrong items.</para>
 	/// </summary>
 	public class ObjectChangeReplay
 	{

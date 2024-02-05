@@ -86,6 +86,7 @@
     <Compile Include="MVC\ControllerAsync.cs" />
     <Compile Include="MVC\RequiresHttpMethodAttribute.cs" />
     <Compile Include="ObjectCacheSimple.cs" />
+    <Compile Include="ObjectMerge.cs" />
     <Compile Include="ObjectChangeReplay.cs" />
     <Compile Include="ObjectFieldMap.cs" />
     <Compile Include="ObjectChangeHelper2.cs" />

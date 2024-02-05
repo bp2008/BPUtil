@@ -14,11 +14,22 @@ namespace BPUtil
 	/// </summary>
 	public class ObjectFieldMap
 	{
-		class FieldData
+		public class FieldData
 		{
 			public string Path;
 			public object Value;
 			public FieldData(string path, object value) { Path = path; Value = value; }
+			public override string ToString()
+			{
+				if (Value == null)
+					return Path + " = null";
+				else if (Value is string)
+					return Path + " = \"" + Value + "\"";
+				else if (Value is char)
+					return Path + " = '" + Value + "'";
+				else
+					return Path + " = " + Value;
+			}
 		}
 		/// <summary>
 		/// <para>The keys are strings which identify the field or property or IList index which contains the value.  Examples: "Name", "Child.Name", "Children[0].Name".</para>
@@ -108,16 +119,7 @@ namespace BPUtil
 			{
 				if (sb.Length > 0)
 					sb.AppendLine();
-				sb.Append(item.Path);
-				sb.Append(" = ");
-				if (item.Value == null)
-					sb.Append("null");
-				else if (item.Value is string)
-					sb.Append('"').Append(item.Value).Append('"');
-				else if (item.Value is char)
-					sb.Append('\'').Append(item.Value).Append('\'');
-				else
-					sb.Append(item.Value.ToString());
+				sb.Append(item.ToString());
 			}
 			return sb.ToString();
 		}
@@ -125,15 +127,23 @@ namespace BPUtil
 		/// Returns a Dictionary mapping Path to Value, built from <see cref="fieldDataList"/>.
 		/// </summary>
 		/// <returns></returns>
-		private Dictionary<string, object> ToDictionary()
+		internal Dictionary<string, object> ToDictionary()
 		{
 			return fieldDataList.ToDictionary(f => f.Path, f => f.Value);
+		}
+		/// <summary>
+		///  Gets <see cref="fieldDataList"/> as an array.
+		/// </summary>
+		/// <returns></returns>
+		internal FieldData[] Unordered()
+		{
+			return fieldDataList.ToArray();
 		}
 		/// <summary>
 		/// Gets <see cref="fieldDataList"/> as an array, sorted by Path in the specified order.
 		/// </summary>
 		/// <param name="descending">If true, it will be ordered descending (e.g. ["Z", "M", "A"]).</param>
-		private FieldData[] Ordered(bool descending = false)
+		internal FieldData[] Ordered(bool descending = false)
 		{
 			FieldData[] arr = fieldDataList.ToArray();
 			if (descending)
@@ -263,7 +273,12 @@ namespace BPUtil
 					if (index == null)
 						SetMemberValue(obj, memberName, value);
 					else if (obj is IList list)
+					{
+						// TODO: Unit test this using an array.
+						// TODO: Unit test this using a List.
+						// TODO: Unit test an Apply that tries to make the IList longer.  That doesn't happen, so the test should fail.  Then make this actually make the IList longer so the error no longer occurs.
 						list[index.Value] = value;
+					}
 					else
 						throw new Exception("Unable to set value at index " + index.Value + " because type " + obj.GetType().FullName + " does not inherit from IList.");
 				}
