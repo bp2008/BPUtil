@@ -284,7 +284,7 @@ namespace BPUtil.NativeWin
 		/// <summary>
 		/// Returns true if the window with the given Handle has the "TopMost" style.
 		/// </summary>
-		/// <param name="hWnd"Window Handle></param>
+		/// <param name="hWnd">Window Handle</param>
 		/// <returns></returns>
 		public static bool IsWindowTopMost(IntPtr hWnd)
 		{
