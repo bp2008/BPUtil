@@ -23,7 +23,7 @@ namespace BPUtil
 		{
 			ObjectFieldMap aMap = new ObjectFieldMap(A);
 			ObjectFieldMap bMap = new ObjectFieldMap(B);
-			diff = aMap ^ bMap;
+			diff = aMap.Diff(bMap);
 		}
 		/// <summary>
 		/// Applies stored changes to object C.

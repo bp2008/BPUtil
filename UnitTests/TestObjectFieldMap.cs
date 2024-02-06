@@ -11,6 +11,7 @@ namespace UnitTests
 	[TestClass]
 	public class TestObjectFieldMap
 	{
+		private static string SEP = ", " + Environment.NewLine;
 		[TestMethod]
 		public void TestObjectFieldMap_ArgumentExceptions()
 		{
@@ -41,8 +42,8 @@ namespace UnitTests
 			list.Add(4);
 			list.Add(8);
 			ObjectFieldMap map = new ObjectFieldMap(list);
-			Assert.AreEqual("[0] = 2" + Environment.NewLine
-				+ "[1] = 4" + Environment.NewLine
+			Assert.AreEqual("[0] = 2" + SEP
+				+ "[1] = 4" + SEP
 				+ "[2] = 8", map.ToString());
 		}
 		[TestMethod]
@@ -50,7 +51,7 @@ namespace UnitTests
 		{
 			SO obj = new SO(1, "s");
 			ObjectFieldMap map = new ObjectFieldMap(obj);
-			Assert.AreEqual("A = 1" + Environment.NewLine + "B = \"s\"", map.ToString());
+			Assert.AreEqual("A = 1" + SEP + "B = \"s\"", map.ToString());
 		}
 		[TestMethod]
 		public void TestObjectFieldMap_SimpleObject2()
@@ -68,9 +69,9 @@ namespace UnitTests
 		{
 			CO obj = new CO(new SO(1, "s"), null, "&");
 			ObjectFieldMap map = new ObjectFieldMap(obj);
-			Assert.AreEqual("X.A = 1" + Environment.NewLine
-				+ "X.B = \"s\"" + Environment.NewLine
-				+ "Y = null" + Environment.NewLine
+			Assert.AreEqual("X.A = 1" + SEP
+				+ "X.B = \"s\"" + SEP
+				+ "Y = null" + SEP
 				+ "Z = \"&\"", map.ToString());
 		}
 		[TestMethod]
@@ -78,9 +79,9 @@ namespace UnitTests
 		{
 			CO obj = new CO(new SO(1, "s"), null, null);
 			ObjectFieldMap map = new ObjectFieldMap(obj);
-			Assert.AreEqual("X.A = 1" + Environment.NewLine
-				+ "X.B = \"s\"" + Environment.NewLine
-				+ "Y = null" + Environment.NewLine
+			Assert.AreEqual("X.A = 1" + SEP
+				+ "X.B = \"s\"" + SEP
+				+ "Y = null" + SEP
 				+ "Z = null", map.ToString());
 		}
 		[TestMethod]
@@ -88,10 +89,10 @@ namespace UnitTests
 		{
 			CO obj = new CO(new SO(1, "s"), new SO(2, null), "m");
 			ObjectFieldMap map = new ObjectFieldMap(obj);
-			Assert.AreEqual("X.A = 1" + Environment.NewLine
-				+ "X.B = \"s\"" + Environment.NewLine
-				+ "Y.A = 2" + Environment.NewLine
-				+ "Y.B = null" + Environment.NewLine
+			Assert.AreEqual("X.A = 1" + SEP
+				+ "X.B = \"s\"" + SEP
+				+ "Y.A = 2" + SEP
+				+ "Y.B = null" + SEP
 				+ "Z = \"m\"", map.ToString());
 		}
 		[TestMethod]
@@ -99,13 +100,13 @@ namespace UnitTests
 		{
 			CO4 obj = new CO4(new SO(-1, ""), new double[] { 0.1, -0.9, double.MaxValue }, new string[] { "First", "", null });
 			ObjectFieldMap map = new ObjectFieldMap(obj);
-			Assert.AreEqual("X.A = -1" + Environment.NewLine
-				+ "X.B = \"\"" + Environment.NewLine
-				+ "Y[0] = 0.1" + Environment.NewLine
-				+ "Y[1] = -0.9" + Environment.NewLine
-				+ "Y[2] = 1.79769313486232E+308" + Environment.NewLine
-				+ "Z[0] = \"First\"" + Environment.NewLine
-				+ "Z[1] = \"\"" + Environment.NewLine
+			Assert.AreEqual("X.A = -1" + SEP
+				+ "X.B = \"\"" + SEP
+				+ "Y[0] = 0.1" + SEP
+				+ "Y[1] = -0.9" + SEP
+				+ "Y[2] = 1.79769313486232E+308" + SEP
+				+ "Z[0] = \"First\"" + SEP
+				+ "Z[1] = \"\"" + SEP
 				+ "Z[2] = null", map.ToString());
 		}
 		[TestMethod]
@@ -120,11 +121,11 @@ namespace UnitTests
 			// Test that ObjectFieldMap does not process loops.  If it does, this method will either infinite loop or will stack overflow.
 
 			ObjectFieldMap map = new ObjectFieldMap(loopedA);
-			Assert.AreEqual("name = \"A\"" + Environment.NewLine
+			Assert.AreEqual("name = \"A\"" + SEP
 				+ "child.name = \"B\"", map.ToString());
 
 			map = new ObjectFieldMap(loopedB);
-			Assert.AreEqual("name = \"B\"" + Environment.NewLine
+			Assert.AreEqual("name = \"B\"" + SEP
 				+ "child.name = \"A\"", map.ToString());
 		}
 		class SO

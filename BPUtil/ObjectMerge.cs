@@ -71,8 +71,7 @@ namespace BPUtil
 					// No exact match.  It is possible the other changeset changed a descendant or ancestor.
 					foreach (string theirPath in theirPaths)
 					{
-						if ((theirPath.Length > yourPath.Length && theirPath.StartsWith(yourPath))
-							|| (theirPath.Length < yourPath.Length && yourPath.StartsWith(theirPath)))
+						if (ObjectFieldMap.FieldData.PathsAreSameBranch(theirPath, yourPath))
 						{
 							// Changes were made to different nodes IN THE SAME BRANCH, which is a different kind of conflict.
 							theirValue = theirMap[theirPath];

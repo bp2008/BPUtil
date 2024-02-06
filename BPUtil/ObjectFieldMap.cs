@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization;
@@ -16,7 +17,13 @@ namespace BPUtil
 	{
 		public class FieldData
 		{
+			/// <summary>
+			/// Object path string. Examples: "Name", "Child.Name", "Children[0].Name"
+			/// </summary>
 			public string Path;
+			/// <summary>
+			/// Value to set at the location defined by the Path.
+			/// </summary>
 			public object Value;
 			public FieldData(string path, object value) { Path = path; Value = value; }
 			public override string ToString()
@@ -29,6 +36,28 @@ namespace BPUtil
 					return Path + " = '" + Value + "'";
 				else
 					return Path + " = " + Value;
+			}
+			/// <summary>
+			/// Returns true if the paths are the same or if one of the paths refers to an ancestor of the other path.
+			/// </summary>
+			/// <param name="pathA">FieldData path string.</param>
+			/// <param name="pathB">FieldData path string.</param>
+			/// <returns></returns>
+			public static bool PathsAreSameBranch(string pathA, string pathB)
+			{
+				if (pathA == pathB)
+					return true;
+				if (pathA.Length > pathB.Length && pathA.StartsWith(pathB))
+				{
+					char nextChar = pathA[pathB.Length];
+					return nextChar == '.' || nextChar == '[';
+				}
+				if (pathB.Length > pathA.Length && pathB.StartsWith(pathA))
+				{
+					char nextChar = pathB[pathA.Length];
+					return nextChar == '.' || nextChar == '[';
+				}
+				return false;
 			}
 		}
 		/// <summary>
@@ -118,7 +147,7 @@ namespace BPUtil
 			foreach (FieldData item in fieldDataList)
 			{
 				if (sb.Length > 0)
-					sb.AppendLine();
+					sb.AppendLine(", ");
 				sb.Append(item.ToString());
 			}
 			return sb.ToString();
@@ -147,9 +176,9 @@ namespace BPUtil
 		{
 			FieldData[] arr = fieldDataList.ToArray();
 			if (descending)
-				Array.Sort(arr, (a, b) => StringSorting.CompareStringsContainingIntegers(a.Path, b.Path));
-			else
 				Array.Sort(arr, (a, b) => -1 * StringSorting.CompareStringsContainingIntegers(a.Path, b.Path));
+			else
+				Array.Sort(arr, (a, b) => StringSorting.CompareStringsContainingIntegers(a.Path, b.Path));
 			return arr;
 		}
 		#region Diff - Find changes between two objects
@@ -161,27 +190,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public static ObjectFieldMap operator ^(ObjectFieldMap left, ObjectFieldMap right)
 		{
-			List<string> allPaths = new List<string>(left.fieldDataList.Select(f => f.Path));
-			allPaths.AddRange(right.fieldDataList.Select(f => f.Path));
-			HashSet<string> includedPaths = new HashSet<string>();
-
-			Dictionary<string, object> leftMap = left.ToDictionary();
-			Dictionary<string, object> rightMap = right.ToDictionary();
-			ObjectFieldMap diff = new ObjectFieldMap();
-			foreach (string path in allPaths)
-			{
-				if (!includedPaths.Contains(path))
-				{
-					includedPaths.Add(path);
-					bool hasOriginalValue = leftMap.TryGetValue(path, out object originalValue);
-					bool hasModifiedValue = rightMap.TryGetValue(path, out object modifiedValue);
-					if (!hasModifiedValue)
-						diff.fieldDataList.Add(new FieldData(path, null));
-					else if (!hasOriginalValue || !Object.Equals(originalValue, modifiedValue))
-						diff.fieldDataList.Add(new FieldData(path, modifiedValue));
-				}
-			}
-			return diff;
+			return left.Diff(right);
 		}
 		/// <summary>
 		/// Returns a new ObjectFieldMap that contains only values from the [other] object that are different from those in [this] object.  Same as using the XOR operator ([this] ^ [other]).
@@ -190,7 +199,43 @@ namespace BPUtil
 		/// <returns></returns>
 		public ObjectFieldMap Diff(ObjectFieldMap other)
 		{
-			return this ^ other;
+			string[] thisPaths = this.fieldDataList.Select(f => f.Path).ToArray();
+			string[] otherPaths = other.fieldDataList.Select(f => f.Path).ToArray();
+			HashSet<string> includedPaths = new HashSet<string>();
+
+			Dictionary<string, object> thisMap = this.ToDictionary();
+			Dictionary<string, object> otherMap = other.ToDictionary();
+			ObjectFieldMap diff = new ObjectFieldMap();
+			foreach (string path in thisPaths)
+			{
+				if (!includedPaths.Contains(path))
+				{
+					includedPaths.Add(path);
+					object originalValue = thisMap[path];
+					bool hasModifiedValue = otherMap.TryGetValue(path, out object modifiedValue);
+					if (!hasModifiedValue)
+					{
+						// The [other] object does not have this exact path defined.
+						// If it doesn't define another path in this branch, then we'll mark this path as being set to null.
+						if (!otherPaths.Any(p => FieldData.PathsAreSameBranch(p, path)))
+							diff.fieldDataList.Add(new FieldData(path, null));
+					}
+					else if (!Object.Equals(originalValue, modifiedValue))
+						diff.fieldDataList.Add(new FieldData(path, modifiedValue));
+				}
+			}
+			foreach (string path in otherPaths)
+			{
+				if (!includedPaths.Contains(path))
+				{
+					includedPaths.Add(path);
+					bool hasOriginalValue = thisMap.TryGetValue(path, out object originalValue);
+					object modifiedValue = otherMap[path];
+					if (!hasOriginalValue || !Object.Equals(originalValue, modifiedValue))
+						diff.fieldDataList.Add(new FieldData(path, modifiedValue));
+				}
+			}
+			return diff;
 		}
 		#endregion
 		#region Apply Changes to another object
@@ -221,7 +266,7 @@ namespace BPUtil
 		/// <param name="path">Property or field name(s) and IList indices as they would be written in C# code.  Examples: "Name", "Child.Name", "Children[0].Name", "A.B[0].C.D[5]".</param>
 		/// <param name="value">Value to set.</param>
 		/// <exception cref="Exception">Throws if "key" is invalid, or if the key defines a location that can't be found or constructed using default constructors available for relevant types.</exception>
-		private void Apply(object root, string path, object value)
+		private static void Apply(object root, string path, object value)
 		{
 			if (root == null)
 				throw new ArgumentNullException(nameof(root));
@@ -232,6 +277,8 @@ namespace BPUtil
 
 			// Traverse the object and its descendants to reach the location specified by [path].
 			object obj = root;
+			object parent = null;
+			MemberInfo myMemberInfo = null;
 			string[] pathSegments = path.Split('.');
 			while (pathSegments.Length > 0)
 			{
@@ -274,9 +321,23 @@ namespace BPUtil
 						SetMemberValue(obj, memberName, value);
 					else if (obj is IList list)
 					{
-						// TODO: Unit test this using an array.
-						// TODO: Unit test this using a List.
-						// TODO: Unit test an Apply that tries to make the IList longer.  That doesn't happen, so the test should fail.  Then make this actually make the IList longer so the error no longer occurs.
+						if (list.Count < index.Value + 1)
+						{
+							if (list.IsFixedSize)
+							{
+								if (parent == null)
+									throw new Exception("ObjectFieldMap can't construct a new " + list.GetType() + " with longer length for you because it is the root object being modified.");
+								IList longerList = LengthenFixedSizeList(list, index.Value + 1);
+								SetMemberValue(parent, myMemberInfo, longerList);
+								obj = list = longerList;
+							}
+							else
+							{
+								object defValue = GetDefaultValue(value);
+								while (list.Count < index.Value + 1)
+									list.Add(defValue);
+							}
+						}
 						list[index.Value] = value;
 					}
 					else
@@ -285,7 +346,7 @@ namespace BPUtil
 				else
 				{
 					// We need to move one level deeper
-					MemberInfo childMemberInfo = GetMemberInfo(obj, memberName);
+					MemberInfo childMemberInfo = myMemberInfo = GetMemberInfo(obj, memberName);
 					object referencedChild = GetMemberValue(obj, childMemberInfo);
 					if (referencedChild == null)
 					{
@@ -295,9 +356,9 @@ namespace BPUtil
 						referencedChild = ConstructInstanceOfType(childType, size);
 						SetMemberValue(obj, childMemberInfo, referencedChild);
 					}
+					parent = obj;
 					obj = referencedChild;
 				}
-				pathSegments = pathSegments.Skip(1).ToArray();
 			}
 		}
 		#endregion
@@ -309,7 +370,7 @@ namespace BPUtil
 		/// <param name="memberName">Field or property name.</param>
 		/// <returns></returns>
 		/// <exception cref="Exception">Throws if the requested member does not exist or is ambiguous.</exception>
-		private MemberInfo GetMemberInfo(object obj, string memberName)
+		private static MemberInfo GetMemberInfo(object obj, string memberName)
 		{
 			MemberInfo mi = obj.GetType().GetMember(memberName, MemberTypes.Field | MemberTypes.Property, BindingFlags.Public | BindingFlags.Instance).Single();
 			if (mi is FieldInfo fi)
@@ -325,7 +386,7 @@ namespace BPUtil
 		/// <param name="parent">Object which has the field or property.</param>
 		/// <param name="memberInfo">FieldInfo or PropertyInfo</param>
 		/// <returns></returns>
-		private object GetMemberValue(object parent, MemberInfo memberInfo)
+		private static object GetMemberValue(object parent, MemberInfo memberInfo)
 		{
 			if (memberInfo is FieldInfo fi)
 				return fi.GetValue(parent);
@@ -341,7 +402,7 @@ namespace BPUtil
 		/// <param name="memberName">Field or property name.</param>
 		/// <returns></returns>
 		/// <exception cref="Exception">Throws if the requested member does not exist or is ambiguous.</exception>
-		private object GetMemberValue(object parent, string memberName)
+		private static object GetMemberValue(object parent, string memberName)
 		{
 			return GetMemberValue(parent, GetMemberInfo(parent, memberName));
 		}
@@ -351,7 +412,7 @@ namespace BPUtil
 		/// <param name="parent">Object which has the field or property.</param>
 		/// <param name="memberInfo">FieldInfo or PropertyInfo</param>
 		/// <param name="value">Value to set.</param>
-		private void SetMemberValue(object parent, MemberInfo memberInfo, object value)
+		private static void SetMemberValue(object parent, MemberInfo memberInfo, object value)
 		{
 			if (memberInfo is FieldInfo fi)
 				fi.SetValue(parent, value);
@@ -367,7 +428,7 @@ namespace BPUtil
 		/// <param name="memberName">Field or property name.</param>
 		/// <param name="value">Value to set.</param>
 		/// <exception cref="Exception">Throws if the requested member does not exist or is ambiguous.</exception>
-		private void SetMemberValue(object parent, string memberName, object value)
+		private static void SetMemberValue(object parent, string memberName, object value)
 		{
 			SetMemberValue(parent, GetMemberInfo(parent, memberName), value);
 		}
@@ -376,7 +437,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="memberInfo">FieldInfo or PropertyInfo</param>
 		/// <returns></returns>
-		private Type GetMemberType(MemberInfo memberInfo)
+		private static Type GetMemberType(MemberInfo memberInfo)
 		{
 			if (memberInfo is FieldInfo fi)
 				return fi.FieldType;
@@ -392,7 +453,7 @@ namespace BPUtil
 		/// <param name="memberName">Field or property name.</param>
 		/// <returns></returns>
 		/// <exception cref="Exception">Throws if the requested member does not exist or is ambiguous.</exception>
-		private Type GetMemberType(object parent, string memberName)
+		private static Type GetMemberType(object parent, string memberName)
 		{
 			return GetMemberType(GetMemberInfo(parent, memberName));
 		}
@@ -402,10 +463,21 @@ namespace BPUtil
 		/// <param name="t">Type to construct</param>
 		/// <param name="size">Optional size, if [t] inherits from IList.</param>
 		/// <returns></returns>
-		private object ConstructInstanceOfType(Type t, int? size)
+		private static object ConstructInstanceOfType(Type t, int? size)
 		{
 			if (typeof(IList).IsAssignableFrom(t))
 			{
+				if (t.IsInterface)
+					t = typeof(ArrayList);
+				ConstructorInfo constructor = t.GetConstructor(new[] { typeof(int) });
+				if (constructor == null)
+					throw new ArgumentException("IList type must have a constructor that takes a single int parameter", nameof(t));
+				return (IList)constructor.Invoke(new object[] { size.Value });
+			}
+			else if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IList<>))
+			{
+				if (t.IsInterface)
+					t = typeof(List<>).MakeGenericType(t.GetGenericArguments());
 				ConstructorInfo constructor = t.GetConstructor(new[] { typeof(int) });
 				if (constructor == null)
 					throw new ArgumentException("IList type must have a constructor that takes a single int parameter", nameof(t));
@@ -414,6 +486,33 @@ namespace BPUtil
 			else
 				return Activator.CreateInstance(t);
 		}
+		/// <summary>
+		/// Constructs a new object of the same type with a new length and copies all values from the previous instance into the new one.
+		/// </summary>
+		/// <param name="originalList">Fixed-size list that needs to be longer.</param>
+		/// <param name="newSize">New size to set</param>
+		/// <returns>The new fixed-size list.</returns>
+		private static IList LengthenFixedSizeList(IList originalList, int newSize)
+		{
+			IList longerList = (IList)ConstructInstanceOfType(originalList.GetType(), newSize);
+			for (int i = 0; i < originalList.Count; i++)
+				longerList[i] = originalList[i];
+			return longerList;
+		}
+		/// <summary>
+		/// Returns an object that is the default value for the type of the given object.
+		/// </summary>
+		/// <param name="obj">The object whose type should be inspected.</param>
+		/// <returns></returns>
+		private static object GetDefaultValue(object obj)
+		{
+			if (obj == null)
+				return null;
+
+			Type type = obj.GetType();
+			return type.IsValueType ? Activator.CreateInstance(type) : null;
+		}
+
 		#endregion
 	}
 	/// <summary>
