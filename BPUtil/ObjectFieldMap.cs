@@ -240,7 +240,7 @@ namespace BPUtil
 		#region Apply Changes to another object
 		/// <summary>
 		/// <para>WARNING: This method does not handle all IList operations correctly, such as setting the correct length of the IList or removing elements from an IList.</para>
-		/// <para>It is recommended to use <see cref="ObjectMerge"/> instead of ObjectFieldMap if your goal is to 2-way or 3-way merge objects.</para>
+		/// <para>It is recommended to use <see cref="ObjectMerge"/> instead of ObjectFieldMap if your goal is to 3-way merge objects.</para>
 		/// <para>Applies the values stored in this ObjectFieldMap to the given object.  If any values are not compatible with the structure of the given object, an exception is thrown.</para>
 		/// </summary>
 		/// <param name="obj">Object to apply values to.</param>

@@ -27,36 +27,77 @@ namespace BPUtil
 		/// </summary>
 		public static Func<string, Type, object> DeserializeObject = (str, type) => throw new Exception("ObjectMerge.DeserializeObject must be assigned prior to using ObjectMerge.");
 
+		/// <summary>
+		/// Performs a 3-way merge using the given objects.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <param name="baseObject">Base object, from which [yourObject] and [theirObject] were derived.</param>
+		/// <param name="yourObject">Your version of the object, which may contain changes.</param>
+		/// <param name="theirObject">Their version of the object, which may contain changes.</param>
+		/// <param name="opt">Optional options object.</param>
+		/// <returns></returns>
+		/// <exception cref="ObjectMergeException"></exception>
 		public static T ThreeWayMerge<T>(T baseObject, T yourObject, T theirObject, MergeOptions opt)
 		{
-			//if (baseObject == null)
-			//	throw new ArgumentNullException(nameof(baseObject));
-			//if (yourObject == null)
-			//	throw new ArgumentNullException(nameof(yourObject));
-			//if (theirObject == null)
-			//	throw new ArgumentNullException(nameof(theirObject));
-
 			if (opt == null)
 				opt = new MergeOptions();
+			else
+			{
+				// Refurbish this options object.
+				if (opt.MergeConflicts == null)
+					opt.MergeConflicts = new List<ObjectMergeConflict>();
+				else
+					opt.MergeConflicts.Clear();
+			}
+			MergeState state = new MergeState();
+			state.Options = opt;
 
-			T mergeResult = Merge(baseObject, yourObject, theirObject, null, opt);
+			T mergeResult = Merge(baseObject, yourObject, theirObject, null, state);
 
 			if (opt.MergeConflicts.Count > 0 && opt.ConflictResolution == ConflictResolution.Throw)
 				throw new ObjectMergeException(opt.MergeConflicts.ToArray());
 
 			return mergeResult;
 		}
+		/// <summary>
+		/// Enumeration of options for how to resolve merge conflicts.
+		/// </summary>
 		public enum ConflictResolution
 		{
+			/// <summary>
+			/// Throw an <see cref="ObjectMergeException"/> detailing the conflicts that occurred.
+			/// </summary>
 			Throw,
+			/// <summary>
+			/// In case of field data conflict, use the version of data from the "base" object.
+			/// </summary>
 			TakeBase,
+			/// <summary>
+			/// In case of field data conflict, use the version of data from "your" object.
+			/// </summary>
 			TakeYours,
+			/// <summary>
+			/// In case of field data conflict, use the version of data from "their" object.
+			/// </summary>
 			TakeTheirs
 		}
+		/// <summary>
+		/// ObjectMerge options object.
+		/// </summary>
 		public class MergeOptions
 		{
+			/// <summary>
+			/// Determines how merge conflicts will be handled.
+			/// </summary>
 			public ConflictResolution ConflictResolution = ConflictResolution.Throw;
+			/// <summary>
+			/// A list of merge conflicts that occurred during the merge operation.
+			/// </summary>
 			public List<ObjectMergeConflict> MergeConflicts = new List<ObjectMergeConflict>();
+		}
+		class MergeState
+		{
+			public MergeOptions Options;
 			/// <summary>
 			/// Stores visited objects for the purpose of loop detection and handling.
 			/// </summary>
@@ -70,10 +111,10 @@ namespace BPUtil
 		/// <param name="yourObject">Object produced by "you".</param>
 		/// <param name="theirObject">Object produced by a third-party.</param>
 		/// <param name="path">Path string for use in merge conflict reports. Starts as null for the root object.</param>
-		/// <param name="opt">Options object</param>
+		/// <param name="state">State object.</param>
 		/// <returns></returns>
 		/// <exception cref="Exception">If an unknown ConflictResolution is used.</exception>
-		private static T Merge<T>(T baseObject, T yourObject, T theirObject, string path, MergeOptions opt)
+		private static T Merge<T>(T baseObject, T yourObject, T theirObject, string path, MergeState state)
 		{
 			// Care must be taken throughout this method to never return one of the input objects directly unless it is a string or primitive value type or null.
 			// Otherwise we can end up with the merge result sharing references to mutable objects, and that is not typically desired in a situation where you want to merge 3 objects.
@@ -107,17 +148,17 @@ namespace BPUtil
 					return yourObject; // "They" didn't make a change, so return "your" version.
 
 				// Both "new" versions are different, so this is a merge conflict.
-				opt.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
-				if (opt.ConflictResolution == ConflictResolution.Throw)
+				state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
+				if (state.Options.ConflictResolution == ConflictResolution.Throw)
 					return default(T);
-				else if (opt.ConflictResolution == ConflictResolution.TakeBase)
+				else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
 					return baseObject;
-				else if (opt.ConflictResolution == ConflictResolution.TakeYours)
+				else if (state.Options.ConflictResolution == ConflictResolution.TakeYours)
 					return yourObject;
-				else if (opt.ConflictResolution == ConflictResolution.TakeTheirs)
+				else if (state.Options.ConflictResolution == ConflictResolution.TakeTheirs)
 					return theirObject;
 				else
-					throw new Exception("Unknown ConflictResolution option: " + opt.ConflictResolution);
+					throw new Exception("Unknown ConflictResolution option: " + state.Options.ConflictResolution);
 			}
 			else if (typeof(IEnumerable).IsAssignableFrom(type)
 				|| (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
@@ -129,7 +170,7 @@ namespace BPUtil
 				string b = SerializeForCompare(baseObject);
 				string y = SerializeForCompare(yourObject);
 				string t = SerializeForCompare(theirObject);
-				string mergeResult = Merge(b, y, t, path, opt);
+				string mergeResult = Merge(b, y, t, path, state);
 				return (T)DeserializeForCompare(mergeResult, type);
 
 				// An earlier version of ObjectMerge attempted to support per-element change detection and merging, but this class simply does not have the requisite knowledge to know which changes are safe and which are not.  The only safe thing is to consider any change in the collection as being incompatible with any other change in the collection.
@@ -158,17 +199,17 @@ namespace BPUtil
 						if (yourJson != theirJson)
 						{
 							// "you" and "they" created different values
-							opt.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
-							if (opt.ConflictResolution == ConflictResolution.Throw)
+							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
+							if (state.Options.ConflictResolution == ConflictResolution.Throw)
 								return default(T);
-							else if (opt.ConflictResolution == ConflictResolution.TakeBase)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
 								return default(T);
-							else if (opt.ConflictResolution == ConflictResolution.TakeYours)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeYours)
 								return (T)DeserializeObject(yourJson, type);
-							else if (opt.ConflictResolution == ConflictResolution.TakeTheirs)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeTheirs)
 								return (T)DeserializeObject(theirJson, type);
 							else
-								throw new Exception("Unknown ConflictResolution option: " + opt.ConflictResolution);
+								throw new Exception("Unknown ConflictResolution option: " + state.Options.ConflictResolution);
 						}
 						else
 							return (T)DeserializeObject(yourJson, type); // No conflict.  Just return a copy of your version.
@@ -180,17 +221,17 @@ namespace BPUtil
 						if (baseJson != theirJson)
 						{
 							// "you" deleted the object, but "they" only changed it.
-							opt.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
-							if (opt.ConflictResolution == ConflictResolution.Throw)
+							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
+							if (state.Options.ConflictResolution == ConflictResolution.Throw)
 								return default(T);
-							else if (opt.ConflictResolution == ConflictResolution.TakeBase)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
 								return baseObject.Copy();
-							else if (opt.ConflictResolution == ConflictResolution.TakeYours)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeYours)
 								return default(T);
-							else if (opt.ConflictResolution == ConflictResolution.TakeTheirs)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeTheirs)
 								return theirObject.Copy();
 							else
-								throw new Exception("Unknown ConflictResolution option: " + opt.ConflictResolution);
+								throw new Exception("Unknown ConflictResolution option: " + state.Options.ConflictResolution);
 						}
 						else
 							return default(T); // "you" deleted, "they" didn't change.
@@ -202,17 +243,17 @@ namespace BPUtil
 						if (baseJson != yourJson)
 						{
 							// "they" deleted the object, but "you" only changed it.
-							opt.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
-							if (opt.ConflictResolution == ConflictResolution.Throw)
+							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
+							if (state.Options.ConflictResolution == ConflictResolution.Throw)
 								return default(T);
-							else if (opt.ConflictResolution == ConflictResolution.TakeBase)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
 								return baseObject.Copy();
-							else if (opt.ConflictResolution == ConflictResolution.TakeYours)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeYours)
 								return yourObject.Copy();
-							else if (opt.ConflictResolution == ConflictResolution.TakeTheirs)
+							else if (state.Options.ConflictResolution == ConflictResolution.TakeTheirs)
 								return default(T);
 							else
-								throw new Exception("Unknown ConflictResolution option: " + opt.ConflictResolution);
+								throw new Exception("Unknown ConflictResolution option: " + state.Options.ConflictResolution);
 						}
 						else
 							return default(T); // "they" deleted, "you" didn't change.
@@ -220,11 +261,11 @@ namespace BPUtil
 				}
 
 				// None of the objects is null.  We can iterate over fields and properties and recursively merge them.
-				if (opt.Visited.TryGetValue(baseObject, out object previousResult))
+				if (state.Visited.TryGetValue(baseObject, out object previousResult))
 					return (T)previousResult; // Loop detected
 
 				T merged = (T)Activator.CreateInstance(type);
-				opt.Visited[baseObject] = merged;
+				state.Visited[baseObject] = merged;
 				foreach (MemberInfo memberInfo in type.GetMembers(BindingFlags.Public | BindingFlags.Instance))
 				{
 					if (memberInfo is FieldInfo || memberInfo is PropertyInfo)
@@ -233,7 +274,7 @@ namespace BPUtil
 						object y = GetValueOrDefault(yourObject, memberInfo);
 						object t = GetValueOrDefault(theirObject, memberInfo);
 						string pathAdd = (path == null ? "" : ".") + memberInfo.Name;
-						object mergeResult = Merge(b, y, t, path + pathAdd, opt);
+						object mergeResult = Merge(b, y, t, path + pathAdd, state);
 						SetMemberValue(merged, memberInfo, mergeResult);
 					}
 				}
