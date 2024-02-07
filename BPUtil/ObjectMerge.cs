@@ -34,10 +34,10 @@ namespace BPUtil
 		/// <param name="baseObject">Base object, from which [yourObject] and [theirObject] were derived.</param>
 		/// <param name="yourObject">Your version of the object, which may contain changes.</param>
 		/// <param name="theirObject">Their version of the object, which may contain changes.</param>
-		/// <param name="opt">Optional options object.</param>
+		/// <param name="opt">Optional options object.  This also will contain the list of merge conflicts, if you care.  The default conflict handling is to throw an exception that details them.</param>
 		/// <returns></returns>
 		/// <exception cref="ObjectMergeException"></exception>
-		public static T ThreeWayMerge<T>(T baseObject, T yourObject, T theirObject, MergeOptions opt)
+		public static T ThreeWayMerge<T>(T baseObject, T yourObject, T theirObject, MergeOptions opt = null)
 		{
 			if (opt == null)
 				opt = new MergeOptions();
@@ -93,7 +93,15 @@ namespace BPUtil
 			/// <summary>
 			/// A list of merge conflicts that occurred during the merge operation.
 			/// </summary>
-			public List<ObjectMergeConflict> MergeConflicts = new List<ObjectMergeConflict>();
+			internal List<ObjectMergeConflict> MergeConflicts = new List<ObjectMergeConflict>();
+			/// <summary>
+			/// Returns an array of merge conflicts that occurred during the merge operation.
+			/// </summary>
+			/// <returns>An array of merge conflicts that occurred during the merge operation.</returns>
+			public ObjectMergeConflict[] GetConflicts()
+			{
+				return MergeConflicts.ToArray();
+			}
 		}
 		class MergeState
 		{
@@ -345,10 +353,10 @@ namespace BPUtil
 	/// </summary>
 	public class ObjectMergeConflict
 	{
-		public string path;
-		public object baseValue;
-		public object yourValue;
-		public object theirValue;
+		public readonly string path;
+		public readonly object baseValue;
+		public readonly object yourValue;
+		public readonly object theirValue;
 		public ObjectMergeConflict() { }
 		public ObjectMergeConflict(string path, object baseValue, object yourValue, object theirValue)
 		{
