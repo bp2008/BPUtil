@@ -40,7 +40,8 @@ namespace UnitTests
 				Assert.AreEqual("L5", ex.GetExceptionOfType<IndexOutOfRangeException>(false).Message);
 				Assert.AreEqual("L5", ex.GetExceptionOfType<IndexOutOfRangeException>(true).Message);
 			}
-			Assert.IsTrue(threw, "Expected exception to be thrown");
+			if (!threw)
+				Assert.Fail("Expected exception to be thrown");
 		}
 		[TestMethod]
 		public void TestGetExceptionWhere()
@@ -49,7 +50,6 @@ namespace UnitTests
 			try
 			{
 				ThrowComplex();
-				Assert.Fail("Expected exception to be thrown");
 			}
 			catch (Exception ex)
 			{
@@ -58,18 +58,20 @@ namespace UnitTests
 				Assert.IsNotNull(found);
 				Assert.IsTrue(found is ArithmeticException);
 			}
-			Assert.IsTrue(threw, "Expected exception to be thrown");
+			if (!threw)
+				Assert.Fail("Expected exception to be thrown");
 		}
 		[TestMethod]
 		public void TestToHierarchicalString()
 		{
+			bool threw = false;
 			try
 			{
 				ThrowComplex();
-				Assert.Fail("Expected exception to be thrown");
 			}
 			catch (Exception ex)
 			{
+				threw = true;
 				string standardStr = ex.ToString();
 				string hierStr = ex.ToHierarchicalString();
 
@@ -85,6 +87,8 @@ namespace UnitTests
 				AssertStringsContain("at UnitTests.TestExceptionExtensions.ThrowComplex() in ", standardStr, hierStr);
 				AssertStringsContain("at UnitTests.TestExceptionExtensions.TestToHierarchicalString() in ", standardStr, hierStr);
 			}
+			if (!threw)
+				Assert.Fail("Expected exception to be thrown");
 		}
 		/// <summary>
 		/// Asserts that the first argument is contained in all other arguments.

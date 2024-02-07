@@ -15,24 +15,18 @@ namespace UnitTests
 		[TestMethod]
 		public void TestObjectFieldMap_ArgumentExceptions()
 		{
-			try
+			Expect.Exception(() =>
 			{
 				new ObjectFieldMap(null);
-				Assert.Fail("Expected exception from passing in null");
-			}
-			catch { }
-			try
+			}, "Expected exception from passing in null");
+			Expect.Exception(() =>
 			{
 				new ObjectFieldMap("str");
-				Assert.Fail("Expected exception from passing in string");
-			}
-			catch { }
-			try
+			}, "Expected exception from passing in string");
+			Expect.Exception(() =>
 			{
 				new ObjectFieldMap(1);
-				Assert.Fail("Expected exception from passing in int");
-			}
-			catch { }
+			}, "Expected exception from passing in int");
 		}
 		[TestMethod]
 		public void TestObjectFieldMap_List()

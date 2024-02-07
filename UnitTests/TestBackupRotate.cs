@@ -46,7 +46,7 @@ namespace UnitTests
 			};
 			DateTime[] actual1k = br_oneday.DetermineBackupsToDelete(input1);
 
-			AssertArraysEqual(expected1k, actual1k);
+			Expect.Equal(expected1k, actual1k);
 		}
 		[TestMethod]
 		public void TestDetermineBackupsToKeep_Basic()
@@ -68,7 +68,7 @@ namespace UnitTests
 			};
 			DateTime[] actual1k = br_oneday.DetermineBackupsToKeep(input1);
 
-			AssertArraysEqual(expected1k, actual1k);
+			Expect.Equal(expected1k, actual1k);
 		}
 		[TestMethod]
 		public void TestDetermineBackupsToKeep_Adv1()
@@ -130,27 +130,6 @@ namespace UnitTests
 			}
 			//string result = sb.ToString();
 			//Console.WriteLine(result);
-		}
-		private void AssertArraysEqual<T>(IEnumerable<T> expected, IEnumerable<T> actual)
-		{
-			if (expected == null && actual != null)
-				Assert.Fail("Expected null. Got " + actual.GetType().ToString() + ".");
-			if (expected != null && actual == null)
-				Assert.Fail("Expected " + expected.GetType().ToString() + ". Got null.");
-			if (expected.Count() != actual.Count())
-				Assert.Fail("Expected " + expected.Count() + " items in collection. Got " + actual.Count() + " items.");
-			int max = expected.Count();
-			for (int i = 0; i < max; i++)
-			{
-				object e = expected.ElementAt(i);
-				object a = actual.ElementAt(i);
-				if (e == null && a != null)
-					Assert.Fail("Expected null item at index " + i + ". Got \"" + a.ToString() + "\".");
-				if (e != null && a == null)
-					Assert.Fail("Expected \"" + e.ToString() + "\" at index " + i + ". Got null.");
-				if (!e.Equals(a))
-					Assert.Fail("Expected index " + i + " to be \"" + expected.ElementAt(i) + "\" but actual item was not equal: \"" + actual.ElementAt(i) + "\"");
-			}
 		}
 	}
 }

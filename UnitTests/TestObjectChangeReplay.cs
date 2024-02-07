@@ -3,15 +3,33 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using BPUtil;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace UnitTests
 {
+	/// <summary>
+	/// ObjectChangeReplay is effectively ObjectMerge.ThreeWayMerge that always uses ConflictResolution.TakeYours.
+	/// </summary>
 	[TestClass]
 	public class TestObjectChangeReplay
 	{
+		[TestInitialize]
+		public void TestInitialize()
+		{
+			ObjectMerge.SerializeObject = obj =>
+			{
+				System.Web.Script.Serialization.JavaScriptSerializer serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+				return serializer.Serialize(obj);
+			};
+			ObjectMerge.DeserializeObject = (json, type) =>
+			{
+				System.Web.Script.Serialization.JavaScriptSerializer serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+				return serializer.Deserialize(json, type);
+			};
+		}
 		[TestMethod]
 		public void TestObjectChangeReplay_Int()
 		{
@@ -44,7 +62,7 @@ namespace UnitTests
 			PrimitiveWrapper differentW = new PrimitiveWrapper(src);
 
 			ObjectChangeReplay changeHelper = new ObjectChangeReplay(originalW, modifiedW);
-			changeHelper.Apply(differentW);
+			differentW = changeHelper.Apply(differentW);
 
 			if (expectModification)
 				Assert.AreEqual(modifiedW.val, differentW.val);
@@ -69,7 +87,7 @@ namespace UnitTests
 		{
 			ObjectChangeReplay changeHelper = new ObjectChangeReplay(new SO(1, 2), new SO(1, 3));
 			SO obj = new SO(4, 4);
-			changeHelper.Apply(obj);
+			obj = changeHelper.Apply(obj);
 			Assert.AreEqual(4, obj.A, changeHelper.ToString());
 			Assert.AreEqual(3, obj.B, changeHelper.ToString());
 		}
@@ -78,66 +96,57 @@ namespace UnitTests
 		{
 			ObjectChangeReplay changeHelper = new ObjectChangeReplay(new SO(2, 1), new SO(3, 1));
 			SO obj = new SO(4, 4);
-			changeHelper.Apply(obj);
+			obj = changeHelper.Apply(obj);
 			Assert.AreEqual(3, obj.A, changeHelper.ToString());
 			Assert.AreEqual(4, obj.B, changeHelper.ToString());
 		}
 		[TestMethod]
-		public void TestObjectChangeReplay_SimpleObject_SetNull_Throws()
+		public void TestObjectChangeReplay_SimpleObject_SetNull()
 		{
-			try
-			{
-				new ObjectChangeReplay(new SO(1, 2), null);
-				Assert.Fail("Expected Exception");
-			}
-			catch { }
+			SO result = new ObjectChangeReplay(new SO(1, 2), null).Apply(new SO(9, 8));
+			Assert.IsNull(result);
 		}
 		[TestMethod]
-		public void TestObjectChangeReplay_SimpleObject_SetFromNull_Throws()
+		public void TestObjectChangeReplay_SimpleObject_SetFromNull()
 		{
-			try
-			{
-				new ObjectChangeReplay(null, new SO(1, 3));
-				Assert.Fail("Expected Exception");
-			}
-			catch { }
+			SO result = new ObjectChangeReplay(null, new SO(1, 3)).Apply(new SO(9, 8));
+			// 1,3 was recorded, so it should be the result
+			Assert.AreEqual(1, result.A);
+			Assert.AreEqual(3, result.B);
 		}
 		[TestMethod]
-		public void TestObjectChangeReplay_NullNull_Throws()
+		public void TestObjectChangeReplay_NullNull()
 		{
-			try
-			{
-				new ObjectChangeReplay(null, null);
-				Assert.Fail("Expected Exception");
-			}
-			catch { }
+			SO result = new ObjectChangeReplay(null, null).Apply(new SO(9, 8));
+			// No change was recorded, so there should be no change to the applied item
+			Assert.AreEqual(9, result.A);
+			Assert.AreEqual(8, result.B);
+		}
+		[TestMethod]
+		public void TestObjectChangeReplay_SimpleObject_ApplyToNull()
+		{
+			ObjectChangeReplay changeHelper = new ObjectChangeReplay(new SO(1, 2), new SO(1, 3));
+			SO obj = null;
+			SO result = changeHelper.Apply(obj);
+			// B=3 was recorded, so it should be the result
+			Assert.AreEqual(1, result.A);
+			Assert.AreEqual(3, result.B);
 		}
 		[TestMethod]
 		public void TestObjectChangeReplay_SimpleObject_NoChanges()
 		{
 			ObjectChangeReplay changeHelper = new ObjectChangeReplay(new SO(1, 2), new SO(1, 2));
 			SO obj = new SO(4, 4);
-			changeHelper.Apply(obj);
+			obj = changeHelper.Apply(obj);
 			Assert.AreEqual(4, obj.A, changeHelper.ToString());
 			Assert.AreEqual(4, obj.B, changeHelper.ToString());
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_SimpleObject_ApplyToNull_Throws()
-		{
-			try
-			{
-				ObjectChangeReplay changeHelper = new ObjectChangeReplay(new SO(1, 2), new SO(1, 3));
-				SO obj = null;
-				changeHelper.Apply(obj);
-				Assert.Fail("Expected Exception");
-			}
-			catch { }
 		}
 		class CO
 		{
 			public SO X { get; set; }
 			public SO Y;
 			public int Z;
+			public CO() { }
 			public CO(SO x, SO y, int z) { X = x; Y = y; Z = z; }
 		}
 		[TestMethod]
@@ -149,7 +158,7 @@ namespace UnitTests
 			B.Z = 2;
 			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
 			CO obj = new CO(null, null, 3);
-			changeHelper.Apply(obj);
+			obj = changeHelper.Apply(obj);
 			Assert.IsNull(obj.X, changeHelper.ToString());
 			Assert.IsNull(obj.Y, changeHelper.ToString());
 			Assert.AreEqual(2, obj.Z, changeHelper.ToString());
@@ -160,7 +169,7 @@ namespace UnitTests
 			B.Y = new SO(4, 5);
 			changeHelper = new ObjectChangeReplay(A, B);
 			obj = new CO(null, null, 3);
-			changeHelper.Apply(obj);
+			obj = changeHelper.Apply(obj);
 			Assert.IsNull(obj.X, changeHelper.ToString());
 			Assert.AreEqual(4, obj.Y.A, changeHelper.ToString());
 			Assert.AreEqual(5, obj.Y.B, changeHelper.ToString());
@@ -173,7 +182,7 @@ namespace UnitTests
 			B.Y = new SO(4, 5);
 			changeHelper = new ObjectChangeReplay(A, B);
 			obj = new CO(null, null, 3);
-			changeHelper.Apply(obj);
+			obj = changeHelper.Apply(obj);
 			Assert.IsNull(obj.X, changeHelper.ToString());
 			Assert.AreEqual(4, obj.Y.A, changeHelper.ToString());
 			Assert.AreEqual(5, obj.Y.B, changeHelper.ToString());
@@ -186,7 +195,7 @@ namespace UnitTests
 			B.Y = new SO(4, 5);
 			changeHelper = new ObjectChangeReplay(A, B);
 			obj = new CO(new SO(10, 11), new SO(12, 13), 3);
-			changeHelper.Apply(obj);
+			obj = changeHelper.Apply(obj);
 			Assert.IsNull(obj.X, changeHelper.ToString());
 			Assert.AreEqual(4, obj.Y.A, changeHelper.ToString());
 			Assert.AreEqual(5, obj.Y.B, changeHelper.ToString());
@@ -195,20 +204,20 @@ namespace UnitTests
 		[TestMethod]
 		public void TestObjectChangeReplay_TypeMismatch_Throws()
 		{
-			try
+			Expect.Exception(() =>
 			{
-				new ObjectChangeReplay(new SO(1, 2), new CO(null, null, 1));
-				Assert.Fail("Expected exception");
-			}
-			catch { }
-			try
+				new ObjectChangeReplay(new SO(1, 2), new CO(null, null, 1)).Apply(new SO(3, 4));
+			});
+			Expect.Exception(() =>
+			{
+				new ObjectChangeReplay(new SO(1, 2), new CO(null, null, 1)).Apply(new CO(null, null, 1));
+			});
+			Expect.Exception(() =>
 			{
 				ObjectChangeReplay c = new ObjectChangeReplay(new SO(1, 2), new SO(1, 3));
 				CO src = new CO(null, null, 1);
-				c.Apply(src);
-				Assert.Fail("Expected exception");
-			}
-			catch { }
+				object result = c.Apply(src);
+			});
 		}
 		class L1
 		{
@@ -235,249 +244,82 @@ namespace UnitTests
 			public L4(int[] list) { this.list = list; }
 		}
 		[TestMethod]
-		public void TestObjectChangeReplay_IList()
-		{
-			L1 A = new L1(new int[] { 1, 5, 9, 10 });
-			L1 B = new L1(new List<int>(new int[] { 1, 4, 9, 11 })); // Simulate User B changing the second element to 4, fourth element to 11. User B's changes are committed last.
-			L1 C = new L1(new int[] { 2, 5, 9, 12 }); // Simulate User C changing the first element to 2, fourth element to 12.
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(2, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(9, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_IList_int()
-		{
-			L2 A = new L2(new int[] { 1, 5, 9, 10 });
-			L2 B = new L2(new List<int>(new int[] { 1, 4, 9, 11 })); // Simulate User B changing the second element to 4, fourth element to 11. User B's changes are committed last.
-			L2 C = new L2(new int[] { 2, 5, 9, 12 }); // Simulate User C changing the first element to 2, fourth element to 12.
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(2, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(9, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_List_int()
-		{
-			L3 A = new L3(new List<int>(new int[] { 1, 5, 9, 10 }));
-			L3 B = new L3(new List<int>(new int[] { 1, 4, 9, 11 })); // Simulate User B changing the second element to 4, fourth element to 11. User B's changes are committed last.
-			L3 C = new L3(new List<int>(new int[] { 2, 5, 9, 12 })); // Simulate User C changing the first element to 2, fourth element to 12.
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(2, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(9, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_Array_int()
-		{
-			L4 A = new L4(new int[] { 1, 5, 9, 10 });
-			L4 B = new L4(new int[] { 1, 4, 9, 11 }); // Simulate User B changing the second element to 4, fourth element to 11. User B's changes are committed last.
-			L4 C = new L4(new int[] { 2, 5, 9, 12 }); // Simulate User C changing the first element to 2, fourth element to 12.
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			Assert.AreEqual(4, C.list.Length);
-			Assert.AreEqual(2, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(9, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
 		public void TestObjectChangeReplay_Array_Nullification()
 		{
 			L4 A = new L4(new int[] { 1, 5, 9, 10 });
 			L4 B = new L4(null);
 			L4 C = new L4(new int[] { 2, 5, 9, 12 });
 			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			Assert.IsNull(C.list);
+			L4 result = changeHelper.Apply(C);
+			Assert.IsNull(result.list);
 		}
 		[TestMethod]
-		public void TestObjectChangeReplay_IList_Construction()
+		public void TestObjectChangeReplay_CollectionMerge_YouChange()
 		{
-			L1 A = new L1(new int[] { 1, 5, 9, 10, 7 });
-			L1 B = new L1(new int[] { 1, 4, 9, 11, 7 });
-			L1 C = new L1(null);
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4, and it should have default values in the 1st and 3rd slots.
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(0, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(0, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_IList_int_Construction()
-		{
-			L2 A = new L2(new int[] { 1, 5, 9, 10, 7 });
-			L2 B = new L2(new int[] { 1, 4, 9, 11, 7 });
-			L2 C = new L2(null);
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4, and it should have default values in the 1st and 3rd slots.
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(0, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(0, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_List_int_Construction()
-		{
+			// This is a 3-way merge where A is base version, B is your version, C is their version.
 			L3 A = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
-			L3 B = new L3(new List<int>(new int[] { 1, 4, 9, 11, 7 }));
-			L3 C = new L3(null);
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4, and it should have default values in the 1st and 3rd slots.
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(0, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(0, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_Array_Construction()
-		{
-			L4 A = new L4(new int[] { 1, 5, 9, 10, 7 });
-			L4 B = new L4(new int[] { 1, 4, 9, 11, 7 });
-			L4 C = new L4(null);
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4, and it should have default values in the 1st and 3rd slots.
-			Assert.AreEqual(4, C.list.Length);
-			Assert.AreEqual(0, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(0, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_IList_Lengthen()
-		{
-			L1 A = new L1(new int[] { 1, 5, 9, 10, 7 });
-			L1 B = new L1(new List<int>(new int[] { 1, 4, 9, 11, 7 }));
-			L1 C = new L1(new int[] { 2 });
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4.
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(2, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(0, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_IList_int_Lengthen()
-		{
-			L2 A = new L2(new int[] { 1, 5, 9, 10, 7 });
-			L2 B = new L2(new List<int>(new int[] { 1, 4, 9, 11, 7 }));
-			L2 C = new L2(new int[] { 2 });
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4.
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(2, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(0, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_List_int_Lengthen()
-		{
-			L3 A = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
-			L3 B = new L3(new List<int>(new int[] { 1, 4, 9, 11, 7 }));
-			L3 C = new L3(new List<int>(new int[] { 2 }));
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4.
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(2, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(0, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_Array_Lengthen()
-		{
-			L4 A = new L4(new int[] { 1, 5, 9, 10, 7 });
-			L4 B = new L4(new int[] { 1, 4, 9, 11, 7 });
-			L4 C = new L4(new int[] { 2 });
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4.
-			Assert.AreEqual(4, C.list.Length);
-			Assert.AreEqual(2, C.list[0]);
-			Assert.AreEqual(4, C.list[1]);
-			Assert.AreEqual(0, C.list[2]);
-			Assert.AreEqual(11, C.list[3]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_List_Weakness_Example()
-		{
-			// In this test, we demonstrate the undesirable behavior when conflicting actions occur to a list.
-			// In this example, User B tries to sort the list, but meanwhile, User C has changed the `5` at index 2 into a `95`.
-			// The final result does not have a `95`.
-			L3 A = new L3(new List<int>(new int[] { 4, 42, 5, 16, 15, 23 }));
-			L3 B = A.Copy();
-			B.list.Sort();
-			// B is now [4, 5, 15, 16, 23, 42]
-			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-
-			L3 C = A.Copy();
-			C.list[2] = 95;
-			changeHelper.Apply(C);
-
-			Assert.AreEqual(6, C.list.Count);
-			Assert.AreEqual(4, C.list[0]);
-			Assert.AreEqual(5, C.list[1]); // User C replaced the 5 with a 95, but it got overwritten by User B's change.
-			Assert.AreEqual(15, C.list[2]);
-			Assert.AreEqual(16, C.list[3]);
-			Assert.AreEqual(23, C.list[4]);
-			Assert.AreEqual(42, C.list[5]);
-
-			// Now to drive home the point, what if User C had changed an element in one of the slots that User B wasn't going to move during the sort operation??
-			A = new L3(new List<int>(new int[] { 4, 42, 5, 16, 15, 23 }));
-			B = A.Copy();
-			B.list.Sort();
-			// B is now [4, 5, 15, 16, 23, 42]
-			changeHelper = new ObjectChangeReplay(A, B);
-
-			C = A.Copy();
-			C.list[3] = 95;
-			changeHelper.Apply(C);
-
-			Assert.AreEqual(6, C.list.Count);
-			Assert.AreEqual(4, C.list[0]);
-			Assert.AreEqual(5, C.list[1]);
-			Assert.AreEqual(15, C.list[2]);
-			Assert.AreEqual(95, C.list[3]); // User C replaced the 16 with a 95, and this time User B's sorting didn't affect that particular list index, so the result is "unexpected".
-			Assert.AreEqual(23, C.list[4]);
-			Assert.AreEqual(42, C.list[5]);
-		}
-		[TestMethod]
-		public void TestObjectChangeReplay_List_int_Shorten()
-		{
-			// In this test, we see what happens when we try to shorten an IList.
-			L3 A = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
-			L3 B = new L3(new List<int>(new int[] { 1, 5, 9, 10 })); // < User B tries to remove the last element
+			L3 B = new L3(new List<int>(new int[] { 1, 5, 9, 10 })); // < You remove the last element
 			L3 C = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
 			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
-			changeHelper.Apply(C);
-			// The only changes that were made were to the 2nd and 4th elements, so C's length is expected to be only 4.
-			Assert.AreEqual(4, C.list.Count);
-			Assert.AreEqual(1, C.list[0]);
-			Assert.AreEqual(5, C.list[1]);
-			Assert.AreEqual(9, C.list[2]);
-			Assert.AreEqual(10, C.list[3]);
+			// Collections are compared as a whole.
+			// C did not change the collection, therefore no conflict.
+			L3 result = changeHelper.Apply(C);
+			Expect.Equal(B.list, result.list);
+		}
+		[TestMethod]
+		public void TestObjectChangeReplay_CollectionMerge_TheyChange()
+		{
+			// This is a 3-way merge where A is base version, B is your version, C is their version.
+			L3 A = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
+			L3 B = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
+			L3 C = new L3(new List<int>(new int[] { 1, 5, 8, 10, 7 })); // < They change the middle element
+			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
+			// Collections are compared as a whole.
+			// B did not change the collection, therefore no conflict.
+			L3 result = changeHelper.Apply(C);
+			Expect.Equal(C.list, result.list);
+		}
+		[TestMethod]
+		public void TestObjectChangeReplay_CollectionMerge_BothChange()
+		{
+			// This is a 3-way merge where A is base version, B is your version, C is their version.
+			L3 A = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
+			L3 B = new L3(new List<int>(new int[] { 1, 5, 9, 10 })); // < You remove the last element
+			L3 C = new L3(new List<int>(new int[] { 1, 5, 9, 10 })); // < They remove the last element
+			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
+			// Collections are compared as a whole.
+			// Both made the same change, therefore no conflict.
+			L3 result = changeHelper.Apply(C);
+			Expect.Equal(B.list, result.list);
+			Expect.Equal(C.list, result.list);
+		}
+		[TestMethod]
+		public void TestObjectChangeReplay_CollectionMerge_NoChange()
+		{
+			// This is a 3-way merge where A is base version, B is your version, C is their version.
+			L3 A = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
+			L3 B = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
+			L3 C = new L3(new List<int>(new int[] { 1, 5, 9, 10, 7 }));
+			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
+			// Collections are compared as a whole.
+			L3 result = changeHelper.Apply(C);
+			Expect.Equal(A.list, result.list);
+		}
+		[TestMethod]
+		public void TestObjectChangeReplay_CollectionMerge_ConflictTakesYours()
+		{
+			// This is a 3-way merge where A is base version, B is your version, C is their version.
+			L4 A = new L4(new int[] { 1, 5, 9, 10, 7 });
+			L4 B = new L4(new int[] { 1, 4, 9, 10, 7 }); // You changed one value
+			L4 C = new L4(new int[] { 1, 5, 9, 11, 7 }); // They changed a different value.
+			ObjectChangeReplay changeHelper = new ObjectChangeReplay(A, B);
+			L4 result = changeHelper.Apply(C);
+			// Collections are compared as a whole.
+			// This is a merge conflict, but the ObjectChangeReplay class resolves conflicts by taking your version.
+			// Therefore, result's list should match B's list.
+			Expect.NotEqual(A.list, result.list);
+			Expect.Equal(B.list, result.list);
+			Expect.NotEqual(C.list, result.list);
 		}
 	}
 }

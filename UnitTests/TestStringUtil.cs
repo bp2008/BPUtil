@@ -463,12 +463,10 @@ namespace UnitTests
 			//_TestDetectionOfTextEncodings(new UnicodeEncoding(false, false), "Hello, World!"); // Disabled because of false-positive UTF-16 detections in CSS files; UTF8 is now the default if there is no byte order mark.
 			_TestDetectionOfTextEncodings(new UTF8Encoding(true), "Hello, World!");
 			_TestDetectionOfTextEncodings(new UTF8Encoding(false), "Hello, World!");
-			try
+			Expect.Exception(() =>
 			{
 				_TestDetectionOfTextEncodings(Encoding.GetEncoding("windows-1252"), "Hello, World!");
-				Assert.Fail("Expected exception: \"Hello, World!\" is indistinguishable between Windows-1252 and UTF-8 encodings, so the detector should have chosen UTF-8.");
-			}
-			catch { }
+			}, "Expected exception: \"Hello, World!\" is indistinguishable between Windows-1252 and UTF-8 encodings, so the detector should have chosen UTF-8.");
 			// A character that encodes correctly in Windows-1252 but not in UTF-8 is the character "Û" (U+00DB). In Windows-1252 encoding, this character is represented by the byte 0xFB. However, in UTF-8, this byte sequence does not represent a valid character, leading to incorrect encoding.
 			_TestDetectionOfTextEncodings(Encoding.GetEncoding("windows-1252"), "Hello, Û!");
 		}

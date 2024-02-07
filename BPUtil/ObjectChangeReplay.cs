@@ -13,7 +13,8 @@ namespace BPUtil
 	/// </summary>
 	public class ObjectChangeReplay
 	{
-		ObjectFieldMap diff;
+		object A;
+		object B;
 		/// <summary>
 		/// Constructs an ObjectChangeReplay that stores the changes between objects A and B.
 		/// </summary>
@@ -21,17 +22,19 @@ namespace BPUtil
 		/// <param name="B">"Modified" object, containing 0 or more changes that make it different from the "Original" object.</param>
 		public ObjectChangeReplay(object A, object B)
 		{
-			ObjectFieldMap aMap = new ObjectFieldMap(A);
-			ObjectFieldMap bMap = new ObjectFieldMap(B);
-			diff = aMap.Diff(bMap);
+			this.A = A;
+			this.B = B;
 		}
 		/// <summary>
 		/// Applies stored changes to object C.
 		/// </summary>
 		/// <param name="C">Object to apply changes on.</param>
-		public void Apply(object C)
+		/// <returns>A copy of C with the stored changes applied.</returns>
+		public T Apply<T>(T C)
 		{
-			diff.Apply(C);
+			ObjectMerge.MergeOptions opt = new ObjectMerge.MergeOptions();
+			opt.ConflictResolution = ObjectMerge.ConflictResolution.TakeYours;
+			return ObjectMerge.ThreeWayMerge((T)A, (T)B, C, opt);
 		}
 	}
 }

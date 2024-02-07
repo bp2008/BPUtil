@@ -10,15 +10,14 @@ using System.Text;
 namespace BPUtil
 {
 	/// <summary>
-	/// <para>This class scans all public instance-level fields and properties to produce a map of the object.  Members inheriting from IList are supported and their elements will be scanned into the ObjectFieldMap.</para>
-	/// <para>ObjectFieldMap is used by ObjectChangeReplay and ObjectThreeWayMerge classes.</para>
+	/// <para>This class scans all public instance-level fields and properties and stores them in a map.</para>
 	/// </summary>
 	public class ObjectFieldMap
 	{
 		public class FieldData
 		{
 			/// <summary>
-			/// Object path string. Examples: "Name", "Child.Name", "Children[0].Name"
+			/// Object path string. Examples: "Name", "Child.Name", "Children"
 			/// </summary>
 			public string Path;
 			/// <summary>
@@ -89,7 +88,7 @@ namespace BPUtil
 			Scan(obj, null, new Stack<object>());
 		}
 		/// <summary>
-		/// 
+		/// Scans the given object, putting its field and descendant fields into the map.
 		/// </summary>
 		/// <param name="obj">Object to scan (recursive)</param>
 		/// <param name="path">Path of parent objects</param>
@@ -240,7 +239,9 @@ namespace BPUtil
 		#endregion
 		#region Apply Changes to another object
 		/// <summary>
-		/// Applies the values stored in this ObjectFieldMap to the given object.  If any values are not compatible with the structure of the given object, an exception is thrown.
+		/// <para>WARNING: This method does not handle all IList operations correctly, such as setting the correct length of the IList or removing elements from an IList.</para>
+		/// <para>It is recommended to use <see cref="ObjectMerge"/> instead of ObjectFieldMap if your goal is to 2-way or 3-way merge objects.</para>
+		/// <para>Applies the values stored in this ObjectFieldMap to the given object.  If any values are not compatible with the structure of the given object, an exception is thrown.</para>
 		/// </summary>
 		/// <param name="obj">Object to apply values to.</param>
 		public void Apply(object obj)
@@ -252,9 +253,9 @@ namespace BPUtil
 			if ((objType.IsValueType && objType.IsPrimitive) || objType == typeof(string))
 				throw new ArgumentException("ObjectFieldMap can't be used directly on strings or primitive value types. Unsupported type: " + objType.FullName, nameof(obj));
 
-			// Order the FieldData so that the largest IList indexes will be encountered first, thereby ensuring that if an IList needs to be created, it will have sufficient capacity to contain all elements defined by the map.
-			FieldData[] ordered = Ordered(true);
-			foreach (FieldData fd in ordered)
+			//// Order the FieldData so that the largest IList indexes will be encountered first, thereby ensuring that if an IList needs to be created, it will have sufficient capacity to contain all elements defined by the map.
+			//FieldData[] ordered = Unordered(true);
+			foreach (FieldData fd in fieldDataList)
 			{
 				Apply(obj, fd.Path, fd.Value);
 			}

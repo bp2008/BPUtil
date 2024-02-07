@@ -79,12 +79,10 @@ namespace UnitTests
 			Assert.IsFalse(ByteUtil.ByteArraysMatch(plainBytes, encryptedBytes2));
 
 			// Try decrypting with the public key (should fail)
-			try
+			Expect.Exception(() =>
 			{
 				byte[] decryptedBytes2 = AsymmetricEncryption.DecryptWithKey(publicKey, encryptedBytes);
-				Assert.Fail("Expected exception when trying to decrypt with public key.");
-			}
-			catch { }
+			}, "Expected exception when trying to decrypt with public key.");
 
 			// Verify that private-key-encryption worked as intended
 			byte[] decryptedBytes3 = AsymmetricEncryption.DecryptWithKey(privateKey, encryptedBytes);
@@ -96,12 +94,10 @@ namespace UnitTests
 				Assert.IsTrue(AsymmetricEncryption.VerifyWithKey(publicKey, plainBytes, signature));
 
 				// You can't Sign with a public key
-				try
+				Expect.Exception(() =>
 				{
 					AsymmetricEncryption.SignWithKey(publicKey, plainBytes);
-					Assert.Fail("Expected exception when trying to sign with public key.");
-				}
-				catch { }
+				}, "Expected exception when trying to sign with public key.");
 
 				// But you can Verify with a private key because it contains public key parameters.
 				Assert.IsTrue(AsymmetricEncryption.VerifyWithKey(privateKey, plainBytes, signature));

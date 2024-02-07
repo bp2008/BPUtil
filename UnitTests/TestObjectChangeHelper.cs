@@ -182,35 +182,33 @@ namespace UnitTests
 			Assert.AreEqual(5, obj.Y.B, changeHelper.ToString());
 			Assert.AreEqual(3, obj.Z, changeHelper.ToString());
 		}
+		class IntHaver
+		{
+			public int field;
+			public IntHaver() { }
+			public IntHaver(int field) { this.field = field; }
+		}
+		class StringHaver
+		{
+			public string field;
+			public StringHaver() { }
+			public StringHaver(string field) { this.field = field; }
+		}
 		[TestMethod]
 		public void TestObjectChangeHelper_TypeMismatch()
 		{
-			try
-			{
-				new ObjectChangeHelper(1, "A");
-				Assert.Fail("Expected exception");
-			}
-			catch { }
-			try
-			{
-				new ObjectChangeHelper("B", 2);
-				Assert.Fail("Expected exception");
-			}
-			catch { }
-			try
-			{
-				new ObjectChangeHelper(new SO(1, 2), new CO(null, null, 1));
-				Assert.Fail("Expected exception");
-			}
-			catch { }
-			try
+			new ObjectChangeHelper(1, "A");
+			new ObjectChangeHelper("B", 2);
+			new ObjectChangeHelper(new IntHaver(1), new StringHaver("A"));
+			new ObjectChangeHelper(new StringHaver("B"), new IntHaver(2));
+			new ObjectChangeHelper(new SO(1, 2), new CO(null, null, 1));
+
+			Expect.Exception(() =>
 			{
 				ObjectChangeHelper c = new ObjectChangeHelper(new SO(1, 2), new SO(1, 3));
 				CO src = new CO(null, null, 1);
 				c.Apply(ref src);
-				Assert.Fail("Expected exception");
-			}
-			catch { }
+			});
 		}
 	}
 }

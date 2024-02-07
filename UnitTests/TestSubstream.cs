@@ -110,14 +110,10 @@ namespace UnitTests
 
 			using (MemoryStream ms = new MemoryStream(input))
 			{
-				try
+				Expect.Exception(() =>
 				{
 					ms.Substream(-1);
-					Assert.Fail("Expected exception.");
-				}
-				catch
-				{
-				}
+				});
 				Assert.AreEqual(0, ByteUtil.ReadToEnd(ms.Substream(0)).Length);
 				Assert.AreEqual(0, ms.Position);
 				Assert.AreEqual(256, ByteUtil.ReadToEnd(ms.Substream(256)).Length);
@@ -137,14 +133,10 @@ namespace UnitTests
 				int read = ssTooLong.Read(buf, 0, 1);
 				Assert.AreEqual(0, read, "Expected end of stream to be one byte early.");
 				Assert.AreEqual(256, ms.Position);
-				try
+				Expect.Exception(() =>
 				{
 					buf = ByteUtil.ReadNBytes(ssTooLong, 1);
-					Assert.Fail("Expected exception from ReadNBytes method.");
-				}
-				catch
-				{
-				}
+				}, "Expected exception from ReadNBytes method.");
 				Assert.AreEqual(256, ms.Position);
 			}
 		}

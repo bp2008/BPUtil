@@ -50,15 +50,11 @@ namespace UnitTests
 			Assert.AreEqual(expectedOutput, output);
 		}
 		[TestMethod]
+		[ExpectedException(typeof(Exception), AllowDerivedTypes = true)]
 		public void TestMVCViewUnknownVariables()
 		{
 			string input = "<html><head><title>@HtmlEncode:TITLE</title></head><body>@BODY</body>@Body</html>";
-			try
-			{
-				ProcessView(input, BuildViewData());
-				Assert.Fail("Expected exception");
-			}
-			catch (Exception) { }
+			ProcessView(input, BuildViewData());
 
 			//string expectedOutput = "<html><head><title></title></head><body></body><div>Test text is the best text.</div><div><a href=\"mailto:me@example.com\">Mail</a></div></html>";
 			//Assert.AreEqual(expectedOutput, output);
