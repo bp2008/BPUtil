@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace UnitTests
 {
 	[TestClass]
+	[Obsolete("This class tests ObjectChangeHelper which is not used.", true)]
 	public class TestObjectChangeHelper
 	{
 		[TestMethod]
@@ -145,7 +146,7 @@ namespace UnitTests
 			Assert.AreEqual(2, obj.Z, changeHelper.ToString());
 
 			// Test setting a null field when the field is already null.
-			A = new CO(new SO(1,2), null, 3);
+			A = new CO(new SO(1, 2), null, 3);
 			B = A.Copy();
 			B.Y = new SO(4, 5);
 			changeHelper = new ObjectChangeHelper(A, B);
@@ -175,7 +176,7 @@ namespace UnitTests
 			B.X = null;
 			B.Y = new SO(4, 5);
 			changeHelper = new ObjectChangeHelper(A, B);
-			obj = new CO(new SO(10,11), new SO(12,13), 3);
+			obj = new CO(new SO(10, 11), new SO(12, 13), 3);
 			changeHelper.Apply(ref obj);
 			Assert.IsNull(obj.X, changeHelper.ToString());
 			Assert.AreEqual(4, obj.Y.A, changeHelper.ToString());

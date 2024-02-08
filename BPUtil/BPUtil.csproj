@@ -89,7 +89,6 @@
     <Compile Include="ObjectMerge.cs" />
     <Compile Include="ObjectChangeReplay.cs" />
     <Compile Include="ObjectFieldMap.cs" />
-    <Compile Include="ObjectChangeHelper2.cs" />
     <Compile Include="ObjectChangeHelper.cs" />
     <Compile Include="ObjectExtensions.cs" />
     <Compile Include="RamInfo.cs" />

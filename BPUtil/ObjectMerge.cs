@@ -103,13 +103,17 @@ namespace BPUtil
 				return MergeConflicts.ToArray();
 			}
 		}
-		class MergeState
+		internal class MergeState
 		{
-			public MergeOptions Options;
+			internal MergeOptions Options;
 			/// <summary>
 			/// Stores visited objects for the purpose of loop detection and handling.
 			/// </summary>
 			internal Dictionary<object, object> Visited = new Dictionary<object, object>();
+			/// <summary>
+			/// This flag gets set to true while merging a complex object that has been serialized to JSON.
+			/// </summary>
+			internal bool IsJson;
 		}
 		/// <summary>
 		/// Internal Merge method which is called recursively.
@@ -156,7 +160,7 @@ namespace BPUtil
 					return yourObject; // "They" didn't make a change, so return "your" version.
 
 				// Both "new" versions are different, so this is a merge conflict.
-				state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
+				state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject, state.IsJson));
 				if (state.Options.ConflictResolution == ConflictResolution.Throw)
 					return default(T);
 				else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
@@ -174,12 +178,20 @@ namespace BPUtil
 				|| (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IDictionary<,>)))
 			{
 				// Multi-element collection
-				// Serialize the entire collection into a string for the purpose of change detection on the object as a whole.
+				// StringWrap the entire collection into a string for the purpose of change detection on the object as a whole.
 				string b = SerializeForCompare(baseObject);
 				string y = SerializeForCompare(yourObject);
 				string t = SerializeForCompare(theirObject);
-				string mergeResult = Merge(b, y, t, path, state);
-				return (T)DeserializeForCompare(mergeResult, type);
+				state.IsJson = true;
+				try
+				{
+					string mergeResult = Merge(b, y, t, path, state);
+					return (T)DeserializeForCompare(mergeResult, type);
+				}
+				finally
+				{
+					state.IsJson = false;
+				}
 
 				// An earlier version of ObjectMerge attempted to support per-element change detection and merging, but this class simply does not have the requisite knowledge to know which changes are safe and which are not.  The only safe thing is to consider any change in the collection as being incompatible with any other change in the collection.
 			}
@@ -207,7 +219,7 @@ namespace BPUtil
 						if (yourJson != theirJson)
 						{
 							// "you" and "they" created different values
-							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
+							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, null, yourJson, theirJson, true));
 							if (state.Options.ConflictResolution == ConflictResolution.Throw)
 								return default(T);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
@@ -229,7 +241,7 @@ namespace BPUtil
 						if (baseJson != theirJson)
 						{
 							// "you" deleted the object, but "they" only changed it.
-							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
+							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseJson, null, theirJson, true));
 							if (state.Options.ConflictResolution == ConflictResolution.Throw)
 								return default(T);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
@@ -251,7 +263,7 @@ namespace BPUtil
 						if (baseJson != yourJson)
 						{
 							// "they" deleted the object, but "you" only changed it.
-							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseObject, yourObject, theirObject));
+							state.Options.MergeConflicts.Add(new ObjectMergeConflict(path, baseJson, yourJson, null, true));
 							if (state.Options.ConflictResolution == ConflictResolution.Throw)
 								return default(T);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
@@ -357,13 +369,18 @@ namespace BPUtil
 		public readonly object baseValue;
 		public readonly object yourValue;
 		public readonly object theirValue;
+		/// <summary>
+		/// True if the values stored within are JSON strings representing complex objects.  If false, you can assume the values are primitive values such as numbers or strings.
+		/// </summary>
+		public readonly bool isJson;
 		public ObjectMergeConflict() { }
-		public ObjectMergeConflict(string path, object baseValue, object yourValue, object theirValue)
+		public ObjectMergeConflict(string path, object baseValue, object yourValue, object theirValue, bool isJson)
 		{
 			this.path = path;
 			this.baseValue = baseValue;
 			this.yourValue = yourValue;
 			this.theirValue = theirValue;
+			this.isJson = isJson;
 		}
 
 		/// <summary>
@@ -372,11 +389,11 @@ namespace BPUtil
 		/// <returns></returns>
 		public override string ToString()
 		{
-			return path + " = " + Serialize(baseValue) + Environment.NewLine
-				+ " * Yours:  " + Serialize(yourValue) + Environment.NewLine
-				+ " * Theirs: " + Serialize(theirValue);
+			return path + " = " + StringWrap(baseValue) + Environment.NewLine
+				+ " * Yours:  " + StringWrap(yourValue) + Environment.NewLine
+				+ " * Theirs: " + StringWrap(theirValue);
 		}
-		private string Serialize(object Value)
+		private string StringWrap(object Value)
 		{
 			if (Value == null)
 				return "null";

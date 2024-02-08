@@ -15,6 +15,7 @@ namespace BPUtil
 	/// <para>This class supports detecting changes to nested objects, which may be a different type than the parent object.</para>
 	/// <para>This class supports detecting changes to an IEnumerable and its elements, but does not support merging element-level changes.</para>
 	/// </summary>
+	[Obsolete("This class is overly complicated and was never fully completed.  It will be deleted in a later revision of BPUtil.", true)]
 	public class ObjectChangeHelper
 	{
 		/// <summary>

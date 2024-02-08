@@ -340,5 +340,74 @@ namespace UnitTests
 
 			AssertEqual(theirs, result);
 		}
+		class LoopClass1
+		{
+			public LoopClass2 child;
+			public int a;
+			public LoopClass1() { }
+			public LoopClass1(LoopClass2 child) { this.child = child; }
+		}
+		class LoopClass2
+		{
+			public LoopClass3 child;
+			public int a;
+			public LoopClass2() { }
+			public LoopClass2(LoopClass3 child) { this.child = child; }
+		}
+		class LoopClass3
+		{
+			public LoopClass1 child;
+			public int a;
+			public LoopClass3() { }
+			public LoopClass3(LoopClass1 child) { this.child = child; }
+		}
+		[TestMethod]
+		public void TestObjectMerge_LoopsAreHandledWell()
+		{
+			LoopClass1 l1 = new LoopClass1() { a = 1 };
+			LoopClass2 l2 = new LoopClass2() { a = 2 };
+			LoopClass3 l3 = new LoopClass3() { a = 3 };
+			l1.child = l2;
+			l2.child = l3;
+			l3.child = l1;
+			LoopClass1 yours = l1.Copy();
+			yours.a = 10;
+			LoopClass1 theirs = l1.Copy();
+			theirs.child.a = 20;
+
+			LoopClass1 result = ObjectMerge.ThreeWayMerge(l1, yours, theirs);
+
+			Assert.IsNotNull(result); // 1
+			Assert.IsNotNull(result.child); // 2
+			Assert.IsNotNull(result.child.child); // 3
+			Assert.IsNotNull(result.child.child.child); // 1
+			Assert.IsNotNull(result.child.child.child.child); // 2
+			Assert.IsNotNull(result.child.child.child.child.child); // 3
+			Assert.IsNotNull(result.child.child.child.child.child.child); // 1
+			Assert.IsNotNull(result.child.child.child.child.child.child.child); // 2
+			Assert.IsNotNull(result.child.child.child.child.child.child.child.child); // 3
+			Assert.IsNotNull(result.child.child.child.child.child.child.child.child.child); // 1
+
+			Assert.AreEqual(10, result.a); // 1
+			Assert.AreEqual(20, result.child.a); // 2
+			Assert.AreEqual(3, result.child.child.a); // 3
+			Assert.AreEqual(10, result.child.child.child.a); // 1
+			Assert.AreEqual(20, result.child.child.child.child.a); // 2
+			Assert.AreEqual(3, result.child.child.child.child.child.a); // 3
+			Assert.AreEqual(10, result.child.child.child.child.child.child.a); // 1
+			Assert.AreEqual(20, result.child.child.child.child.child.child.child.a); // 2
+			Assert.AreEqual(3, result.child.child.child.child.child.child.child.child.a); // 3
+			Assert.AreEqual(10, result.child.child.child.child.child.child.child.child.child.a); // 1
+
+			Assert.AreNotSame(result, result.child);
+			Assert.AreNotSame(result, result.child.child);
+			Assert.AreSame(result, result.child.child.child);
+			Assert.AreNotSame(result, result.child.child.child.child);
+			Assert.AreNotSame(result, result.child.child.child.child.child);
+			Assert.AreSame(result, result.child.child.child.child.child.child);
+			Assert.AreNotSame(result, result.child.child.child.child.child.child.child);
+			Assert.AreNotSame(result, result.child.child.child.child.child.child.child.child);
+			Assert.AreSame(result, result.child.child.child.child.child.child.child.child.child);
+		}
 	}
 }
