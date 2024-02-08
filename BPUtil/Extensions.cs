@@ -243,14 +243,7 @@ namespace BPUtil
 		/// <param name="ex">The exception to be rethrown.</param>
 		public static void Rethrow(this Exception ex)
 		{
-			try
-			{
-				System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw();
-			}
-			catch
-			{
-				throw new Exception("(Extension Method) Exception.Rethrow failed.", ex);
-			}
+			System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw();
 		}
 		#endregion
 		#region IEnumerable<string>
