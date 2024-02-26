@@ -22,7 +22,8 @@ namespace BPUtil
 		}
 
 		/// <summary>
-		/// Returns a deep copy of this object.
+		/// <para>!!! DANGEROUS !!! This method can cause memory corruption if used on non-primitive framework objects such as Thread and String.  Special cases have been added for those types but more will exist !!!</para>
+		/// <para>Returns a deep copy of this object.</para>
 		/// </summary>
 		/// <param name="originalObject">This object to clone.</param>
 		/// <returns>A deep copy of the object.</returns>
@@ -33,11 +34,12 @@ namespace BPUtil
 		private static Object InternalCopy(Object originalObject, IDictionary<Object, Object> visited)
 		{
 			if (originalObject == null) return null;
-			var typeToReflect = originalObject.GetType();
+			Type typeToReflect = originalObject.GetType();
 			if (IsPrimitive(typeToReflect)) return originalObject;
 			if (visited.ContainsKey(originalObject)) return visited[originalObject];
 			if (typeof(Delegate).IsAssignableFrom(typeToReflect)) return null;
-			var cloneObject = CloneMethod.Invoke(originalObject, null);
+			if (typeof(System.Threading.Thread).IsAssignableFrom(typeToReflect)) return null;
+			object cloneObject = CloneMethod.Invoke(originalObject, null);
 			if (typeToReflect.IsArray)
 			{
 				var arrayType = typeToReflect.GetElementType();
@@ -75,7 +77,8 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Returns a deep copy of this object.
+		/// <para>!!! DANGEROUS !!! This method can cause memory corruption if used on non-primitive framework objects such as Thread and String.  Special cases have been added for those types but more will exist !!!</para>
+		/// <para>Returns a deep copy of this object.</para>
 		/// </summary>
 		/// <typeparam name="T">Type of object.</typeparam>
 		/// <param name="original">This object to clone.</param>

@@ -203,11 +203,11 @@ namespace BPUtil
 				{
 					// Check special cases where 2 of 3 objects are null
 					if (yourObject == null && theirObject == null)
-						return yourObject.Copy(); // Both "new" versions are the same, so return either of them.
+						return Copy(yourObject); // Both "new" versions are the same, so return either of them.
 					else if (baseObject == null && yourObject == null)
-						return theirObject.Copy(); // "You" didn't make a change, so return "their" version.
+						return Copy(theirObject); // "You" didn't make a change, so return "their" version.
 					else if (baseObject == null && theirObject == null)
-						return yourObject.Copy(); // "They" didn't make a change, so return "your" version.
+						return Copy(yourObject); // "They" didn't make a change, so return "your" version.
 
 					// Check special cases where 1 of 3 objects is null
 					if (baseObject == null)
@@ -245,11 +245,11 @@ namespace BPUtil
 							if (state.Options.ConflictResolution == ConflictResolution.Throw)
 								return default(T);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
-								return baseObject.Copy();
+								return Copy(baseObject);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeYours)
 								return default(T);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeTheirs)
-								return theirObject.Copy();
+								return Copy(theirObject);
 							else
 								throw new Exception("Unknown ConflictResolution option: " + state.Options.ConflictResolution);
 						}
@@ -267,9 +267,9 @@ namespace BPUtil
 							if (state.Options.ConflictResolution == ConflictResolution.Throw)
 								return default(T);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeBase)
-								return baseObject.Copy();
+								return Copy(baseObject);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeYours)
-								return yourObject.Copy();
+								return Copy(yourObject);
 							else if (state.Options.ConflictResolution == ConflictResolution.TakeTheirs)
 								return default(T);
 							else
@@ -301,6 +301,18 @@ namespace BPUtil
 				return merged;
 			}
 		}
+
+		/// <summary>
+		/// For now, this method just returns the object you pass in and doesn't copy it because it is not necessary for my use case to actually copy it.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <param name="obj"></param>
+		/// <returns></returns>
+		private static T Copy<T>(T obj)
+		{
+			return obj;
+		}
+
 		/// <summary>
 		/// Returns the type of the first non-null object passed in to this method. If all of the objects are null, returns the generic type's type, which may be just "Object".
 		/// </summary>
@@ -412,6 +424,9 @@ namespace BPUtil
 	[Serializable]
 	public class ObjectMergeException : Exception
 	{
+		/// <summary>
+		/// An array of merge conflicts that must be manually resolved.
+		/// </summary>
 		public ObjectMergeConflict[] Conflicts;
 		public ObjectMergeException(ObjectMergeConflict[] conflicts) : base(GenerateMessage(conflicts))
 		{

@@ -125,11 +125,8 @@ namespace BPUtil
 		/// <returns></returns>
 		public static bool Allow_127_0_0_1_ValidationCallback(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
 		{
-			if (sender is HttpWebRequest)
-			{
-				HttpWebRequest request = (HttpWebRequest)sender;
+			if (sender is HttpWebRequest request)
 				return _isLocalhost(request.Host) || _isLocalhost(request.Address?.Host);
-			}
 			return false;
 		}
 		private static bool _isLocalhost(string host)

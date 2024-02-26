@@ -43,22 +43,32 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="span">A TimeSpan instance.</param>
 		/// <param name="includeMilliseconds">(Optional; Default: false) Set true to include milliseconds.</param>
+		/// <param name="padDigits">(Optional; Default: false) Set true to pad all integers to 2 digits except for the leftmost unit.</param>
 		/// <returns></returns>
-		public static string ToDHMS(TimeSpan span, bool includeMilliseconds = false)
+		public static string ToDHMS(TimeSpan span, bool includeMilliseconds = false, bool padDigits = false)
 		{
 			StringBuilder sb = new StringBuilder();
+			bool leftmost = true;
 			if (span.Days > 0)
-				sb.Append(span.Days).Append("d");
+				sb.Append(GetPadded(span.Days, padDigits, ref leftmost)).Append("d");
 			if (sb.Length > 0 || span.Hours > 0)
-				sb.Append(span.Hours).Append("h");
+				sb.Append(GetPadded(span.Hours, padDigits, ref leftmost)).Append("h");
 			if (sb.Length > 0 || span.Minutes > 0)
-				sb.Append(span.Minutes).Append("m");
-			sb.Append(span.Seconds).Append("s");
+				sb.Append(GetPadded(span.Minutes, padDigits, ref leftmost)).Append("m");
+			sb.Append(GetPadded(span.Seconds, padDigits, ref leftmost)).Append("s");
 			if (includeMilliseconds)
 				sb.Append(span.Milliseconds.ToString().PadLeft(3, '0')).Append("ms");
 			if (span.Ticks < 0)
 				return "-" + sb.ToString();
 			return sb.ToString();
+		}
+		private static string GetPadded(int num, bool padDigits, ref bool leftmost)
+		{
+			if (leftmost)
+				leftmost = false;
+			else if (padDigits)
+				return num.ToString().PadLeft(2, '0');
+			return num.ToString();
 		}
 		/// <summary>
 		/// Converts a timespan in milliseconds to a compact unambiguous string format with precision to the second. E.g. "1d20h0m5s" or "1m30s" or "0s" or "-1m30s".

@@ -66,6 +66,7 @@
     <Compile Include="TestObjectFieldMap.cs" />
     <Compile Include="TestObjectChangeHelper.cs" />
     <Compile Include="TestSubstream.cs" />
+    <Compile Include="TestDummyValues.cs" />
     <Compile Include="TestThrottle.cs" />
     <Compile Include="TestFileInfoExtensions.cs" />
     <Compile Include="TestDebounce.cs" />

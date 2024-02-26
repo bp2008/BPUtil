@@ -73,6 +73,7 @@
     <Compile Include="Cooldown.cs" />
     <Compile Include="CountdownStopwatch.cs" />
     <Compile Include="Debounce.cs" />
+    <Compile Include="DummyValues.cs" />
     <Compile Include="Forms\TrayIconAppHiddenForm.cs">
       <SubType>Form</SubType>
     </Compile>

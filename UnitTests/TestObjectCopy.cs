@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using BPUtil;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -86,5 +87,42 @@ namespace UnitTests
 
 			Assert.AreEqual(255, co.Z);
 		}
+		class TO
+		{
+			public Thread thr;
+			//public event EventHandler OnStop = delegate { };
+			public TO() { }
+			public TO(Action action)
+			{
+				thr = new Thread(() => { action(); });
+				thr.Name = "TestObjectCopy_2";
+				thr.IsBackground = true;
+				thr.Start();
+			}
+		}
+		//[TestMethod]
+		//public void TestObjectCopy_2()
+		//{
+		//	bool stop = false;
+		//	long stopCount = 0;
+		//	TO to = new TO(() =>
+		//	{
+		//		Thread.Sleep(5000);
+		//		stop = true;
+		//		Interlocked.Increment(ref stopCount);
+		//	});
+
+		//	TO copy = to.Copy();
+		//	while (!stop)
+		//	{
+		//		copy = to.Copy();
+		//		byte[] buf = new byte[1024 * 64];
+		//		StaticRandom.NextBytes(buf);
+		//	}
+
+		//	Thread.Sleep(500);
+		//	Assert.AreEqual(1, stopCount);
+			
+		//}
 	}
 }

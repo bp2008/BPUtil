@@ -450,7 +450,7 @@ namespace BPUtil
 			return FormatDataSize(bytes,
 				new int[] { decimals, decimals, decimals, decimals, decimals, decimals, decimals, decimals, decimals },
 				1000,
-				new string[] { "B", "K", "M", "G", "T", "PB", "EB", "ZB", "YB" });
+				new string[] { "B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" });
 		}
 		/// <summary>
 		/// <para>Returns a number of bits formatted with an appropriate unit for network transfer sizes.  E.g. 1234567 => 1.2 Mb</para>
