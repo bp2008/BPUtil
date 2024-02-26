@@ -46,6 +46,7 @@ namespace UnitTests
 		}
 		private void AssertSO(SO so)
 		{
+			Assert.IsTrue(so._bool);
 			Assert.AreEqual((sbyte)1, so._sbyte);
 			Assert.AreEqual((byte)2, so._byte);
 			Assert.AreEqual((short)3, so._short);
@@ -57,7 +58,7 @@ namespace UnitTests
 			Assert.AreEqual((float)9, so._float);
 			Assert.AreEqual((double)10, so._double);
 			Assert.AreEqual((decimal)11, so._decimal);
-			Assert.IsTrue(so._bool);
+			Assert.AreEqual((EN)12, so._enum);
 			Assert.AreEqual("test", so._string);
 			Assert.AreEqual(2, so._byteArray.Length);
 			Assert.AreEqual((byte)2, so._byteArray[0]);
@@ -75,6 +76,7 @@ namespace UnitTests
 		}
 		class SO
 		{
+			public bool _bool;
 			public sbyte _sbyte;
 			public byte _byte;
 			public short _short;
@@ -86,10 +88,14 @@ namespace UnitTests
 			public float _float;
 			public double _double;
 			public decimal _decimal;
-			public bool _bool;
+			public EN _enum;
 			public string _string;
 			public byte[] _byteArray;
 			public string[] _stringArray;
+		}
+		enum EN
+		{
+			None = 0
 		}
 	}
 }

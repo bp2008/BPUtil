@@ -62,6 +62,8 @@ namespace BPUtil
 				return 10.0d;
 			else if (type == typeof(decimal))
 				return 11.0m;
+			else if (type.IsEnum)
+				return Enum.ToObject(type, 12);
 			else if (type.IsArray)
 			{
 				Type elementType = type.GetElementType();
