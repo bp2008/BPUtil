@@ -1260,7 +1260,7 @@ namespace BPUtil.SimpleHttp
 										}
 										else
 										{
-											// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.
+											// TcpClient's timeouts are merely limits on Read() and Write() call blocking time.  If we try to read or write a chunk of data that legitimately takes longer than the timeout to finish, it will still time out even if data was being transferred steadily.  These timeouts do not apply to async I/O methods.
 											if (s.ReceiveTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
 												s.ReceiveTimeout = 10000;
 											if (s.SendTimeout < 10000) // Timeout of 0 is infinite (and default), which is bad for resource consumption.
@@ -1269,8 +1269,8 @@ namespace BPUtil.SimpleHttp
 											if (rbuf != null)
 												s.ReceiveBufferSize = rbuf.Value;
 											IProcessor processor = Server.MakeClientProcessor(s, Server, Server.certificateSelector, Binding.AllowedConnectionTypes);
-											if (Server is HttpServer)
-												((HttpServer)Server).pool.Enqueue(processor.Process);
+											if (Server is HttpServer syncServer)
+												syncServer.pool.Enqueue(processor.Process);
 											else
 												_ = processor.ProcessAsync(cancellationToken).ConfigureAwait(false);
 										}
@@ -1494,12 +1494,43 @@ namespace BPUtil.SimpleHttp
 				return false;
 			return true;
 		}
+		#region Internal Logging
+		private static HttpLogger httpLogger = new HttpLogger();
+		/// <summary>
+		/// If true, HTTP server logging will be enabled during construction for HttpServer instances constructed after this field is set.
+		/// </summary>
+		public static bool EnableLoggingByDefault = false;
+		/// <summary>
+		/// If true, HTTP server verbose logging will be enabled during construction for HttpServer instances constructed after this field is set.
+		/// </summary>
+		public static bool EnableVerboseLoggingByDefault = false;
+		/// <summary>
+		/// Enables HTTP server logging of socket binding operations and unexpected errors not likely to be related to something a remote client did.
+		/// </summary>
+		/// <param name="logVerbose">If true, additional error reporting will be enabled.  These errors include things that can occur frequently during normal operation and may be caused by remote client activity, so it may be spammy.</param>
+		public void EnableLogging(bool logVerbose)
+		{
+			httpLogger.StartLoggingThreads();
+			SimpleHttpLogger.RegisterLogger(httpLogger);
+		}
+		/// <summary>
+		/// Disables HTTP server logging.
+		/// </summary>
+		public void DisableLogging()
+		{
+			SimpleHttpLogger.UnregisterLogger();
+			httpLogger.StopLoggingThreads();
+		}
+		#endregion
 		/// <summary>
 		/// 
 		/// </summary>
 		/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an https-compatible endpoint was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
 		public HttpServerBase(ICertificateSelector certificateSelector = null)
 		{
+			if (EnableLoggingByDefault)
+				EnableLogging(EnableVerboseLoggingByDefault);
+
 			this.certificateSelector = certificateSelector;
 			if (this.certificateSelector == null)
 				this.certificateSelector = new SelfSignedCertificateSelector();
@@ -1800,7 +1831,7 @@ namespace BPUtil.SimpleHttp
 		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
 		/// </summary>
 		/// <param name="p">HttpProcessor</param>
-		/// <param name="remoteIpAddress">True remote IP address of the client.</param>
+		/// <param name="remoteIpAddress">Remote IP address of the client (proxy-related HTTP headers have not been read yet).</param>
 		/// <returns></returns>
 		public virtual bool IsTrustedProxyServer(HttpProcessor p, IPAddress remoteIpAddress)
 		{
@@ -1843,6 +1874,16 @@ namespace BPUtil.SimpleHttp
 		protected virtual bool IsServerTooBusyToProcessNewConnection(TcpClient tcpClient)
 		{
 			return CurrentNumberOfOpenConnections >= MaxConnections;
+		}
+		/// <summary>
+		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
+		/// </summary>
+		/// <param name="remoteIpAddress">Remote IP address of the client (proxy-related HTTP headers have not been read yet).</param>
+		/// <param name="defaultProtocols">The SslProtocols which would be used if you hadn't overridden this method.</param>
+		/// <returns></returns>
+		public virtual SslProtocols ChooseSslProtocols(IPAddress remoteIpAddress, SslProtocols defaultProtocols)
+		{
+			return defaultProtocols;
 		}
 
 #if NET6_0

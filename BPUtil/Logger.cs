@@ -142,23 +142,6 @@ namespace BPUtil
 			}
 		}
 
-		public static HttpLogger httpLogger = new HttpLogger();
-
-		/// <summary>
-		/// Call this if using [httpLogger] with the BPUtil SimpleHttpServer.
-		/// </summary>
-		public static void StartLoggingThreads()
-		{
-			httpLogger.StartLoggingThreads();
-		}
-		/// <summary>
-		/// Call this to stop logging threads if you called [StartLoggingThreads].
-		/// </summary>
-		public static void StopLoggingThreads()
-		{
-			httpLogger.StopLoggingThreads();
-		}
-
 		private static object catchAllLock = new object();
 		private static bool didDefaultCatchAll = false;
 		/// <summary>
@@ -283,14 +266,19 @@ namespace BPUtil
 
 		public void StartLoggingThreads()
 		{
-			StopLoggingThreads();
-			if (loggingThread != null && loggingThread.IsAlive)
-				loggingThread.Join(500);
-			abort = false;
-			loggingThread = new Thread(loggingThreadLoop);
-			loggingThread.Name = "HttpLogger thread";
-			loggingThread.IsBackground = true;
-			loggingThread.Start();
+			if (abort)
+			{
+				if (loggingThread != null && loggingThread.IsAlive)
+					loggingThread.Join(500);
+				abort = false;
+			}
+			if (loggingThread == null || !loggingThread.IsAlive)
+			{
+				loggingThread = new Thread(loggingThreadLoop);
+				loggingThread.Name = "HttpLogger thread";
+				loggingThread.IsBackground = true;
+				loggingThread.Start();
+			}
 		}
 		/// <summary>
 		/// Gets the full path to the web server log file that should be used for events logged at the specified time.

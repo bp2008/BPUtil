@@ -75,7 +75,7 @@ namespace BPUtil.SimpleHttp.TLS
 							cert = await p.certificateSelector.GetAcmeTls1Certificate(p, tlsData.ServerName).ConfigureAwait(false);
 							if (cert == null)
 							{
-								SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the certificate selector [" + p.certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ".");
+								SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the certificate selector [" + p.certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ". Client IP: " + p.RemoteIPAddressStr);
 								return false;
 							}
 							SslServerAuthenticationOptions sslOptions = new SslServerAuthenticationOptions();
@@ -83,10 +83,10 @@ namespace BPUtil.SimpleHttp.TLS
 							sslOptions.ServerCertificate = cert;
 							SslStream ssA = WrapSslStream(p);
 							await TaskHelper.DoWithTimeout(ssA.AuthenticateAsServerAsync(sslOptions, cancellationToken), (HttpProcessor.readTimeoutSeconds * 2000).Clamp(1000, 30000)).ConfigureAwait(false);
-							SimpleHttpLogger.LogVerbose("\"acme-tls/1\" client connected using SslProtocol." + (p.tcpStream as SslStream).SslProtocol);
+							SimpleHttpLogger.LogVerbose("\"acme-tls/1\" client connected using SslProtocol." + (p.tcpStream as SslStream).SslProtocol + ". " + "Client IP: " + p.RemoteIPAddressStr);
 							return false; // This connection is not allowed to be used for data transmission after TLS negotiation is complete.
 #else
-							SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the current .NET version does not support the \"acme-tls/1\" protocol.");
+							SimpleHttpLogger.LogVerbose("\"acme-tls/1\" protocol negotiation failed because the current .NET version does not support the \"acme-tls/1\" protocol. Client IP: " + p.RemoteIPAddressStr);
 							return false;
 #endif
 						}
@@ -94,14 +94,14 @@ namespace BPUtil.SimpleHttp.TLS
 							cert = await p.certificateSelector.GetCertificate(p, tlsData.ServerName).ConfigureAwait(false);
 						if (cert == null)
 						{
-							SimpleHttpLogger.LogVerbose("TLS negotiation failed because the certificate selector [" + p.certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ".");
+							SimpleHttpLogger.LogVerbose("TLS negotiation failed because the certificate selector [" + p.certificateSelector.GetType() + "] returned null certificate for server name " + (tlsData.ServerName == null ? "null" : ("\"" + tlsData.ServerName + "\"")) + ". Client IP: " + p.RemoteIPAddressStr);
 							return false;
 						}
 						SslStream ss = WrapSslStream(p);
 #if NET6_0
 						SslServerAuthenticationOptions sslServerOptions = new SslServerAuthenticationOptions();
 						sslServerOptions.ServerCertificateContext = tlsCertContexts.GetOrAdd(cert, CreateSslStreamCertificateContextFromCert);
-						sslServerOptions.EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
+						sslServerOptions.EnabledSslProtocols = p.srv.ChooseSslProtocols(p.RemoteIPAddress, SslProtocols.Tls12 | SslProtocols.Tls13);
 						sslServerOptions.AllowRenegotiation = false; // Client-side renegotiation is viewed as insecure by the industry and is not available in TLS 1.3.
 						if (HttpServerBase.IsTlsCipherSuitesPolicySupported())
 						{
@@ -112,15 +112,15 @@ namespace BPUtil.SimpleHttp.TLS
 
 						await TaskHelper.DoWithTimeout(ss.AuthenticateAsServerAsync(sslServerOptions, cancellationToken), HttpProcessor.readTimeoutSeconds * 1000).ConfigureAwait(false);
 #else
-						await TaskHelper.DoWithCancellation(ss.AuthenticateAsServerAsync(cert, false, Tls13 | SslProtocols.Tls12, false), HttpProcessor.readTimeoutSeconds * 1000, cancellationToken).ConfigureAwait(false);
+						await TaskHelper.DoWithCancellation(ss.AuthenticateAsServerAsync(cert, false, p.srv.ChooseSslProtocols(p.RemoteIPAddress, Tls13 | SslProtocols.Tls12), false), HttpProcessor.readTimeoutSeconds * 1000, cancellationToken).ConfigureAwait(false);
 #endif
-						SimpleHttpLogger.LogVerbose("Client connected using SslProtocol." + (p.tcpStream as SslStream).SslProtocol);
+						SimpleHttpLogger.LogVerbose("Client connected using SslProtocol." + (p.tcpStream as SslStream).SslProtocol + ". Client IP: " + p.RemoteIPAddressStr);
 					}
 					else
 					{
 						if (!p.allowedConnectionTypes.HasFlag(AllowedConnectionTypes.http))
 						{
-							SimpleHttpLogger.LogVerbose("Client " + p.RemoteIPAddressStr + " requested plain HTTP from an IP endpoint (" + p.tcpClient.Client.LocalEndPoint.ToString() + ") that is not configured to support plain HTTP.");
+							SimpleHttpLogger.LogVerbose("Client requested plain HTTP from an IP endpoint (" + p.tcpClient.Client.LocalEndPoint.ToString() + ") that is not configured to support plain HTTP. Client IP: " + p.RemoteIPAddressStr);
 							return false;
 						}
 					}
@@ -144,7 +144,7 @@ namespace BPUtil.SimpleHttp.TLS
 							}
 						}
 					}
-					SimpleHttpLogger.LogVerbose(ex);
+					SimpleHttpLogger.LogVerbose(ex, "Client IP: " + p.RemoteIPAddressStr);
 					return false;
 				}
 			}

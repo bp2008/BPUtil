@@ -50,7 +50,7 @@ namespace BPUtil
 
 			if (options.LoggerCatchAll)
 				Logger.CatchAll();
-			SimpleHttpLogger.RegisterLogger(Logger.httpLogger, false);
+			HttpServer.EnableLoggingByDefault = true;
 
 			ServiceType myService = new ServiceType();
 
