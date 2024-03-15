@@ -152,5 +152,49 @@ namespace BPUtil
 			// It will also be the only attempt if the [delays] argument was empty.
 			return func();
 		}
+		/// <summary>
+		/// Runs the specified action. Each time the action fails (throws an exception), the caller will be given the option to cancel. Sleep time is defined by the [delays] arguments.
+		/// </summary>
+		/// <param name="action">Action to run.</param>
+		/// <param name="shouldCancel">If the action fails (throws an exception), [shouldCancel] is called.  If [shouldCancel] returns true, the exception is rethrown. If [shouldCancel] returns false, the thread sleeps and the action is called again. The [shouldCancel] function is passed the exception that occurred.</param>
+		/// <param name="delays">
+		/// <para>
+		/// After failing to run an action, if cancellation is not requested, we sleep the thread for this many milliseconds. Each int from this array is used one time until we reach the end of the array.  When we reach the last int in the array, the last int is used for all following sleeps.
+		/// </para>
+		/// <para>
+		/// Example: Given a [delays] array of [5,10,20], the RetryUntilCancelled method will wait 5ms after the first failure, 10ms after the second failure, 20ms for all following failures.  Repeated execution stops only if [shouldCancel] returns true.
+		/// </para></param>
+		public static void RetryUntilCancelled(Action action, Func<Exception, bool> shouldCancel, params int[] delays)
+		{
+			if (delays.Length == 0)
+				delays = new int[1];
+			int i = 0;
+			int max = delays.Length - 1;
+			while (true)
+			{
+				try
+				{
+					action();
+					return;
+				}
+				catch (Exception ex)
+				{
+					bool cancel;
+					try
+					{
+						cancel = shouldCancel(ex);
+					}
+					catch (Exception ex2)
+					{
+						throw new AggregateException(ex2, ex);
+					}
+					if (cancel)
+						throw;
+					Thread.Sleep(delays[i]);
+					if (i < max)
+						i++;
+				}
+			}
+		}
 	}
 }

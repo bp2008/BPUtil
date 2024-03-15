@@ -103,15 +103,7 @@ namespace BPUtil
 				fiDest.Delete();
 			}
 
-			if (GetDriveLetter(sourceFileName) == GetDriveLetter(destFileName))
-			{
-				File.Move(sourceFileName, destFileName);
-			}
-			else
-			{
-				File.Copy(sourceFileName, destFileName, true);
-				File.Delete(sourceFileName);
-			}
+			File.Move(sourceFileName, destFileName);
 		}
 		/// <summary>
 		/// Returns the drive letter, capitalized, from the absolute Windows path ("c:/temp/file.txt" yields "C").  Returns null if a drive letter could not be identified.
