@@ -36,8 +36,7 @@ namespace BPUtil
 	/// </summary>
 	public class BasicEventTimer
 	{
-		private Stopwatch watch;
-		private string currentEvent;
+		private TimedEvent currentEvent;
 		private Dictionary<string, TimedEvent> dict_events;
 		private List<TimedEvent> events;
 		private string numberFormatString;
@@ -58,9 +57,6 @@ namespace BPUtil
 		/// </summary>
 		public void Reset()
 		{
-			if (watch != null)
-				watch.Stop();
-			watch = new Stopwatch();
 			currentEvent = null;
 			events = new List<TimedEvent>();
 			if (mergeSameEventTimes)
@@ -75,37 +71,36 @@ namespace BPUtil
 			if (eventName == null)
 				eventName = "null";
 			Stop();
-			currentEvent = eventName;
-			watch.Start();
+			if (mergeSameEventTimes)
+			{
+				if (dict_events.TryGetValue(eventName, out TimedEvent existing))
+				{
+					currentEvent = existing;
+					existing.Resume();
+				}
+				else
+				{
+					currentEvent = new TimedEvent(eventName, numberFormatString);
+					dict_events[eventName] = currentEvent;
+					events.Add(currentEvent);
+				}
+			}
+			else
+			{
+				currentEvent = new TimedEvent(eventName, numberFormatString);
+				events.Add(currentEvent);
+			}
 		}
 		/// <summary>
 		/// Stops and logs the time for the previously started event, if there was one.
 		/// </summary>
 		public void Stop()
 		{
-			if (currentEvent == null)
-				return;
-			watch.Stop();
-			AddEvent(new TimedEvent(currentEvent, watch.Elapsed, numberFormatString));
-			watch.Reset();
-			currentEvent = null;
-		}
-
-		private void AddEvent(TimedEvent timedEvent)
-		{
-			if (mergeSameEventTimes)
+			if (currentEvent != null)
 			{
-				TimedEvent existing;
-				if (dict_events.TryGetValue(timedEvent.name, out existing))
-					existing.time += timedEvent.time;
-				else
-				{
-					dict_events[timedEvent.name] = timedEvent;
-					events.Add(timedEvent);
-				}
+				currentEvent.Stop();
+				currentEvent = null;
 			}
-			else
-				events.Add(timedEvent);
 		}
 		/// <summary>
 		/// Returns the time (in seconds) elapsed for the named event. If the event is not found, returns 0.
@@ -141,7 +136,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public string ToString(string separator)
 		{
-			return string.Join(separator, events) + (currentEvent == null ? "" : separator + new TimedEvent(currentEvent + " (ongoing)", watch.Elapsed, numberFormatString).ToString());
+			return string.Join(separator, events);
 		}
 		/// <summary>
 		/// Produces a string that can be set in HTTP response header "Server-Timing" to allow browser developer tools to show these results among other request timing info.
@@ -184,18 +179,37 @@ namespace BPUtil
 		}
 		private class TimedEvent
 		{
-			public string name;
-			public TimeSpan time;
-			public string numberFormatString;
-			public TimedEvent(string name, TimeSpan time, string numberFormatString)
+			public readonly string name;
+			/// <summary>
+			/// The time measured for this TimedEvent.
+			/// </summary>
+			public TimeSpan time => stopwatch.Elapsed;
+			public readonly string numberFormatString;
+			private Stopwatch stopwatch;
+			public TimedEvent(string name, string numberFormatString)
 			{
 				this.name = name;
-				this.time = time;
 				this.numberFormatString = numberFormatString;
+				stopwatch = Stopwatch.StartNew();
+			}
+			/// <summary>
+			/// Stops the Stopwatch such that this TimedEvent's [time] property stops increasing.
+			/// </summary>
+			public void Stop()
+			{
+				stopwatch.Stop();
+			}
+			/// <summary>
+			/// Resumes the Stopwatch such that this TimedEvent's [time] property begins increasing.
+			/// </summary>
+			/// <exception cref="NotImplementedException"></exception>
+			public void Resume()
+			{
+				stopwatch.Start();
 			}
 			public override string ToString()
 			{
-				return time.TotalSeconds.ToString(numberFormatString) + " - " + name;
+				return time.TotalSeconds.ToString(numberFormatString) + " - " + name + (stopwatch.IsRunning ? " (ongoing)" : "");
 			}
 		}
 	}
