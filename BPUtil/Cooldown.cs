@@ -62,6 +62,14 @@ namespace BPUtil
 			return false;
 		}
 		/// <summary>
+		/// Immediately resets the cooldown so that the next call to <see cref="Consume"/> will return true.
+		/// </summary>
+		/// <returns></returns>
+		public void Reset()
+		{
+			_cd = null;
+		}
+		/// <summary>
 		/// Gets or sets a value indicating if the countdown has reached zero.  If you set this value to true, it will instantly expire the cooldown.  If you set it to false, it will start a fresh cooldown period.
 		/// </summary>
 		public bool Available
