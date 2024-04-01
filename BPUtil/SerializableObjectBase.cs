@@ -149,7 +149,11 @@ namespace BPUtil
 			return false;
 		}
 
-		protected virtual string GetDefaultFilePath()
+		/// <summary>
+		/// Gets the default settings file path, which is typically a relative path (to the current working directory).
+		/// </summary>
+		/// <returns></returns>
+		public virtual string GetDefaultFilePath()
 		{
 			return this.GetType().Name + ".cfg";
 		}
@@ -159,14 +163,29 @@ namespace BPUtil
 		/// </summary>
 		protected virtual void SerializeObject(object obj, FileStream stream)
 		{
-			System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(this.GetType());
-			x.Serialize(stream, this);
+			SerializeObjectXml(obj, stream);
 		}
 		/// <summary>
 		/// <para>Reads the object from a FileStream.  The default implementation in SerializableObjectBase uses XML.</para>
 		/// <para>Must return a type inheriting from SerializableObjectBase.</para>
 		/// </summary>
 		protected virtual SerializableObjectBase DeserializeObject(FileStream stream)
+		{
+			return DeserializeObjectXml(stream);
+		}
+		/// <summary>
+		/// <para>Writes the object to a FileStream using XML.</para>
+		/// </summary>
+		protected void SerializeObjectXml(object obj, FileStream stream)
+		{
+			System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(this.GetType());
+			x.Serialize(stream, this);
+		}
+		/// <summary>
+		/// <para>Reads the object from a FileStream using XML.</para>
+		/// <para>Must return a type inheriting from SerializableObjectBase.</para>
+		/// </summary>
+		protected SerializableObjectBase DeserializeObjectXml(FileStream stream)
 		{
 			System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(this.GetType());
 			object obj = x.Deserialize(stream);
@@ -197,7 +216,11 @@ namespace BPUtil
 			}
 		}
 
-		protected override string GetDefaultFilePath()
+		/// <summary>
+		/// Gets the default settings file path, which is typically a relative path (to the current working directory).
+		/// </summary>
+		/// <returns></returns>
+		public override string GetDefaultFilePath()
 		{
 			return this.GetType().Name + ".json";
 		}

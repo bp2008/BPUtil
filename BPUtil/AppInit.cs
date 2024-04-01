@@ -70,7 +70,10 @@ namespace BPUtil
 					c.RedLine("Failed to load settings file.");
 #if NETFRAMEWORK || NET6_0_WIN
 					if (Environment.UserInteractive)
+					{
 						System.Windows.Forms.MessageBox.Show("Failed to load settings file.");
+						Process.Start(settingsObj.GetDefaultFilePath());
+					}
 #endif
 					throw new Exception("Failed to load settings file.");
 				}

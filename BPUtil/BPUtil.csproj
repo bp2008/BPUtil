@@ -66,6 +66,7 @@
     <Compile Include="BackupRotate.cs" />
     <Compile Include="Base64UrlMod.cs" />
     <Compile Include="BitRateCalculator.cs" />
+    <Compile Include="BPMessage.cs" />
     <Compile Include="BPQueue.cs" />
     <Compile Include="BranchStatus.cs" />
     <Compile Include="CertificateValidation.cs" />

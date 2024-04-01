@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BPUtil
@@ -28,6 +29,7 @@ namespace BPUtil
 	public class BranchStatus : IDisposable
 	{
 		private List<BranchStatus> branches = new List<BranchStatus>();
+		private ReaderWriterLockSlim branchLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
 		private BranchStatus parent;
 		private int depth;
 		/// <summary>
@@ -101,8 +103,15 @@ namespace BPUtil
 		public BranchStatus Branch(string Name = null, string Status = null)
 		{
 			BranchStatus child = new BranchStatus(Name, Status, this);
-			lock (branches)
+			branchLock.EnterWriteLock();
+			try
+			{
 				branches.Add(child);
+			}
+			finally
+			{
+				branchLock.ExitWriteLock();
+			}
 			child.OnChange += Child_OnChange;
 			Child_OnChange(child, EventArgs.Empty);
 			return child;
@@ -126,15 +135,32 @@ namespace BPUtil
 			if (!string.IsNullOrWhiteSpace(Name))
 				sb.Append(Name).Append(": ");
 			sb.AppendLine(Status);
-			foreach (BranchStatus child in branches)
-				sb.Append(child.ToString());
+
+			branchLock.EnterReadLock();
+			try
+			{
+				foreach (BranchStatus child in branches)
+					sb.Append(child.ToString());
+			}
+			finally
+			{
+				branchLock.ExitReadLock();
+			}
+
 			return sb.ToString();
 		}
 		private void RemoveChild(BranchStatus child)
 		{
 			child.OnChange -= Child_OnChange;
-			lock (branches)
+			branchLock.EnterWriteLock();
+			try
+			{
 				branches.Remove(child);
+			}
+			finally
+			{
+				branchLock.ExitWriteLock();
+			}
 		}
 		#region IDisposable
 
@@ -148,10 +174,15 @@ namespace BPUtil
 				{
 					// Remove self from the parent's branches.
 					parent?.RemoveChild(this);
-					lock (branches)
+					branchLock.EnterWriteLock();
+					try
 					{
 						for (int i = 0; i < branches.Count; i++)
 							branches[branches.Count - 1].Dispose(); // Just dispose the last item in the list each time, and ignore the [i] variable.
+					}
+					finally
+					{
+						branchLock.ExitWriteLock();
 					}
 				}
 
