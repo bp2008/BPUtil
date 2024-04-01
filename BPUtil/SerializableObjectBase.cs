@@ -23,7 +23,7 @@ namespace BPUtil
 		/// <summary>
 		/// Saves this instance to file.  Returns true if successful.
 		/// </summary>
-		/// <param name="filePath"></param>
+		/// <param name="filePath">Optional file path. If null, the default file path is used.</param>
 		/// <returns></returns>
 		public virtual bool Save(string filePath = null)
 		{
@@ -60,7 +60,7 @@ namespace BPUtil
 		/// <summary>
 		/// Saves this instance from file.  Returns true if successful.
 		/// </summary>
-		/// <param name="filePath"></param>
+		/// <param name="filePath">Optional file path. If null, the default file path is used.</param>
 		/// <returns></returns>
 		public virtual bool Load(string filePath = null)
 		{
@@ -121,9 +121,21 @@ namespace BPUtil
 			return false;
 		}
 		/// <summary>
+		/// (Thread-)Safely checks if the settings file exists, and returns true if it does.
+		/// </summary>
+		/// <param name="filePath">Optional file path. If null, the default file path is used.</param>
+		public virtual bool FileExists(string filePath = null)
+		{
+			if (filePath == null)
+				filePath = GetDefaultFilePath();
+			object lockObj = fileLocks.GetOrAdd(filePath.ToLower(), MakeLockKey);
+			lock (lockObj)
+				return File.Exists(filePath);
+		}
+		/// <summary>
 		/// (Thread-)Safely checks if the settings file exists, and if not, saves the current instance.  Returns true if a file was saved.
 		/// </summary>
-		/// <param name="filePath"></param>
+		/// <param name="filePath">Optional file path. If null, the default file path is used.</param>
 		public virtual bool SaveIfNoExist(string filePath = null)
 		{
 			if (filePath == null)
