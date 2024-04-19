@@ -4,7 +4,7 @@ using BPUtil;
 namespace UnitTests
 {
 	[TestClass]
-	public class IPAddressRangeTests
+	public class TestIPAddressRange
 	{
 		[TestMethod]
 		public void TestSingleAddress()

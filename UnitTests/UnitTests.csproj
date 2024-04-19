@@ -52,7 +52,6 @@
   <ItemGroup>
     <Compile Include="Expect.cs" />
     <Compile Include="Helpers\IterateOverKeyContainers.cs" />
-    <Compile Include="IPAddressRangeTests.cs" />
     <Compile Include="TestBackupRotate.cs" />
     <Compile Include="TestBase64UrlMod.cs" />
     <Compile Include="TestByteUtil.cs" />
@@ -60,6 +59,7 @@
     <Compile Include="TestChunkedTransferEncodingStreams.cs" />
     <Compile Include="TestConcatenatedStream.cs" />
     <Compile Include="TestHttpHeaderCollection.cs" />
+    <Compile Include="TestIPAddressRange.cs" />
     <Compile Include="TestObjectChangeReplay.cs" />
     <Compile Include="TestObjectCopy.cs" />
     <Compile Include="TestObjectMerge.cs" />
