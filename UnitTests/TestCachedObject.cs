@@ -22,6 +22,9 @@ namespace UnitTests
 				counter = 0;
 			}
 		}
+		/// <summary>
+		/// This test is flaky because it relies on unpredictable timing.
+		/// </summary>
 		[TestMethod]
 		public void TestCachedObjectCorrectness()
 		{

@@ -1,6 +1,7 @@
 ﻿using BPUtil;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Net;
 
 namespace UnitTests
 {
@@ -83,6 +84,18 @@ namespace UnitTests
 		}
 
 		[TestMethod]
+		public void TestGenerateMaskFromPrefixSize()
+		{
+			byte[] expected = IPUtil.GenerateMaskBytesFromPrefixSize(true, 23);
+			byte[] actual = IPUtil.GenerateMaskFromPrefixSize(true, 23).GetAddressBytes();
+			CollectionAssert.AreEqual(expected, actual);
+
+			expected = IPUtil.GenerateMaskBytesFromPrefixSize(false, 47);
+			actual = IPUtil.GenerateMaskFromPrefixSize(false, 47).GetAddressBytes();
+			CollectionAssert.AreEqual(expected, actual);
+		}
+
+		[TestMethod]
 		[ExpectedException(typeof(ArgumentException))]
 		public void TestGenerateMaskBytesFromPrefixSize_InvalidPrefixSize()
 		{
@@ -101,6 +114,35 @@ namespace UnitTests
 		public void TestGenerateMaskBytesFromPrefixSize_InvalidPrefixSize_3()
 		{
 			IPUtil.GenerateMaskBytesFromPrefixSize(false, 129);
+		}
+
+		[TestMethod]
+		public void TestSubnetCompare()
+		{
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("192.168.0.1"), IPAddress.Parse("192.168.0.255"), 0, 64));
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("192.168.0.1"), IPAddress.Parse("192.168.0.255"), 24, 64));
+			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("192.168.0.1"), IPAddress.Parse("192.168.0.255"), 25, 64));
+			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("192.168.0.1"), IPAddress.Parse("192.168.0.255"), 32, 64));
+
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("192.168.0.1"), IPAddress.Parse("192.168.0.1"), 32, 64));
+
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("2001:4860:4860::8888"), IPAddress.Parse("2001:4860:4860::8844"), 32, 0));
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("2001:4860:4860::8888"), IPAddress.Parse("2001:4860:4860::8844"), 32, 64));
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("2001:4860:4860::8888"), IPAddress.Parse("2001:4860:4860::8844"), 32, 120));
+			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("2001:4860:4860::8888"), IPAddress.Parse("2001:4860:4860::8844"), 32, 121));
+			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("2001:4860:4860::8888"), IPAddress.Parse("2001:4860:4860::8844"), 32, 128));
+
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("2001:4860:4860::8888"), IPAddress.Parse("2001:4860:4860::8888"), 32, 128));
+
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:ffff:ffff:ffff:ffff"), 32, 0));
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:ffff:ffff:ffff:ffff"), 32, 64));
+			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:ffff:ffff:ffff:ffff"), 32, 65));
+			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:ffff:ffff:ffff:ffff"), 32, 128));
+
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:1111:1111:1111:1111"), 32, 0));
+			Assert.IsTrue(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:1111:1111:1111:1111"), 32, 67));
+			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:1111:1111:1111:1111"), 32, 68));
+			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:1111:1111:1111:1111"), 32, 128));
 		}
 	}
 }

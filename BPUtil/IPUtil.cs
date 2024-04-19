@@ -115,43 +115,84 @@ namespace BPUtil
 			}
 			return maskBytes;
 		}
+		/// <summary>
+		/// Returns an IPAddress that defines the subnet mask with the given prefixSize.
+		/// </summary>
+		/// <param name="ipv4">If true, generate a subnet mask for IPv4.  If false, generate a subnet mask for IPv6.</param>
+		/// <param name="prefixSize">Prefix size in bits (0-32 for IPv4, 0-128 for IPv6).</param>
+		/// <returns></returns>
+		public static IPAddress GenerateMaskFromPrefixSize(bool ipv4, int prefixSize)
+		{
+			return new IPAddress(GenerateMaskBytesFromPrefixSize(ipv4, prefixSize));
+		}
+		/// <summary>
+		/// Compares two IP addresses and returns true if they are in the same subnet according to the given subnet sizes.
+		/// </summary>
+		/// <param name="a">First IP Address to test.</param>
+		/// <param name="b">Second IP Address to test.</param>
+		/// <param name="ipv4SubnetSize">IPv4 subnet size, default 32.  E.g. with 32, the IP addresses must match exactly in order to be considered equal. `192.168.0.1/32`</param>
+		/// <param name="ipv6SubnetSize">IPv6 subnet size, default 64.  E.g. with 64, as long as the first 4 segments of the IPv6 address match, this method will return true.`param>
+		/// <returns></returns>
+		public static bool SubnetCompare(IPAddress a, IPAddress b, byte ipv4SubnetSize = 32, byte ipv6SubnetSize = 64)
+		{
+			if (a.AddressFamily == b.AddressFamily)
+			{
+				if (a.AddressFamily == AddressFamily.InterNetwork)
+					return a.IsInSameSubnet(b, ipv4SubnetSize);
+				else if (a.AddressFamily == AddressFamily.InterNetworkV6)
+					return a.IsInSameSubnet(b, ipv6SubnetSize);
+				else
+					throw new Exception("AddressFamily." + a.AddressFamily + " is not supported.");
+			}
+			else
+				throw new Exception("AddressFamily of both IP addresses must be the same to be compared. A: " + a.AddressFamily + ", B: " + b.AddressFamily + ".");
+		}
 	}
 	public static class IPAddressExtensions
 	{
 		public static IPAddress GetBroadcastAddress(this IPAddress address, IPAddress subnetMask)
 		{
-			byte[] ipAdressBytes = address.GetAddressBytes();
+			byte[] ipAddressBytes = address.GetAddressBytes();
 			byte[] subnetMaskBytes = subnetMask.GetAddressBytes();
 
-			if (ipAdressBytes.Length != subnetMaskBytes.Length)
+			if (ipAddressBytes.Length != subnetMaskBytes.Length)
 				throw new ArgumentException("Lengths of IP address and subnet mask do not match.");
 
-			byte[] broadcastAddress = new byte[ipAdressBytes.Length];
+			byte[] broadcastAddress = new byte[ipAddressBytes.Length];
 			for (int i = 0; i < broadcastAddress.Length; i++)
 			{
-				broadcastAddress[i] = (byte)(ipAdressBytes[i] | (subnetMaskBytes[i] ^ 255));
+				broadcastAddress[i] = (byte)(ipAddressBytes[i] | (subnetMaskBytes[i] ^ 255));
 			}
 			return new IPAddress(broadcastAddress);
 		}
 
 		public static IPAddress GetNetworkAddress(this IPAddress address, IPAddress subnetMask)
 		{
-			byte[] ipAdressBytes = address.GetAddressBytes();
+			byte[] ipAddressBytes = address.GetAddressBytes();
 			byte[] subnetMaskBytes = subnetMask.GetAddressBytes();
 
-			if (ipAdressBytes.Length != subnetMaskBytes.Length)
+			if (ipAddressBytes.Length != subnetMaskBytes.Length)
 				throw new ArgumentException("Lengths of IP address and subnet mask do not match.");
 
-			byte[] broadcastAddress = new byte[ipAdressBytes.Length];
+			byte[] broadcastAddress = new byte[ipAddressBytes.Length];
 			for (int i = 0; i < broadcastAddress.Length; i++)
 			{
-				broadcastAddress[i] = (byte)(ipAdressBytes[i] & (subnetMaskBytes[i]));
+				broadcastAddress[i] = (byte)(ipAddressBytes[i] & (subnetMaskBytes[i]));
 			}
 			return new IPAddress(broadcastAddress);
 		}
 
 		public static bool IsInSameSubnet(this IPAddress address2, IPAddress address, IPAddress subnetMask)
 		{
+			IPAddress network1 = address.GetNetworkAddress(subnetMask);
+			IPAddress network2 = address2.GetNetworkAddress(subnetMask);
+
+			return network1.Equals(network2);
+		}
+
+		public static bool IsInSameSubnet(this IPAddress address2, IPAddress address, int subnetSize)
+		{
+			IPAddress subnetMask = IPUtil.GenerateMaskFromPrefixSize(address2.AddressFamily == AddressFamily.InterNetwork, subnetSize);
 			IPAddress network1 = address.GetNetworkAddress(subnetMask);
 			IPAddress network2 = address2.GetNetworkAddress(subnetMask);
 
