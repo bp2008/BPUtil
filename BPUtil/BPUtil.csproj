@@ -70,6 +70,7 @@
     <Compile Include="BPQueue.cs" />
     <Compile Include="BranchStatus.cs" />
     <Compile Include="CertificateValidation.cs" />
+    <Compile Include="ComparableIPAddress.cs" />
     <Compile Include="Compass.cs" />
     <Compile Include="Cooldown.cs" />
     <Compile Include="CountdownStopwatch.cs" />
@@ -84,6 +85,7 @@
     <Compile Include="Forms\TrayIconApplication2.cs" />
     <Compile Include="IO\ConcatenatedStream.cs" />
     <Compile Include="IO\Substream.cs" />
+    <Compile Include="IpRangeLite.cs" />
     <Compile Include="Linux\PortHelper.cs" />
     <Compile Include="MVC\ControllerAsync.cs" />
     <Compile Include="MVC\RequiresHttpMethodAttribute.cs" />
