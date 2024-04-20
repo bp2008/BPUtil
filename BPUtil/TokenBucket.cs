@@ -13,25 +13,27 @@ namespace BPUtil
 	/// </summary>
 	public class TokenBucket
 	{
-		private readonly double _capacity;
-		private readonly double _tokensPerTick;
+		private double _capacity;
+		private double _tokensPerTick;
 		private double _tokens;
+		private double _refillRate;
 		private long _lastRefillTime;
 		private readonly object _lock = new object();
 
 		/// <summary>
 		/// Initializes a new instance of the TokenBucket class with the specified capacity and refill rate.
 		/// </summary>
-		/// <param name="capacity">The maximum number of tokens that the bucket can hold.</param>
+		/// <param name="capacity">The maximum number of tokens that the bucket can hold.  The bucket starts full.</param>
 		/// <param name="refillRate">The rate at which tokens are added to the bucket (tokens per second).</param>
 		public TokenBucket(double capacity, double refillRate)
 		{
 			if (capacity <= 0)
-				throw new ArgumentOutOfRangeException("capacity", capacity, "must be a positive number");
+				throw new ArgumentOutOfRangeException("capacity", capacity, "TokenBucket capacity must be a positive number");
 			if (refillRate <= 0)
-				throw new ArgumentOutOfRangeException("refillRate", refillRate, "must be a positive number");
+				throw new ArgumentOutOfRangeException("refillRate", refillRate, "TokenBucket refill rate must be a positive number");
 
 			_capacity = capacity;
+			_refillRate = refillRate;
 			_tokensPerTick = refillRate / Stopwatch.Frequency;
 			_tokens = capacity;
 			_lastRefillTime = GetTime();
@@ -80,6 +82,48 @@ namespace BPUtil
 			{
 				_tokens = Math.Min(_capacity, _tokens + newTokens);
 				_lastRefillTime = now;
+			}
+		}
+		/// <summary>
+		/// Gets or sets the capacity of this TokenBucket, in tokens.  If reducing the capacity, excess tokens will be lost.  Must be a positive number.
+		/// </summary>
+		public double Capacity
+		{
+			get
+			{
+				return _capacity;
+			}
+			set
+			{
+				if (value <= 0)
+					throw new ArgumentOutOfRangeException("value", value, "TokenBucket capacity must be a positive number");
+				lock (_lock)
+				{
+					Refill();
+					_capacity = value;
+					_tokens = Math.Min(_capacity, _tokens);
+				}
+			}
+		}
+		/// <summary>
+		/// Gets or sets the refill rate of this TokenBucket, in tokens per second.  Must be a positive number.
+		/// </summary>
+		public double RefillRate
+		{
+			get
+			{
+				return _refillRate;
+			}
+			set
+			{
+				if (value <= 0)
+					throw new ArgumentOutOfRangeException("value", value, "TokenBucket refill rate must be a positive number");
+				lock (_lock)
+				{
+					Refill();
+					_refillRate = value;
+					_tokensPerTick = _refillRate / Stopwatch.Frequency;
+				}
 			}
 		}
 		#region Timekeeping
