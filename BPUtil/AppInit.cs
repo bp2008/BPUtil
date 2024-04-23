@@ -109,7 +109,7 @@ namespace BPUtil
 				}
 
 				bool didStart = false;
-				if (Debugger.IsAttached || options.RunForDebugging)
+				if (options.RunForDebugging == true || (options.RunForDebugging == null && Debugger.IsAttached))
 				{
 					PrivateAccessor.CallMethod<ServiceType>(myService, "OnStart", new object[] { new string[0] });
 					didStart = true;
@@ -607,9 +607,9 @@ WantedBy=multi-user.target";
 	public class WindowsServiceInitOptions
 	{
 		/// <summary>
-		/// If true, the service's OnStart() method will be called even if <see cref="Debugger.IsAttached"/> is false.  Useful in some development circumstances, such as when launching the application with a performance profiler.
+		/// Determines whether the service's OnStart() method will be called during GUI initialization (for debugging purposes). If null, this will be controlled by <see cref="Debugger.IsAttached"/>.  Useful in some development circumstances, such as when launching the application with a performance profiler.
 		/// </summary>
-		public bool RunForDebugging = false;
+		public bool? RunForDebugging = null;
 		/// <summary>
 		/// If true, the "Open Data Folder" button will be added to the service manager. True by default.
 		/// </summary>
