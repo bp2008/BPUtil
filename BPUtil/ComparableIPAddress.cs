@@ -59,7 +59,7 @@ namespace BPUtil
 		/// <summary>
 		/// Compares this address with another address.
 		/// </summary>
-		/// <param name="other">Other address.</param>
+		/// <param name="obj">Other address.</param>
 		/// <returns></returns>
 		public int CompareTo(object obj)
 		{

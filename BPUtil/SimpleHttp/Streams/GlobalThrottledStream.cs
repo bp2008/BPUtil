@@ -336,9 +336,9 @@ namespace BPUtil.SimpleHttp
 							if (timeToWait > 0)
 								ewh.WaitOne(timeToWait);
 						}
-						catch (ThreadAbortException ex)
+						catch (ThreadAbortException)
 						{
-							throw ex;
+							throw;
 						}
 						catch (Exception ex)
 						{

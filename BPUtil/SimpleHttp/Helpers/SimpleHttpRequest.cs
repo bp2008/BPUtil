@@ -37,7 +37,7 @@ namespace BPUtil.SimpleHttp
 		public Uri Url { get; private set; }
 		/// <summary>
 		/// <para>The path to and name of the requested page, not including the first '/'.</para>
-		/// <para>For example, if the URL was "/articles/science/moon.html?date=2011-10-21", requestedPage would be "articles/science/moon.html".</para>
+		/// <para>For example, if the URL was "/articles/science/moon.html?date=2011-10-21", Page would be "articles/science/moon.html".</para>
 		/// <para>URL-encoded characters remain url-encoded. E.g. "File%20Name.jpg".</para>
 		/// </summary>
 		public string Page { get; private set; }

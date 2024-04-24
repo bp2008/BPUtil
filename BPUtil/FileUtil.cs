@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,10 +20,25 @@ namespace BPUtil
 		public static void FullControlToUsers(string filePath)
 		{
 			FileSecurity oFileSecurity = new FileSecurity();
-			oFileSecurity.AddAccessRule(new FileSystemAccessRule("Users", FileSystemRights.FullControl, AccessControlType.Allow));
+			SecurityIdentifier sid = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+			oFileSecurity.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, AccessControlType.Allow));
 			FileInfo fi = new FileInfo(filePath);
 			fi.SetAccessControl(oFileSecurity);
 		}
+		/// <summary>
+		/// For the given directory, allows "Full Control" permission to "Users".
+		/// </summary>
+		/// <param name="directoryPath">Path of the directory to set permission on.</param>
+		public static void DirectoryFullControlToUsers(string directoryPath)
+		{
+			DirectorySecurity directorySecurity = new DirectorySecurity();
+			SecurityIdentifier sid = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+			FileSystemAccessRule rule = new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow);
+			directorySecurity.AddAccessRule(rule);
+			DirectoryInfo di = new DirectoryInfo(directoryPath);
+			di.SetAccessControl(directorySecurity);
+		}
+
 #endif
 
 		/// <summary>

@@ -131,7 +131,7 @@ namespace BPUtil
 		/// <param name="a">First IP Address to test.</param>
 		/// <param name="b">Second IP Address to test.</param>
 		/// <param name="ipv4SubnetSize">IPv4 subnet size, default 32.  E.g. with 32, the IP addresses must match exactly in order to be considered equal. `192.168.0.1/32`</param>
-		/// <param name="ipv6SubnetSize">IPv6 subnet size, default 64.  E.g. with 64, as long as the first 4 segments of the IPv6 address match, this method will return true.`param>
+		/// <param name="ipv6SubnetSize">IPv6 subnet size, default 64.  E.g. with 64, as long as the first 4 segments of the IPv6 address match, this method will return true.</param>
 		/// <returns></returns>
 		public static bool SubnetCompare(IPAddress a, IPAddress b, byte ipv4SubnetSize = 32, byte ipv6SubnetSize = 64)
 		{

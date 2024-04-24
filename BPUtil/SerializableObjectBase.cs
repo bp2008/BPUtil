@@ -58,7 +58,7 @@ namespace BPUtil
 			return false;
 		}
 		/// <summary>
-		/// Saves this instance from file.  Returns true if successful.
+		/// Loads this instance from file.  Returns true if successful.  May throw an exception if the file format is invalid.
 		/// </summary>
 		/// <param name="filePath">Optional file path. If null, the default file path is used.</param>
 		/// <returns></returns>
@@ -114,7 +114,10 @@ namespace BPUtil
 				catch (Exception ex)
 				{
 					if (tries >= 5)
+					{
 						Logger.Debug(ex);
+						throw;
+					}
 					else
 						Thread.Sleep(1);
 				}
