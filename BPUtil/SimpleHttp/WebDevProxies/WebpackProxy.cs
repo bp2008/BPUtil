@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BPUtil.SimpleHttp.Client;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -20,6 +21,18 @@ namespace BPUtil.SimpleHttp
 		string workingDirectory;
 		object webpackStartLock = new object();
 		bool hasTriedRecovery = false;
+		/// <summary>
+		/// If true, requests will be proxied using HTTPS.
+		/// </summary>
+		public bool ConnectWithHttps = false;
+		/// <summary>
+		/// If true, requests will be proxied via the newer Async method.
+		/// </summary>
+		public bool ProxyViaAsyncMethod = false;
+		static WebpackProxy()
+		{
+			CertificateValidation.RegisterCallback(CertificateValidation.Allow_127_0_0_1_ValidationCallback);
+		}
 
 		public WebpackProxy(int webpackPort, string workingDirectory = null)
 		{
@@ -29,10 +42,11 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Attempts to proxy the connection to webpack, starting webpack dev server if necessary.
 		/// </summary>
-		/// <param name="p"></param>
-		public void Proxy(HttpProcessor p)
+		/// <param name="p">HttpProcessor</param>
+		/// <param name="overrideAbsolutePath">If not null, change the absolute path from whatever the client requestd to this. (e.g. "/test")</param>
+		public void Proxy(HttpProcessor p, string overrideAbsolutePath = null)
 		{
-			Exception ex = TryProxy(p);
+			Exception ex = TryProxy(p, overrideAbsolutePath);
 			if (ex == null)
 				return;
 			if (!hasTriedRecovery)
@@ -60,16 +74,44 @@ namespace BPUtil.SimpleHttp
 				}
 			}
 			if (!p.Response.ResponseHeaderWritten)
-				ex = TryProxy(p);
+				ex = TryProxy(p, overrideAbsolutePath);
 			if (ex == null)
 				return;
 			Logger.Debug(ex, "Failed to proxy \"" + p.Request.Url.PathAndQuery + "\" to webpack dev server.");
 		}
-		private Exception TryProxy(HttpProcessor p)
+		private Exception TryProxy(HttpProcessor p, string overrideAbsolutePath)
+		{
+			if (ProxyViaAsyncMethod)
+				return TaskHelper.RunAsyncCodeSafely(() => TryProxyAsync(p, overrideAbsolutePath));
+			else
+			{
+				try
+				{
+					p.ProxyTo("http" + (ConnectWithHttps ? "s" : "") + "://" + IPAddress.Loopback.ToString() + ":" + webpackPort + (overrideAbsolutePath != null ? overrideAbsolutePath : p.Request.Url.AbsolutePath));
+					return null;
+				}
+				catch (Exception ex) { return ex; }
+			}
+		}
+		private async Task<Exception> TryProxyAsync(HttpProcessor p, string overrideAbsolutePath, CancellationToken cancellationToken = default)
 		{
 			try
 			{
-				p.ProxyTo("http://" + IPAddress.Loopback.ToString() + ":" + webpackPort + p.Request.Url.AbsolutePath);
+				UriBuilder builder = new UriBuilder(p.Request.Url);
+				builder.Scheme = "http" + (ConnectWithHttps ? "s" : "");
+				builder.Host = IPAddress.Loopback.ToString();
+				builder.Port = webpackPort;
+				if (overrideAbsolutePath != null)
+					builder.Path = overrideAbsolutePath;
+				await p.ProxyToAsync(builder.Uri.ToString(), new ProxyOptions()
+				{
+					allowGatewayTimeoutResponse = false,
+					allowConnectionKeepalive = true,
+					connectTimeoutMs = 5000,
+					networkTimeoutMs = 15000,
+					longReadTimeoutMinutes = 1440,
+					cancellationToken = cancellationToken
+				}).ConfigureAwait(false);
 				return null;
 			}
 			catch (Exception ex) { return ex; }

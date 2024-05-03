@@ -294,7 +294,7 @@ namespace BPUtil.SimpleHttp.Client
 			proxyTiming?.Start("Send Request");
 			options.bet?.Start("Send Request");
 			StringBuilder sbRequestText = new StringBuilder();
-			string requestLine = p.Request.HttpMethod + ' ' + p.Request.Url.PathAndQuery + ' ' + p.Request.HttpProtocolVersionString;
+			string requestLine = p.Request.HttpMethod + ' ' + uri.PathAndQuery + ' ' + p.Request.HttpProtocolVersionString;
 			sbRequestText.AppendLineRN(requestLine);
 			// After the first line comes the request headers.
 			string outgoingHostHeader = host;
