@@ -160,6 +160,8 @@ namespace BPUtil
 				else
 					throw new OperationCanceledException("TaskHelper.DoWithTimeout: The operation has timed out.");
 			}
+			else if (completedTask.IsFaulted)
+				await completedTask; // This will throw the exception if the task faulted.
 		}
 		/// <summary>
 		/// Returns the result of the given task or throws <see cref="OperationCanceledException"/> if the task does not complete within the specified time period.
@@ -182,6 +184,8 @@ namespace BPUtil
 				else
 					throw new OperationCanceledException("TaskHelper.GetWithTimeout: The operation has timed out.");
 			}
+			else if (completedTask.IsFaulted)
+				await completedTask; // This will throw the exception if the task faulted.
 			return task.GetAwaiter().GetResult();
 		}
 
@@ -225,6 +229,8 @@ namespace BPUtil
 				Task completedTask = await Task.WhenAny(timeoutTask, waiter.WaitAsync(cancellationToken)).ConfigureAwait(false);
 				if (completedTask == timeoutTask)
 					throw new OperationCanceledException("A timeout expired while waiting for a condition to be met.");
+				else if (completedTask.IsFaulted)
+					await completedTask; // This will throw the exception if the task faulted.
 				cancellationToken.ThrowIfCancellationRequested();
 			}
 		}
@@ -241,13 +247,16 @@ namespace BPUtil
 			TaskCompletionSource<bool> taskCompletionSource = new TaskCompletionSource<bool>();
 			using (cancellationToken.Register(() => taskCompletionSource.TrySetResult(true)))
 			{
-				if (task != await Task.WhenAny(task, taskCompletionSource.Task).ConfigureAwait(false))
+				Task completedTask = await Task.WhenAny(task, taskCompletionSource.Task).ConfigureAwait(false);
+				if (completedTask != task)
 				{
 					if (doIfCancelled != null)
 						await doIfCancelled().ConfigureAwait(false);
 					else
 						throw new OperationCanceledException("TaskHelper.DoWithCancellation: The operation was cancelled.");
 				}
+				else if (completedTask.IsFaulted)
+					await completedTask; // This will throw the exception if the task faulted.
 			}
 		}
 		/// <summary>
@@ -270,13 +279,16 @@ namespace BPUtil
 			using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, ctsTimeout.Token))
 			using (cts.Token.Register(() => taskCompletionSource.TrySetResult(true)))
 			{
-				if (task != await Task.WhenAny(task, taskCompletionSource.Task).ConfigureAwait(false))
+				Task completedTask = await Task.WhenAny(task, taskCompletionSource.Task).ConfigureAwait(false);
+				if (completedTask != task)
 				{
 					if (doIfCancelled != null)
 						await doIfCancelled(ctsTimeout.IsCancellationRequested).ConfigureAwait(false);
 					else
 						throw new OperationCanceledException("TaskHelper.DoWithCancellation: The operation " + (ctsTimeout.IsCancellationRequested ? "timed out." : "was cancelled."));
 				}
+				else if (completedTask.IsFaulted)
+					await completedTask; // This will throw the exception if the task faulted.
 			}
 		}
 		/// <summary>
