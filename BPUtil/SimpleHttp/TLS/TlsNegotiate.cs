@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -148,7 +149,13 @@ namespace BPUtil.SimpleHttp.TLS
 					return false;
 				}
 			}
-			p.base_uri_this_server = new Uri("http" + (p.secure_https ? "s" : "") + "://" + p.tcpClient.Client.LocalEndPoint.ToString(), UriKind.Absolute);
+			string scheme = "http" + (p.secure_https ? "s" : "");
+			IPEndPoint ipEndpoint = (IPEndPoint)p.tcpClient.Client.LocalEndPoint;
+			string ipEndpointHost = ipEndpoint.Address.AddressFamily == AddressFamily.InterNetworkV6 ? ("[" + ipEndpoint.Address.ToString() + "]") : ipEndpoint.Address.ToString();
+			int defaultPort = p.secure_https ? 443 : 80;
+			string strPort = ipEndpoint.Port == defaultPort ? "" : ":" + ipEndpoint.Port;
+			p.base_uri_this_server = new Uri(scheme + "://" + (p.HostName ?? ipEndpointHost) + strPort, UriKind.Absolute);
+			p.base_uri_this_server_via_local_endpoint = new Uri(scheme + "://" + ipEndpointHost + strPort, UriKind.Absolute);
 			return true;
 		}
 		private static SslStream WrapSslStream(HttpProcessor p)

@@ -75,9 +75,16 @@ namespace BPUtil.SimpleHttp
 		internal Stream tcpStream { get; set; }
 
 		/// <summary>
-		/// The base Uri for this server, containing its host name and port.
+		/// <para>The base Uri for this server, containing its host name and port.</para>
+		/// <para>The host name is provided by the client via TLS Server Name Indication or the Host header.</para>
+		/// <para>If the client does not provide a host name, the host name will be the IP address which received the TCP connection (which may be an internal IPv4 address).</para>
 		/// </summary>
 		public Uri base_uri_this_server { get; internal set; }
+
+		/// <summary>
+		/// The base Uri for this server constructed from the local IPEndpoint.  In many cases, this will not match what the user entered in their web browser.
+		/// </summary>
+		public Uri base_uri_this_server_via_local_endpoint { get; internal set; }
 
 		/// <summary>
 		/// <para>Gets true if the HTTP server is believed to be under high load conditions.</para>
