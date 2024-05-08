@@ -27,6 +27,7 @@ namespace BPUtil
 			}
 		}
 		private CountdownStopwatch _cd = null;
+		private object cooldownConsumeLock = new object();
 		/// <summary>
 		/// Constructs a new Cooldown where <see cref="Available"/> is true and the first call to <see cref="Consume"/> will return true.
 		/// </summary>
@@ -44,20 +45,33 @@ namespace BPUtil
 			this.TimeToWait = TimeSpan.FromMilliseconds(timeToWaitMs);
 		}
 		/// <summary>
-		/// Attempt to consume the limited resource.  Returns true if the resource was available and consumed.  Returns false if the resource was on cooldown.
+		/// Attempt to consume the limited resource.  Returns true if the resource was available and consumed.  Returns false if the resource was on cooldown.  Uses `lock` to ensure that only one concurrent consumer can consume the cooldown.
 		/// </summary>
 		public bool Consume()
 		{
 			CountdownStopwatch cd = _cd;
 			if (cd == null)
 			{
-				_cd = CountdownStopwatch.StartNew(TimeToWait);
-				return true;
+				lock (cooldownConsumeLock)
+				{
+					cd = _cd;
+					if (cd == null)
+						_cd = CountdownStopwatch.StartNew(TimeToWait);
+					return true;
+				}
 			}
-			else if (cd.Finished)
+
+			if (cd.Finished)
 			{
-				cd.Restart();
-				return true;
+				lock (cooldownConsumeLock)
+				{
+					cd = _cd;
+					if (cd.Finished)
+					{
+						cd.Restart();
+						return true;
+					}
+				}
 			}
 			return false;
 		}

@@ -61,13 +61,15 @@ namespace BPUtil.SimpleHttp
 		}
 		internal static void LogRequest(DateTime time, string remoteHost, string requestMethod, string requestedUrl, string hostName)
 		{
-			LogVerbose(remoteHost + "\t-> " + hostName + "\t" + requestMethod + "\t" + requestedUrl);
 			if (logger != null)
+			{
+				LogVerbose(remoteHost + "\t-> " + hostName + "\t" + requestMethod + "\t" + requestedUrl);
 				try
 				{
 					logger.LogRequest(time, time.ToString("yyyy-MM-dd hh:mm:ss tt") + ":\t" + remoteHost + "\t" + requestMethod + "\t" + requestedUrl);
 				}
 				catch { }
+			}
 		}
 	}
 	/// <summary>

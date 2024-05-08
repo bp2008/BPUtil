@@ -244,7 +244,7 @@ namespace BPUtil
 								Directory.CreateDirectory(di.FullName);
 							File.AppendAllText(logFileName, nextItemToLog.Item2 + Environment.NewLine, Encoding.UTF8);
 						}
-						Thread.Sleep(100);
+						Thread.Sleep(50);
 					}
 					catch (ThreadAbortException) { throw; }
 					catch (Exception ex)

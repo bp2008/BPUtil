@@ -1518,7 +1518,7 @@ namespace BPUtil.SimpleHttp
 		public void EnableLogging(bool logVerbose)
 		{
 			httpLogger.StartLoggingThreads();
-			SimpleHttpLogger.RegisterLogger(httpLogger);
+			SimpleHttpLogger.RegisterLogger(httpLogger, logVerbose);
 		}
 		/// <summary>
 		/// Disables HTTP server logging.
