@@ -580,6 +580,14 @@ namespace BPUtil.SimpleHttp
 				return true;
 			return false;
 		}
+		/// <summary>
+		/// Gets the collection of raw post parameters (parameters sent via POST with MIME type "application/x-www-form-urlencoded") with case-insensitive keying.
+		/// </summary>
+		public IDictionary<string, string> RawPostParams => PostParams;
+		/// <summary>
+		/// Gets the collection of raw query string parameters with case-insensitive keying.
+		/// </summary>
+		public IDictionary<string, string> RawQueryParams => QueryString;
 		#endregion
 		#region ReadRequestBody
 		private void CreateRequestBodyStream(Stream stream)

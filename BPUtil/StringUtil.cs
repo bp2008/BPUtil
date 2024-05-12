@@ -45,6 +45,48 @@ namespace BPUtil
 			return sb.ToString();
 		}
 		/// <summary>
+		/// Gets a random character from the ranges 0-9, A-Z. There are 36 possible characters this method will return.
+		/// </summary>
+		/// <returns></returns>
+		public static char GetRandomAlphaNumericCapitalChar()
+		{
+			int i = SecureRandom.Next(36);
+			if (i < 10)
+				return (char)(48 + i);
+			return (char)(65 + (i - 10));
+		}
+		/// <summary>
+		/// Gets a string of random characters from the ranges 0-9, A-Z. There are 36 possible characters this method will return.
+		/// </summary>
+		/// <returns></returns>
+		public static string GetRandomAlphaNumericCapitalString(ushort length)
+		{
+			StringBuilder sb = new StringBuilder(length);
+			for (int i = 0; i < length; i++)
+				sb.Append(GetRandomAlphaNumericCapitalChar());
+			return sb.ToString();
+		}
+		/// <summary>
+		/// Gets a random character from the range A-Z. There are 26 possible characters this method will return.
+		/// </summary>
+		/// <returns></returns>
+		public static char GetRandomCapitalChar()
+		{
+			int i = SecureRandom.Next(26);
+			return (char)(65 + i);
+		}
+		/// <summary>
+		/// Gets a string of random characters from the range A-Z. There are 26 possible characters this method will return.
+		/// </summary>
+		/// <returns></returns>
+		public static string GetRandomCapitalString(ushort length)
+		{
+			StringBuilder sb = new StringBuilder(length);
+			for (int i = 0; i < length; i++)
+				sb.Append(GetRandomCapitalChar());
+			return sb.ToString();
+		}
+		/// <summary>
 		/// Gets a random character between ASCII values 32 (inclusive) and 127 (exclusive).
 		/// </summary>
 		/// <returns></returns>
