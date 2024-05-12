@@ -234,57 +234,18 @@ namespace BPUtil.SimpleHttp
 		#endregion
 		#region Static File
 		/// <summary>
-		/// Options object for the `StaticFile` and `StaticFileAsync` methods.
-		/// </summary>
-		public class StaticFileOptions
-		{
-			/// <summary>
-			/// If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.
-			/// </summary>
-			public string ContentTypeOverride = null;
-			/// <summary>
-			/// If true, caching is provided for supported file extensions based on ETag or Last-Modified date.
-			/// </summary>
-			public bool CanCache = true;
-			/// <summary>
-			/// If not null, the "Content-Disposition" header will instruct the client to download the response to a file with this file name.
-			/// </summary>
-			public string _downloadAs = null;
-			/// <summary>
-			/// If not null, the "Content-Disposition" header will instruct the client to download the response to a file with this file name.
-			/// </summary>
-			public string DownloadAs
-			{
-				get
-				{
-					return _downloadAs;
-				}
-				set
-				{
-					if (value != null && StringUtil.MakeSafeForFileName(value) != value)
-						throw new ArgumentException("Value is not a valid file name: " + value);
-					_downloadAs = value;
-				}
-			}
-		}
-		/// <summary>
 		/// <para>Synchronously writes a static file response with built-in caching support.</para>
 		/// <para>This completes the response.</para>
 		/// </summary>
 		/// <param name="filePath">Path to the file on disk.</param>
-		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
-		public void StaticFile(string filePath, string contentTypeOverride = null, bool canCache = true)
+		/// <param name="options">If provided, this object contains options for the static file transmission.</param>
+		public void StaticFile(string filePath, StaticFileOptions options = null)
 		{
 			if (_checkAsyncUsage && p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in blocking/synchronous mode.");
 			if (ResponseHeaderWritten)
 				throw new ApplicationException("The response header was already written.");
-			StaticFile(new FileInfo(filePath), new StaticFileOptions()
-			{
-				ContentTypeOverride = contentTypeOverride,
-				CanCache = canCache
-			});
+			StaticFile(new FileInfo(filePath), options);
 		}
 
 		/// <summary>
@@ -292,53 +253,15 @@ namespace BPUtil.SimpleHttp
 		/// <para>This completes the response.</para>
 		/// </summary>
 		/// <param name="filePath">Path to the file on disk.</param>
-		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
+		/// <param name="options">If provided, this object contains options for the static file transmission.</param>
 		/// <param name="cancellationToken">Cancellation Token.</param>
-		public Task StaticFileAsync(string filePath, string contentTypeOverride = null, bool canCache = true, CancellationToken cancellationToken = default)
+		public Task StaticFileAsync(string filePath, StaticFileOptions options = null, CancellationToken cancellationToken = default)
 		{
 			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");
 			if (ResponseHeaderWritten)
 				throw new ApplicationException("The response header was already written.");
-			return StaticFileAsync(new FileInfo(filePath), new StaticFileOptions()
-			{
-				ContentTypeOverride = contentTypeOverride,
-				CanCache = canCache
-			}, cancellationToken);
-		}
-
-		/// <summary>
-		/// <para>Synchronously writes a static file response with built-in caching support.</para>
-		/// <para>This completes the response.</para>
-		/// </summary>
-		/// <param name="fi">File on disk.</param>
-		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
-		public void StaticFile(FileInfo fi, string contentTypeOverride = null, bool canCache = true)
-		{
-			StaticFile(fi, new StaticFileOptions()
-			{
-				ContentTypeOverride = contentTypeOverride,
-				CanCache = canCache
-			});
-		}
-
-		/// <summary>
-		/// <para>Asynchronously writes a static file response with built-in caching support.</para>
-		/// <para>This completes the response.</para>
-		/// </summary>
-		/// <param name="fi">File on disk.</param>
-		/// <param name="contentTypeOverride">If provided, this is the value of the Content-Type header to be sent in the response.  If null or empty, it will be determined from the file extension.</param>
-		/// <param name="canCache">If true, caching is provided for supported file extensions based on ETag or Last-Modified date.</param>
-		/// <param name="cancellationToken">Cancellation Token.</param>
-		public Task StaticFileAsync(FileInfo fi, string contentTypeOverride = null, bool canCache = true, CancellationToken cancellationToken = default)
-		{
-			return StaticFileAsync(fi, new StaticFileOptions()
-			{
-				ContentTypeOverride = contentTypeOverride,
-				CanCache = canCache
-			}, cancellationToken);
+			return StaticFileAsync(new FileInfo(filePath), options, cancellationToken);
 		}
 		/// <summary>
 		/// <para>Synchronously writes a static file response with built-in caching support.</para>
@@ -346,7 +269,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		/// <param name="fi">File on disk.</param>
 		/// <param name="options">If provided, this object contains options for the static file transmission.</param>
-		public void StaticFile(FileInfo fi, StaticFileOptions options)
+		public void StaticFile(FileInfo fi, StaticFileOptions options = null)
 		{
 			if (_checkAsyncUsage && p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in blocking/synchronous mode.");
@@ -431,7 +354,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="fi">File on disk.</param>
 		/// <param name="options">If provided, this object contains options for the static file transmission.</param>
 		/// <param name="cancellationToken">Cancellation Token.</param>
-		public async Task StaticFileAsync(FileInfo fi, StaticFileOptions options, CancellationToken cancellationToken = default)
+		public async Task StaticFileAsync(FileInfo fi, StaticFileOptions options = null, CancellationToken cancellationToken = default)
 		{
 			if (_checkAsyncUsage && !p.IsAsync)
 				throw new ApplicationException("This HttpProcessor is not in async mode.");

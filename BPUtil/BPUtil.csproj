@@ -106,6 +106,7 @@
     <Compile Include="SimpleHttp\Helpers\HttpMethods.cs" />
     <Compile Include="SimpleHttp\Helpers\SimpleHttpLogger.cs" />
     <Compile Include="SimpleHttp\Helpers\SimpleHttpResponse.cs" />
+    <Compile Include="SimpleHttp\Helpers\StaticFileOptions.cs" />
     <Compile Include="SimpleHttp\Streams\GlobalThrottledStream.cs" />
     <Compile Include="SimpleHttp\Streams\ReadableChunkedTransferEncodingStream.cs" />
     <Compile Include="SimpleHttp\Streams\WritableChunkedTransferEncodingStream.cs" />
