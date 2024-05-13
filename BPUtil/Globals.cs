@@ -192,7 +192,7 @@ namespace BPUtil
 		}
 
 		/// <summary>
-		/// Gets the title of the entry assembly.
+		/// Gets the title of the entry assembly (executable file name without extension).
 		/// </summary>
 		public static string AssemblyTitle
 		{
@@ -224,6 +224,17 @@ namespace BPUtil
 			get
 			{
 				return Assembly.GetEntryAssembly().GetName().Version.ToString();
+			}
+		}
+
+		/// <summary>
+		/// Gets the last modified date and time of the entry assembly (executable file).
+		/// </summary>
+		public static DateTime AssemblyModifiedDate
+		{
+			get
+			{
+				return File.GetLastWriteTimeUtc(Assembly.GetEntryAssembly().Location);
 			}
 		}
 	}
