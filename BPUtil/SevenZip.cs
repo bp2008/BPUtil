@@ -101,7 +101,7 @@ namespace BPUtil
 			return files.ToArray();
 		}
 		/// <summary>
-		/// Creates a new archive from the given input path. If there is an error, an exception will be thrown.
+		/// Adds the given file or directory to a 7zip archive, creating or adding to the existing archive if it already exists.  If there is an error, an exception will be thrown.
 		/// </summary>
 		/// <param name="sevenZipCommandLineExePath">Path of 7za.exe.</param>
 		/// <param name="archivePath">Path to a 7zip archive (*.7z).</param>
