@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -124,6 +125,30 @@ namespace BPUtil
 		public static IPAddress GenerateMaskFromPrefixSize(bool ipv4, int prefixSize)
 		{
 			return new IPAddress(GenerateMaskBytesFromPrefixSize(ipv4, prefixSize));
+		}
+		/// <summary>
+		/// Returns the number of bits that are set in the given subnet mask. For "255.255.255.0", this method returns 24.
+		/// </summary>
+		/// <param name="subnetMask">Subnet mask.</param>
+		/// <returns></returns>
+		/// <exception cref="ArgumentException">If the given IPAddress is not a valid subnet mask.</exception>
+		public static byte GetPrefixSizeOfMask(IPAddress subnetMask)
+		{
+			BitArray bitArray = new BitArray(subnetMask.GetAddressBytes());
+			byte count = 0;
+			bool encounteredZero = false;
+			foreach (bool bit in bitArray)
+			{
+				if (bit)
+				{
+					if (encounteredZero)
+						throw new ArgumentException("The given IPAddress is not a valid subnet mask.", nameof(subnetMask));
+					count++;
+				}
+				else
+					encounteredZero = true;
+			}
+			return count;
 		}
 		/// <summary>
 		/// Compares two IP addresses and returns true if they are in the same subnet according to the given subnet sizes.

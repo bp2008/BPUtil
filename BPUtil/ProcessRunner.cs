@@ -323,7 +323,7 @@ namespace BPUtil
 		/// </summary>
 		public bool UseShellExecute = false;
 		/// <summary>
-		/// Gets or sets a value indicating whether to start the process in a new window. (Default: true)
+		/// Gets or sets a value indicating if we should try to start the process in the background with no visible windows. (Default: true)
 		/// </summary>
 		public bool CreateNoWindow = true;
 		/// <summary>

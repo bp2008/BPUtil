@@ -115,6 +115,25 @@ namespace UnitTests
 		{
 			IPUtil.GenerateMaskBytesFromPrefixSize(false, 129);
 		}
+		[TestMethod]
+		[ExpectedException(typeof(ArgumentException))]
+		public void TestGetPrefixSizeOfMask()
+		{
+			Assert.AreEqual(0, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("0.0.0.0")));
+			Assert.AreEqual(24, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("255.255.255.0")));
+			Assert.AreEqual(22, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("255.255.252.0")));
+			Assert.AreEqual(32, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("255.255.255.255")));
+
+			Assert.AreEqual(0, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("::")));
+			Assert.AreEqual(64, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("ffff:ffff:ffff:ffff::")));
+			Assert.AreEqual(128, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")));
+		}
+		[TestMethod]
+		[ExpectedException(typeof(ArgumentException))]
+		public void TestGetPrefixSizeOfMaskThrowsOnInvalidInput()
+		{
+			IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("192.168.0.1"));
+		}
 
 		[TestMethod]
 		public void TestSubnetCompare()
