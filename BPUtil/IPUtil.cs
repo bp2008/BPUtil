@@ -134,19 +134,23 @@ namespace BPUtil
 		/// <exception cref="ArgumentException">If the given IPAddress is not a valid subnet mask.</exception>
 		public static byte GetPrefixSizeOfMask(IPAddress subnetMask)
 		{
-			BitArray bitArray = new BitArray(subnetMask.GetAddressBytes());
+			byte[] bytes = subnetMask.GetAddressBytes();
+			Array.Reverse(bytes); // Reverse the array.  The BitArray will then start with 0s and end with 1s.
+			BitArray bitArray = new BitArray(bytes);
 			byte count = 0;
-			bool encounteredZero = false;
+			bool encounteredOne = false;
 			foreach (bool bit in bitArray)
 			{
 				if (bit)
 				{
-					if (encounteredZero)
-						throw new ArgumentException("The given IPAddress is not a valid subnet mask.", nameof(subnetMask));
+					encounteredOne = true;
 					count++;
 				}
 				else
-					encounteredZero = true;
+				{
+					if (encounteredOne)
+						throw new ArgumentException("The given IPAddress is not a valid subnet mask.", nameof(subnetMask));
+				}
 			}
 			return count;
 		}

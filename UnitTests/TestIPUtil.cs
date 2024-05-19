@@ -115,8 +115,8 @@ namespace UnitTests
 		{
 			IPUtil.GenerateMaskBytesFromPrefixSize(false, 129);
 		}
+
 		[TestMethod]
-		[ExpectedException(typeof(ArgumentException))]
 		public void TestGetPrefixSizeOfMask()
 		{
 			Assert.AreEqual(0, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("0.0.0.0")));
@@ -128,6 +128,7 @@ namespace UnitTests
 			Assert.AreEqual(64, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("ffff:ffff:ffff:ffff::")));
 			Assert.AreEqual(128, IPUtil.GetPrefixSizeOfMask(IPAddress.Parse("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")));
 		}
+
 		[TestMethod]
 		[ExpectedException(typeof(ArgumentException))]
 		public void TestGetPrefixSizeOfMaskThrowsOnInvalidInput()
