@@ -126,6 +126,18 @@ namespace BPUtil
 				}
 			}
 		}
+		/// <summary>
+		/// Changes the quantity of tokens currently in this bucket.
+		/// </summary>
+		/// <param name="tokens">The amount of tokens you want in the bucket. Can be 0 or <see cref="Capacity"/> or any value between.  Out-of-range values are clamped to be between 0 and Capacity.</param>
+		public void SetAvailableTokens(double tokens)
+		{
+			lock (_lock)
+			{
+				Refill();
+				_tokens = tokens.Clamp(0, _capacity);
+			}
+		}
 		#region Timekeeping
 		private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
 		/// <summary>
