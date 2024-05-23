@@ -36,9 +36,9 @@ namespace BPUtil
 			Initialize(address);
 		}
 		/// <summary>
-		/// Initializes a new instance of the ComparableIPAddress class with the address specified as an <see cref="long">.
+		/// Initializes a new instance of the ComparableIPAddress class with the address specified as an <see cref="long"/>.
 		/// </summary>
-		/// <param name="address">The <see cref="long"> value of the IP address. For example, the value 0x2414188f in big-endian format would be the IP address "143.24.20.36".</param>
+		/// <param name="address">The <see cref="long"/> value of the IP address. For example, the value 0x2414188f in big-endian format would be the IP address "143.24.20.36".</param>
 		public ComparableIPAddress(long address) : base(address)
 		{
 			Initialize(null);
@@ -56,7 +56,7 @@ namespace BPUtil
 		/// Initializes the two <see cref="ulong"/> fields <see cref="mostSignificantBytes"/> and <see cref="leastSignificantBytes"/> 
 		/// which make this ComparableIPAddress able to compare with other ComparableIPAddress very slightly faster.
 		/// </summary>
-		/// <param name="address"></param>
+		/// <param name="address">IP Address</param>
 		private void Initialize(byte[] address)
 		{
 			if (address == null)
@@ -79,7 +79,7 @@ namespace BPUtil
 		/// Parses the specified string into a ComparableIPAddress, returning null if the string does not represent a valid IP address.
 		/// </summary>
 		/// <param name="str">String that represents an IP address.</param>
-		/// <returns></returns>
+		/// <returns>A ComparableIPAddress or null.</returns>
 		public new static ComparableIPAddress Parse(string str)
 		{
 			if (!string.IsNullOrWhiteSpace(str) && TryParse(str, out IPAddress ip))
@@ -90,8 +90,8 @@ namespace BPUtil
 		/// <summary>
 		/// Compares this address with another address.
 		/// </summary>
-		/// <param name="other">Other address.</param>
-		/// <returns></returns>
+		/// <param name="obj">Other address.</param>
+		/// <returns>A number that indicates the relative position of this object versus the other object.</returns>
 		public int CompareTo(object obj)
 		{
 			if (obj is ComparableIPAddress ci)
@@ -106,7 +106,7 @@ namespace BPUtil
 		/// Compares this address with another address.
 		/// </summary>
 		/// <param name="other">Other address.</param>
-		/// <returns></returns>
+		/// <returns>A number that indicates the relative position of this object versus the other object.</returns>
 		public int CompareTo(IPAddress other)
 		{
 			if (other == null)
@@ -130,7 +130,7 @@ namespace BPUtil
 		/// Compares this address with another address.
 		/// </summary>
 		/// <param name="other">Other address.</param>
-		/// <returns></returns>
+		/// <returns>A number that indicates the relative position of this object versus the other object.</returns>
 		public int CompareTo(string other)
 		{
 			return CompareTo(Parse(other));
@@ -139,7 +139,7 @@ namespace BPUtil
 		/// Compares this address with another address.
 		/// </summary>
 		/// <param name="other">Other address.</param>
-		/// <returns></returns>
+		/// <returns>A number that indicates the relative position of this object versus the other object.</returns>
 		public int CompareTo(ComparableIPAddress other)
 		{
 			// This specialized comparison method is barely any faster than the generic IPAddress comparer above.  It is not really significant.
