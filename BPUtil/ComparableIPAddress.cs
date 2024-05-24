@@ -143,6 +143,8 @@ namespace BPUtil
 		public int CompareTo(ComparableIPAddress other)
 		{
 			// This specialized comparison method is barely any faster than the generic IPAddress comparer above.  It is not really significant.
+			if (other == null)
+				return -1;
 			if (byteLength < other.byteLength)
 				return -1;
 			else if (byteLength > other.byteLength)
