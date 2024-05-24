@@ -202,7 +202,6 @@ namespace BPUtil
 			/// <summary>
 			/// Resumes the Stopwatch such that this TimedEvent's [time] property begins increasing.
 			/// </summary>
-			/// <exception cref="NotImplementedException"></exception>
 			public void Resume()
 			{
 				stopwatch.Start();
