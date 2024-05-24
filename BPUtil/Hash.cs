@@ -43,7 +43,7 @@ namespace BPUtil
 			return GetSHA512Bytes(data, salt);
 		}
 		/// <summary>
-		/// Decodes the specified string as UTF8 and calculates the SHA512 hash of the data.
+		/// Decodes the specified string as UTF8 and computes the SHA512 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 128 characters long.
 		/// </summary>
 		/// <param name="s">The string to hash.</param>
@@ -53,7 +53,7 @@ namespace BPUtil
 			return BitConverter.ToString(GetSHA512Bytes(s)).Replace("-", "").ToLower();
 		}
 		/// <summary>
-		/// Calculates the SHA512 hash of the data.
+		/// Computes the SHA512 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 128 characters long.
 		/// </summary>
 		/// <param name="data">The data to hash.</param>
@@ -95,7 +95,7 @@ namespace BPUtil
 			return GetSHA256Bytes(data, salt);
 		}
 		/// <summary>
-		/// Decodes the specified string as UTF8 and calculates the SHA256 hash of the data.
+		/// Decodes the specified string as UTF8 and computes the SHA256 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 64 characters long.
 		/// </summary>
 		/// <param name="s">The string to hash.</param>
@@ -105,7 +105,7 @@ namespace BPUtil
 			return BitConverter.ToString(GetSHA256Bytes(s)).Replace("-", "").ToLower();
 		}
 		/// <summary>
-		/// Calculates the SHA256 hash of the data.
+		/// Computes the SHA256 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 64 characters long.
 		/// </summary>
 		/// <param name="data">The data to hash.</param>
@@ -148,7 +148,7 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Decodes the specified string as UTF8 and calculates the SHA1 hash of the data.
+		/// Decodes the specified string as UTF8 and computes the SHA1 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 40 characters long.
 		/// </summary>
 		/// <param name="s">The string to hash.</param>
@@ -158,7 +158,7 @@ namespace BPUtil
 			return BitConverter.ToString(GetSHA1Bytes(s)).Replace("-", "").ToLower();
 		}
 		/// <summary>
-		/// Calculates the SHA1 hash of the data.
+		/// Computes the SHA1 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 40 characters long.
 		/// </summary>
 		/// <param name="data">The data to hash.</param>
@@ -168,7 +168,7 @@ namespace BPUtil
 			return BitConverter.ToString(GetSHA1Bytes(data)).Replace("-", "").ToLower();
 		}
 		/// <summary>
-		/// Decodes the specified string as UTF8 and calculates the SHA1 hash of the data.
+		/// Decodes the specified string as UTF8 and computes the SHA1 hash of the data.
 		/// The hash is returned as a base64-encoded string.
 		/// </summary>
 		/// <param name="s">The string to hash.</param>
@@ -176,6 +176,16 @@ namespace BPUtil
 		public static string GetSHA1Base64(string s)
 		{
 			return Convert.ToBase64String(GetSHA1Bytes(s));
+		}
+		/// <summary>
+		/// Computes the SHA1 hash of the specified data.
+		/// The hash is returned as a base64-encoded string.
+		/// </summary>
+		/// <param name="data">The data to hash.</param>
+		/// <returns></returns>
+		public static string GetSHA1Base64(byte[] data)
+		{
+			return Convert.ToBase64String(GetSHA1Bytes(data));
 		}
 		/// <summary>
 		/// Computes the MD5 hash of the specified data, optionally appending a binary salt value.
@@ -212,7 +222,7 @@ namespace BPUtil
 			return GetMD5Bytes(data, salt);
 		}
 		/// <summary>
-		/// Decodes the specified string as UTF8 and calculates the MD5 hash of the data.
+		/// Decodes the specified string as UTF8 and computes the MD5 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 32 characters long.
 		/// </summary>
 		/// <param name="s">The string to hash.</param>
@@ -222,7 +232,7 @@ namespace BPUtil
 			return BitConverter.ToString(GetMD5Bytes(s)).Replace("-", "").ToLower();
 		}
 		/// <summary>
-		/// Calculates the MD5 hash of the data.
+		/// Computes the MD5 hash of the data.
 		/// The hash is returned as a lower-case hexidecimal string 32 characters long.
 		/// </summary>
 		/// <param name="data">The data to hash.</param>
@@ -232,7 +242,7 @@ namespace BPUtil
 			return BitConverter.ToString(GetMD5Bytes(data)).Replace("-", "").ToLower();
 		}
 		/// <summary>
-		/// Calculates the MD5 hash of the file contents.
+		/// Computes the MD5 hash of the file contents.
 		/// The hash is returned as a lower-case hexidecimal string 32 characters long.
 		/// </summary>
 		/// <param name="path">The path to the file to compute the hash of.</param>
