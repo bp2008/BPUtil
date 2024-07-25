@@ -25,8 +25,7 @@ namespace BPUtil
 		public static void Extract(string sevenZipCommandLineExePath, string archivePath, string outputDirectory, int threads = 2, bool lowPriority = false)
 		{
 			if (!File.Exists(sevenZipCommandLineExePath))
-				throw new Exception("7zip command line executable not found in path \"" + sevenZipCommandLineExePath + "\"");
-
+				throw new Exception("7zip command line executable not found at path \"" + sevenZipCommandLineExePath + "\"");
 			if (!File.Exists(archivePath))
 				throw new Exception("Input file not found for 7zip extraction: \"" + archivePath + "\"");
 
@@ -50,8 +49,7 @@ namespace BPUtil
 		public static SevenZipFileData[] ListFiles(string sevenZipCommandLineExePath, string archivePath, bool lowPriority = false)
 		{
 			if (!File.Exists(sevenZipCommandLineExePath))
-				throw new Exception("7zip command line executable not found in path \"" + sevenZipCommandLineExePath + "\"");
-
+				throw new Exception("7zip command line executable not found at path \"" + sevenZipCommandLineExePath + "\"");
 			if (!File.Exists(archivePath))
 				throw new Exception("Input file not found for 7zip list files: \"" + archivePath + "\"");
 
@@ -111,6 +109,8 @@ namespace BPUtil
 		/// <param name="createNew">If true, an exception will be thrown if the archive already exists. If false, items may be added to an existing archive.</param>
 		public static void Create7zArchive(string sevenZipCommandLineExePath, string archivePath, string sourcePath, int threads = 2, bool lowPriority = false, bool createNew = true)
 		{
+			if (!File.Exists(sevenZipCommandLineExePath))
+				throw new Exception("7zip command line executable not found at path \"" + sevenZipCommandLineExePath + "\"");
 			if (createNew && FileUtil.Exists(archivePath))
 				throw new Exception("Cannot create 7z archive because an object already exists at the path \"" + archivePath + "\".");
 			if (!FileUtil.Exists(sourcePath))
@@ -130,6 +130,47 @@ namespace BPUtil
 			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "a -t7z -mmt" + threads + " \"" + archivePath + "\" \"" + sourcePath + "\"", out std, out err, Options(lowPriority));
 			if (result != 0)
 				throw new Exception("7zip failed to add path \"" + sourcePath + "\" to archive \"" + archivePath + "\": " + std + " " + err);
+		}
+		/// <summary>
+		/// Renames a file or folder in an archive.
+		/// </summary>
+		/// <param name="sevenZipCommandLineExePath">Path of 7za.exe.</param>
+		/// <param name="archivePath">Path to an archive file (*.zip, *.7z, etc.).</param>
+		/// <param name="sourcePath">Path to find, e.g. "folder/subfolder"</param>
+		/// <param name="newPath">Path to assign, e.g. "folder/renamed"</param>
+		/// <param name="lowPriority">If true, the 7zip process will be assigned BelowNormal priority.</param>
+		public static void Rename(string sevenZipCommandLineExePath, string archivePath, string sourcePath, string newPath, bool lowPriority = false)
+		{
+			if (!File.Exists(sevenZipCommandLineExePath))
+				throw new Exception("7zip command line executable not found at path \"" + sevenZipCommandLineExePath + "\"");
+			if (!File.Exists(archivePath))
+				throw new Exception("Archive file not found for 7zip rename operation: \"" + archivePath + "\"");
+
+			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "rn \"" + archivePath + "\" \"" + sourcePath + "\" \"" + newPath + "\"", out string std, out string err, Options(lowPriority));
+			if (result != 0)
+				throw new Exception("7zip failed to rename path \"" + sourcePath + "\" to \"" + newPath + "\" in archive \"" + archivePath + "\": " + std + " " + err);
+		}
+		/// <summary>
+		/// Updates a file in an archive.  Due to 7za API limitations, this can only update a file that is at the root of the archive, and the file name within the archive must be the same as it exists on disk.
+		/// </summary>
+		/// <param name="sevenZipCommandLineExePath">Path of 7za.exe.</param>
+		/// <param name="archivePath">Path to an archive file (*.zip, *.7z, etc.).</param>
+		/// <param name="sourcePath">Path of the file on disk which you want to update in the archive.  The file is expected to already exist at the root of the archive.  This function is supposed to also work to update a directory, but has not been tested that way at the time of this writing.</param>
+		/// <param name="threads">Number of threads the 7zip executable is allowed to use.</param>
+		/// <param name="lowPriority">If true, the 7zip process will be assigned BelowNormal priority.</param>
+		public static void Update(string sevenZipCommandLineExePath, string archivePath, string sourcePath, int threads = 1, bool lowPriority = false)
+		{
+			if (!File.Exists(sevenZipCommandLineExePath))
+				throw new Exception("7zip command line executable not found at path \"" + sevenZipCommandLineExePath + "\"");
+			if (!File.Exists(archivePath))
+				throw new Exception("Archive file not found for 7zip update operation: \"" + archivePath + "\"");
+			if (!File.Exists(sourcePath))
+				throw new Exception("Input file not found for 7zip update operation: \"" + sourcePath + "\"");
+
+			threads = threads.Clamp(1, Environment.ProcessorCount);
+			int result = ProcessRunner.RunProcessAndWait(sevenZipCommandLineExePath, "u -mmt" + threads + " \"" + archivePath + "\" \"" + sourcePath + "\"", out string std, out string err, Options(lowPriority));
+			if (result != 0)
+				throw new Exception("7zip failed to update file \"" + Path.GetFileName(sourcePath) + "\" from disk path \"" + sourcePath + "\" in archive \"" + archivePath + "\": " + std + " " + err);
 		}
 		private static ProcessRunnerOptions Options(bool lowPriority)
 		{
