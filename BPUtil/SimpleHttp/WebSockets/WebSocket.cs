@@ -38,6 +38,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// </summary>
 		/// <returns>The send time-out value, in milliseconds. The default is 0.</returns>
 		public int SendTimeout { get { return tcpClient.SendTimeout; } set { tcpClient.SendTimeout = value; } }
+		public WebSocketState State = WebSocketState.Connecting;
 
 		protected Thread thrWebSocketRead;
 		protected Action<WebSocketFrame> onMessageReceived = delegate { };
@@ -64,7 +65,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 		{
 		}
 		/// <summary>
-		/// Creates a new WebSocket bound to a <see cref="TcpClient"/> that is already connected. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection. If TLS is being used, this is not the constructor you want.
+		/// Creates a new WebSocket bound to a <see cref="TcpClient"/> that is already connected. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection. If TLS is being used, this constructor will try to bypass it and red/write diretly from the TcpClient's native stream.  This constructor does not complete the WebSocket handshake.  This constructor does not automatically start reading WebSocket frames from the stream. 
 		/// </summary>
 		/// <param name="tcpc">A connected <see cref="TcpClient"/> to bind to the new WebSocket instance.</param>
 		public WebSocket(TcpClient tcpc)
@@ -75,7 +76,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 		}
 
 		/// <summary>
-		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/> that has already read the request headers.  The WebSocket handshake will be completed automatically.  It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
+		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/> that has already read the request headers.  The WebSocket handshake will be completed synchronously before the constructor returns.  It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection. If you use this constructor, you must call <see cref="StartReading"/> yourself otherwise you have no way to receive any data from this WebSocket.
 		/// </summary>
 		/// <param name="p">An <see cref="HttpProcessor"/> to bind to the new WebSocket instance.</param>
 		/// <param name="additionalResponseHeaders">Optional collection of HTTP headers to include in the HTTP response.</param>
@@ -94,10 +95,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 				throw new HttpProcessor.HttpProcessorException("400 Bad Request", "An unsupported web socket version was requested (\"" + version + "\").", headers);
 			}
 			p.Response.WebSocketUpgradeSync(additionalResponseHeaders);
+			State = WebSocketState.Open;
 		}
 
 		/// <summary>
-		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/>.  The WebSocket handshake will be completed automatically.  This constructor calls StartReading automatically. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
+		/// Creates a new WebSocket bound to an <see cref="HttpProcessor"/>.  The WebSocket handshake will be completed synchronously before the constructor returns.  This constructor calls <see cref="StartReading"/> automatically. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection.
 		/// </summary>
 		/// <param name="p">An <see cref="HttpProcessor"/> to bind to the new WebSocket instance.</param>
 		/// <param name="onMessageReceived">A callback method which is called whenever a message is received from the WebSocket.</param>
@@ -154,6 +156,9 @@ namespace BPUtil.SimpleHttp.WebSockets
 		#endregion
 
 		#region Reading Frames
+		/// <summary>
+		/// This method runs on a background thread and closes the tcp connection before it returns.
+		/// </summary>
 		private void WebSocketRead()
 		{
 			WebSocketCloseFrame closeFrame = null;
@@ -263,6 +268,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 						SimpleHttpLogger.LogVerbose(ex);
 						if (closeFrame == null)
 							closeFrame = new WebSocketCloseFrame(isClient(), ex.closeCode ?? WebSocketCloseCode.InternalError, ex.CloseReason);
+						// This closeFrame is handled by the "finally" block, causing the connection to close soon, but otherwise we continue to try receiving frames from the remote host.
 					}
 					catch (Exception ex)
 					{
@@ -465,7 +471,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 		{
 			return Hash.GetSHA1Base64(SecWebSocketKeyClientValue + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
 		}
-
+		/// <summary>
+		/// Completes the WebSocket handshake, only necessary if you constructed the WebSocket via a constructor that does not automatically do it.
+		/// </summary>
+		/// <param name="expectedPath">The absolute path you expected the client to request, e.g. "/WebSocket".  If it does not match (case-sensitive), an exception will be thrown and the handshake will not be completed.</param>
+		/// <exception cref="Exception"></exception>
 		public void CompleteWebSocketHandshake(string expectedPath)
 		{
 			lock (startStopLock)
@@ -554,6 +564,8 @@ namespace BPUtil.SimpleHttp.WebSockets
 			ByteUtil.WriteUtf8("Connection: Upgrade\r\n", tcpStream);
 			ByteUtil.WriteUtf8("Sec-WebSocket-Accept: " + CreateSecWebSocketAcceptValue(header_sec_websocket_key) + "\r\n", tcpStream);
 			ByteUtil.WriteUtf8("\r\n", tcpStream);
+
+			State = WebSocketState.Open;
 		}
 		#endregion
 	}

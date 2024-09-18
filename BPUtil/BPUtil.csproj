@@ -116,6 +116,7 @@
     <Compile Include="SimpleHttp\Streams\WritableChunkedTransferEncodingStream.cs" />
     <Compile Include="SimpleHttp\TLS\ITlsCipherSuiteSet.cs" />
     <Compile Include="SimpleHttp\TLS\TlsNegotiate.cs" />
+    <Compile Include="SimpleHttp\WebSockets\WebSocketState.cs" />
     <Compile Include="TaskHelper.cs" />
     <Compile Include="TemporaryDirectory.cs" />
     <Compile Include="Throttle.cs" />

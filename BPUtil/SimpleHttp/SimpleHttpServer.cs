@@ -1358,7 +1358,7 @@ namespace BPUtil.SimpleHttp
 			}
 		}
 		/// <summary>
-		/// <para>If not null, each TCP connection will be assigned this receive bufffer size in bytes (default if unassigned is 8192).</para>
+		/// <para>If not null, each TCP connection will be assigned this receive buffer size in bytes (default if unassigned is 8192).</para>
 		/// <para>If your application will be recieving large amounts of data on a single connection, it can improve transfer rate by assigning a larger receive buffer.</para>
 		/// <para>HttpProcessor may be upgraded in the future to automatically tune the receive buffer size depending on the amount of data being received, in which case this field would likely be deleted.</para>
 		/// <para>If you wish to set the size of the send buffer, you should do it on a per-connection basis via the HttpProcessor when you process each request.</para>
