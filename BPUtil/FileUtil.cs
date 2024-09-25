@@ -215,5 +215,47 @@ namespace BPUtil
 				return sw.WriteAsync(contents);
 #endif
 		}
+		/// <summary>
+		/// <para>Creates a relative path string, given two paths that share a root.</para>
+		/// <para>Inputted paths may use either backslash (\) or forward slash (/), but the outputted path will always use forward slash (/).</para>
+		/// <para>Paths are treated as case-sensitive, so, e.g. "C:/Folder" is not equivalent to "c:/Folder" or "C:/folder".</para>
+		/// <para>Examples:</para>
+		/// <para>RelativePath("C:/Folder", "C:/Folder/File.txt") -&gt; "File.txt"</para>
+		/// <para>RelativePath("C:/Folder/", "C:/Folder/File.txt") -&gt; "File.txt"</para>
+		/// <para>RelativePath("C:/Folder", "C:/Folder/Subfolder/File.txt") -&gt; "Subfolder/File.txt"</para>
+		/// <para>RelativePath("C:/Folder", "C:/File.txt") -&gt; "../File.txt"</para>
+		/// <para>RelativePath("C:/Folder", "File.txt") -&gt; "File.txt"</para>
+		/// </summary>
+		/// <param name="rootPath">Path of a folder which shall be the base of the relative path produced by this function. E.g. "C:/Folder".</param>
+		/// <param name="targetPath">The path that defines the target file or folder.  Must begin with <paramref name="rootPath"/>.  (e.g. "C:/Folder/File.txt").</param>
+		/// <returns>The target path relative to the root path.</returns>
+		/// <exception cref="ArgumentNullException">If an argument is null.</exception>
+		/// <exception cref="ArgumentException">If an argument does not represent a valid URI.</exception>
+		/// <exception cref="InvalidOperationException">If the Uri class is unable to make a relative URI from the given inputs.</exception>
+		public static string RelativePath(string rootPath, string targetPath)
+		{
+			if (string.IsNullOrWhiteSpace(rootPath))
+				throw new ArgumentException("Root path is null or empty", nameof(rootPath));
+			if (string.IsNullOrWhiteSpace(targetPath))
+				throw new ArgumentException("Target path is null or empty", nameof(targetPath));
+
+			rootPath = rootPath.Trim().Replace('\\', '/');
+
+			targetPath = targetPath.Trim().Replace('\\', '/');
+
+			if (!targetPath.StartsWith(rootPath))
+				throw new ArgumentException("Target path did not begin with Root path.");
+
+			targetPath = targetPath.Substring(rootPath.Length);
+			if (targetPath != "")
+			{
+				if (!rootPath.EndsWith("/") && !targetPath.StartsWith("/"))
+					throw new ArgumentException("Target path is not relative to the root path.");
+				if (targetPath.Contains("../"))
+					throw new ArgumentException("Target path is not allowed to include \"../\" after the root path.");
+				targetPath = targetPath.TrimStart('/');
+			}
+			return targetPath;
+		}
 	}
 }
