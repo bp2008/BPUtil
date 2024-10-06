@@ -11,7 +11,9 @@ using System.Threading.Tasks;
 namespace BPUtil.SimpleHttp.WebSockets
 {
 	/// <summary>
-	/// A WebSocket server connection providing synchronous access methods. It is recommended to adjust the Tcp Socket's read and write timeouts as needed to avoid premature disconnection. Also set <see cref="MAX_PAYLOAD_BYTES"/> if you expect to receive larger single payloads than 20,000,000 bytes.
+	/// <para>A WebSocket server connection providing synchronous access methods.</para>
+	/// <para>IMPORTANT: Adjust the underlying TCP Socket's read and write timeouts to avoid premature disconnection, as BPUtil's web server uses fairly short timeouts (5 seconds).</para>
+	/// <para>Also set <see cref="MAX_PAYLOAD_BYTES"/> if you expect to receive larger single payloads than 20,000,000 bytes.</para>
 	/// </summary>
 	public class WebSocket
 	{
