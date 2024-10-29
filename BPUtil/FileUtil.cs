@@ -257,5 +257,29 @@ namespace BPUtil
 			}
 			return targetPath;
 		}
+		/// <summary>
+		/// <para>Returns the absolute path to the given relative file.</para>
+		/// <para>Inputted paths may use either backslash (\) or forward slash (/), but the outputted path will always use forward slash (/).</para>
+		/// <para>If the inputted paths are invalid or if the relative path escapes from the root directory (e.g. "../file.txt"), null is returned.</para>
+		/// </summary>
+		/// <param name="rootPath">Path of a root directory from which the relative path is evaluated.</param>
+		/// <param name="relativePath">Path to a file or directory which is relative to <paramref name="rootPath"/>.</param>
+		/// <returns></returns>
+		public static string GetNonEscapingAbsolutePath(string rootPath, string relativePath)
+		{
+			try
+			{
+				DirectoryInfo diRoot = new DirectoryInfo(rootPath);
+				string baseDir = diRoot.FullName.Replace('\\', '/').TrimEnd('/') + '/';
+
+				FileInfo fiTarget = new FileInfo(Path.Combine(diRoot.FullName, relativePath));
+				string absPath = fiTarget.FullName.Replace('\\', '/');
+
+				if (absPath.StartsWith(baseDir))
+					return absPath;
+			}
+			catch { }
+			return null;
+		}
 	}
 }

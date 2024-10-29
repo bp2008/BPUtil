@@ -41,5 +41,36 @@ namespace UnitTests
 		{
 			Assert.AreEqual(expected, FileUtil.RelativePath(rootPath, targetPath));
 		}
+		[TestMethod]
+		public void TestGetNonEscapingAbsolutePath()
+		{
+			// Test valid inputs
+			Assert.AreEqual("C:/Folder/File.txt", FileUtil.GetNonEscapingAbsolutePath(@"C:/Folder", @"File.txt"));
+			Assert.AreEqual("C:/Folder/File.txt", FileUtil.GetNonEscapingAbsolutePath(@"C:\Folder", @"File.txt"));
+			Assert.AreEqual("C:/Folder/File.txt", FileUtil.GetNonEscapingAbsolutePath(@"C:/Folder/", @"File.txt"));
+			Assert.AreEqual("C:/Folder/File.txt", FileUtil.GetNonEscapingAbsolutePath(@"C:\Folder/", @"File.txt"));
+			Assert.AreEqual("C:/Folder/Subfolder", FileUtil.GetNonEscapingAbsolutePath(@"C:/Folder/", @"Subfolder"));
+			Assert.AreEqual("C:/Folder/Subfolder/", FileUtil.GetNonEscapingAbsolutePath(@"C:/Folder/", @"Subfolder/"));
+			Assert.AreEqual("C:/Folder/Subfolder/File.txt", FileUtil.GetNonEscapingAbsolutePath(@"C:/Folder/", @"Subfolder/File.txt"));
+			Assert.AreEqual("C:/Folder/Subfolder/File.txt", FileUtil.GetNonEscapingAbsolutePath(@"C:\Folder/", @"Subfolder\File.txt"));
+
+			// Test invalid inputs
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath(null, "File.txt"));
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath("C:/Folder", null));
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath(null, null));
+
+			// Test inputs that attempt to escape the root directory
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath("C:/Folder", "../File.txt"));
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath("C:/Folder", "C:/File.txt"));
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath("C:/Folder", "D:/File.txt"));
+
+			// "/Subfolder" with leading slash indicates an attempt to navigate from the root of the file system.
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath("C:/Folder/", "/Subfolder"));
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath("C:/Folder", "/Subfolder"));
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath("C:/Folder/", "\\Subfolder"));
+			Assert.IsNull(FileUtil.GetNonEscapingAbsolutePath("C:/Folder", "\\Subfolder"));
+			// ... so it should be valid if the root directory is the root of the file system.
+			Assert.AreEqual("C:/Subfolder", FileUtil.GetNonEscapingAbsolutePath(@"C:/", @"/Subfolder"));
+		}
 	}
 }
