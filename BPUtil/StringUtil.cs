@@ -106,6 +106,31 @@ namespace BPUtil
 			return sb.ToString();
 		}
 		/// <summary>
+		/// This string contains one of every alphanumeric character except:
+		/// B 8 G 6 I 1 l O 0 Q D S 5 Z 2
+		/// </summary>
+		private const string unambiguousPasswordAlphabet = "3479ACEFHJKLMNPRTUVWXYabcdefghijkmnopqrstuvwxyz";
+		/// <summary>
+		/// Gets a random alphanumeric character from an alphabet that omits the most commonly confused characters.
+		/// </summary>
+		/// <returns></returns>
+		public static char GetUnambiguousPasswordChar()
+		{
+			return unambiguousPasswordAlphabet[SecureRandom.Next(unambiguousPasswordAlphabet.Length)];
+		}
+		/// <summary>
+		/// Gets a random alphanumeric string from an alphabet that omits the most commonly confused characters such as B and 8, O and 0.
+		/// </summary>
+		/// <param name="length">Length in characters of the string to generate.</param>
+		/// <returns></returns>
+		public static string GenerateUnambiguousPassword(ushort length)
+		{
+			StringBuilder sb = new StringBuilder(length);
+			for (int i = 0; i < length; i++)
+				sb.Append(GetUnambiguousPasswordChar());
+			return sb.ToString();
+		}
+		/// <summary>
 		/// <para>Encodes the characters '&lt;', '&gt;', '"', '&amp;', and apostrophe as html entities so that the resulting string may be inserted into an html attribute.</para>
 		/// </summary>
 		/// <remarks>
