@@ -15,11 +15,11 @@ namespace BPUtil.SimpleHttp
 	public class HttpHeader : IComparable<HttpHeader>
 	{
 		/// <summary>
-		/// The key of the HTTP header.
+		/// Gets the key of the HTTP header.
 		/// </summary>
 		public string Key { get; private set; }
 		/// <summary>
-		/// The value of the HTTP header.
+		/// Gets or sets the value of the HTTP header.
 		/// </summary>
 		public string Value { get; set; }
 		/// <summary>
@@ -29,9 +29,10 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Initializes a new instance of the HttpHeader class with the specified key and value.
 		/// </summary>
+		/// <param name="NameCase">Specifies how header names are normalized.</param>
 		/// <param name="key">The key of the HTTP header.</param>
 		/// <param name="value">The value of the HTTP header.</param>
-		public HttpHeader(string key, string value)
+		public HttpHeader(HeaderNameCase NameCase, string key, string value)
 		{
 			Key = key;
 			Value = value;
@@ -69,360 +70,28 @@ namespace BPUtil.SimpleHttp
 		{
 			return Key + ": " + Value;
 		}
-	}
-	/// <summary>
-	/// Specifies how header names are normalized.
-	/// </summary>
-	public enum HeaderNameCase
-	{
 		/// <summary>
-		/// Header names are normalized to title case (for HTTP 1.1).
+		/// Normalized the header name according to the method specified.
 		/// </summary>
-		TitleCase,
-		/// <summary>
-		/// Header names are normalized to lower case (for HTTP 2.0).
-		/// </summary>
-		LowerCase
-	}
-
-	// Rewrite this class to use a List<HttpHeader> with locked access.
-	// The existing API for querying single headers should continue to combine header values, but do it at query time instead of add time.
-	// Iterating should deliver duplicate header values as individual key value pairs.
-
-	/// <summary>
-	/// <para>Provides thread-safe (sychronized) read/write access to HTTP headers using case-insensitive keying.</para>
-	/// <para>Note: Any HttpHeader instances obtained from this collection may be obtained and concurrently modified by other threads.</para>
-	/// <para>All header names are automatically normalized to title case for HTTP 1.1.</para>
-	/// <para>All header names are automatically normalized to title case for HTTP 1.1.</para>
-	/// </summary>
-	public class HttpHeaderCollection : IEnumerable<HttpHeader>
-	{
-		/// <summary>
-		/// Lock to hold while internally accessing the header collection.
-		/// </summary>
-		protected object myLock = new object();
-
-		/// <summary>
-		/// A list of header keys, lower-case, in the order in which they were added to the collection.
-		/// </summary>
-		protected List<string> headerDefaultOrder = new List<string>();
-
-		/// <summary>
-		/// The internal keyed collection of HTTP headers using lower-case keys.
-		/// </summary>
-		protected Dictionary<string, string> dict = new Dictionary<string, string>();
-
-		/// <summary>
-		/// Specifies how header names are normalized.
-		/// </summary>
-		public readonly HeaderNameCase NameCase;
-
-		/// <summary>
-		/// Constructs a new empty HttpHeaderCollection.
-		/// </summary>
-		/// <param name="NameCase">Specifies how header names are normalized.</param>
-		public HttpHeaderCollection(HeaderNameCase NameCase = HeaderNameCase.TitleCase)
+		/// <param name="nameCase">Specifies how header names are normalized.</param>
+		/// <param name="headerName">HTTP header name which may not be normalized yet.</param>
+		/// <returns>The normalized header name.</returns>
+		/// <exception cref="ArgumentException">If the given header name is invalid.</exception>
+		public static string NormalizeHeaderName(HeaderNameCase nameCase, string headerName)
 		{
-			this.NameCase = NameCase;
-		}
-
-		/// <summary>
-		/// Constructs a new HttpHeaderCollection from the given list of Key/Value pairs.
-		/// </summary>
-		/// <param name="NameCase">Specifies how header names are normalized.</param>
-		/// <param name="headers">Collection of Key/Value pairs.</param>
-		public static HttpHeaderCollection FromPairs(HeaderNameCase NameCase, IEnumerable<KeyValuePair<string, string>> headers)
-		{
-			if (headers != null)
-			{
-				HttpHeaderCollection c = new HttpHeaderCollection();
-				foreach (KeyValuePair<string, string> kvp in headers)
-					c.Add(kvp);
-				return c;
-			}
-			return null;
-		}
-		/// <summary>
-		/// <para>Gets or sets the value of the first header matching this key, or null.</para>
-		/// <para>Because the HttpHeaderCollection class automatically combines headers when they are added with the same name, most headers work fine with this. "Set-Cookie" however can have multiple distinct headers and this accessor is not compatible.</para>
-		/// </summary>
-		/// <param name="key"></param>
-		/// <returns></returns>
-		public string this[string key]
-		{
-			get => this.GetValues(key)?[0];
-			set => this.Set(key, value);
-		}
-		/// <summary>
-		/// <para>Gets an array of all the current HTTP Headers in the order in which they were added.</para>
-		/// <para>Multiple "Set-Cookie" headers may exist.  All other headers are automatically combined if they are <c>Add</c>ed with an existing key.</para>
-		/// </summary>
-		/// <returns></returns>
-		public HttpHeader[] GetHeaderArray()
-		{
-			lock (myLock)
-			{
-				List<HttpHeader> headers = new List<HttpHeader>();
-				foreach (string key in headerDefaultOrder)
-				{
-					string keyNormalized = NormalizeHeaderName(key);
-					string value = dict[key];
-					if (key == "set-cookie")
-					{
-						string[] parts = value.Split('\n');
-						foreach (string part in parts)
-							headers.Add(new HttpHeader(keyNormalized, part));
-					}
-					else
-						headers.Add(new HttpHeader(keyNormalized, value));
-				}
-				return headers.ToArray();
-			}
-		}
-		/// <inheritdoc />
-		public IEnumerator<HttpHeader> GetEnumerator()
-		{
-			lock (myLock)
-				return ((IEnumerable<HttpHeader>)GetHeaderArray()).GetEnumerator();
-		}
-
-		/// <inheritdoc />
-		IEnumerator IEnumerable.GetEnumerator()
-		{
-			lock (myLock)
-				return GetHeaderArray().GetEnumerator();
-		}
-
-		/// <summary>
-		/// Gets the number of headers in the collection by returning <c>GetHeaderArray().Length</c>.
-		/// </summary>
-		public int Count()
-		{
-			return GetHeaderArray().Length;
-		}
-
-		/// <summary>
-		/// <para>Adds the specified header to the collection.  If the header already exists, its value will be appended to the existing value after a comma.</para>
-		/// <para>Cookie headers are a special case which are combined with semicolon and space instead of comma.</para>
-		/// <para>Set-Cookie headers are a special case which are not appended to each other, instead, multiple Set-Cookie headers are allowed.</para>
-		/// </summary>
-		/// <param name="key">Header Name (not case-sensitive; will be normalized)</param>
-		/// <param name="value">Header Value</param>
-		public void Add(string key, string value)
-		{
-			key = SetKey(key);
-			lock (myLock)
-			{
-				if (!dict.TryGetValue(key, out string existing))
-				{
-					headerDefaultOrder.Add(key);
-					dict[key] = value;
-					return;
-				}
-				if (key.IEquals("Set-Cookie"))
-					dict[key] = existing + "\n" + value; // This special syntax needs parsed into multiple headers when iterating over the header collection.
-				else if (key.IEquals("Cookie"))
-					dict[key] = existing + "; " + value;
-				else
-					dict[key] = existing + "," + value;
-			}
-		}
-
-		/// <summary>
-		/// <para>Adds the specified header to the collection.  If the header already exists, its value will be appended to the existing value after a comma.</para>
-		/// <para>Cookie headers are a special case which are combined with semicolon and space instead of comma.</para>
-		/// <para>Set-Cookie headers are a special case which are not appended to each other, instead, multiple Set-Cookie headers are allowed.</para>
-		/// </summary>
-		/// <param name="item">Header name and value.</param>
-		public void Add(KeyValuePair<string, string> item)
-		{
-			Add(item.Key, item.Value);
-		}
-
-		/// <summary>
-		/// <para>Adds the specified header to the collection.  If the header already exists, its value will be appended to the existing value after a comma.</para>
-		/// <para>Cookie headers are a special case which are combined with semicolon and space instead of comma.</para>
-		/// <para>Set-Cookie headers are a special case which are not appended to each other, instead, multiple Set-Cookie headers are allowed.</para>
-		/// </summary>
-		/// <param name="item">Header to add.</param>
-		public void Add(HttpHeader item)
-		{
-			Add(item.Key, item.Value);
-		}
-
-		/// <summary>
-		/// Removes all headers from this collection, making it as if it was freshly constructed.
-		/// </summary>
-		public void Clear()
-		{
-			lock (myLock)
-			{
-				headerDefaultOrder.Clear();
-				dict.Clear();
-			}
-		}
-
-		/// <summary>
-		/// Returns true if this collection contains a header with the given name (not case-sensitive).
-		/// </summary>
-		/// <param name="key">Header name (not case-sensitive).</param>
-		/// <returns></returns>
-		public bool ContainsKey(string key)
-		{
-			lock (myLock)
-			{
-				return dict.ContainsKey(GetKey(key));
-			}
-		}
-
-		/// <summary>
-		/// Removes all headers with the given name, returning true if any were removed, false if none were found.
-		/// </summary>
-		/// <param name="key">Header name (not case-sensitive).</param>
-		/// <returns></returns>
-		public bool Remove(string key)
-		{
-			key = GetKey(key);
-			lock (myLock)
-			{
-				if (dict.Remove(key))
-				{
-					headerDefaultOrder.RemoveAll(s => s == key);
-					return true;
-				}
-			}
-			return false;
-		}
-
-		/// <summary>
-		/// <para>Tries to get the header values with the specified name (not case-sensitive), returning true if successful.</para>
-		/// <para>Fully compatible with "Set-Cookie".</para>
-		/// </summary>
-		/// <param name="key">Header name (not case-sensitive).</param>
-		/// <param name="values">(Output) Header values.</param>
-		/// <returns></returns>
-#if NET6_0
-		public bool TryGetValues(string key, [MaybeNullWhen(false)] out string[] values)
-#else
-		public bool TryGetValues(string key, out string[] values)
-#endif
-		{
-			key = GetKey(key);
-			lock (myLock)
-			{
-				if (dict.TryGetValue(key, out string existing))
-				{
-					if (key == "set-cookie")
-						values = existing.Split('\n');
-					else
-						values = new string[] { existing };
-					return true;
-				}
-			}
-			values = null;
-			return false;
-		}
-
-		/// <summary>
-		/// <para>Tries to get the value of the first header with the specified name (not case-sensitive), returning true if successful.</para>
-		/// <para>NOT fully compatible with "Set-Cookie", as "Set-Cookie" can have multiple headers.</para>
-		/// </summary>
-		/// <param name="key">Header name (not case-sensitive).</param>
-		/// <param name="value">(Output) Header value.</param>
-		/// <returns></returns>
-#if NET6_0
-		public bool TryGetValue(string key, [MaybeNullWhen(false)] out string value)
-#else
-		public bool TryGetValue(string key, out string value)
-#endif
-		{
-			key = GetKey(key);
-			lock (myLock)
-			{
-				if (dict.TryGetValue(key, out value))
-				{
-					if (key == "set-cookie")
-						value = value.Split('\n')[0];
-					return true;
-				}
-			}
-			value = null;
-			return false;
-		}
-
-		/// <summary>
-		/// <para>Gets the values of the headers with the specified name, or null if the header does not exist.</para>
-		/// <para>Fully compatible with "Set-Cookie".</para>
-		/// </summary>
-		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
-		/// <returns></returns>
-		public string[] GetValues(string headerName)
-		{
-			if (TryGetValues(headerName, out string[] v))
-				return v;
-			return null;
-		}
-
-		/// <summary>
-		/// <para>Gets the value of the first header with the specified name, or null if the header does not exist.</para>
-		/// <para>NOT fully compatible with "Set-Cookie", as "Set-Cookie" can have multiple headers.</para>
-		/// </summary>
-		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
-		/// <returns></returns>
-		public string Get(string headerName)
-		{
-			if (TryGetValue(headerName, out string v))
-				return v;
-			return null;
-		}
-
-		/// <summary>
-		/// <para>Assigns multiple values to the header with the specified name.</para>
-		/// <para>Because the HttpHeaderCollection class automatically combines headers, for most headers, this method will assign a single combined value.</para>
-		/// <para>This overload is mainly meant for the "Set-Cookie" header, which can exist as multiple distinct headers.</para>
-		/// </summary>
-		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
-		/// <param name="values">Values to set.  If null or empty array, the header is removed from the collection.</param>
-		public void Set(string headerName, string[] values)
-		{
-			if (values == null || values.Length == 0)
-				Remove(headerName);
+			ValidateHeaderName(headerName);
+			if (nameCase == HeaderNameCase.LowerCase)
+				return headerName.ToLower();
 			else
 			{
-				headerName = SetKey(headerName);
-				string valueStr;
-				if (headerName.IEquals("Set-Cookie"))
-					valueStr = string.Join("\n", values); // This special syntax needs parsed into multiple headers when iterating over the header collection.
-				else if (headerName.IEquals("Cookie"))
-					valueStr = string.Join("; ", values);
-				else
-					valueStr = string.Join(",", values);
-				lock (myLock)
+				// Capitalizes the first character of each hyphen-separated word while making the rest of the characters lowercase.
+				string[] words = headerName.Split('-');
+				for (int i = 0; i < words.Length; i++)
 				{
-					if (!dict.ContainsKey(headerName))
-						headerDefaultOrder.Add(headerName);
-					dict[headerName] = valueStr;
+					if (words[i].Length > 0)
+						words[i] = char.ToUpper(words[i][0]) + words[i].Substring(1).ToLower();
 				}
-			}
-		}
-		/// <summary>
-		/// <para>Assigns a single value to the header with the specified name, removing any existing values for the header.</para>
-		/// </summary>
-		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
-		/// <param name="value">Value to set.  If null, the header is removed from the collection.</param>
-		public void Set(string headerName, string value)
-		{
-			if (value == null || value.Length == 0)
-				Remove(headerName);
-			else
-			{
-				headerName = SetKey(headerName);
-				lock (myLock)
-				{
-					if (!dict.ContainsKey(headerName))
-						headerDefaultOrder.Add(headerName);
-					dict[headerName] = value;
-				}
+				return string.Join("-", words);
 			}
 		}
 
@@ -451,63 +120,308 @@ namespace BPUtil.SimpleHttp
 				throw new ArgumentException("Header name contains invalid characters: " + headerName + ".");
 			return headerName;
 		}
+	}
+	/// <summary>
+	/// Specifies how header names are normalized.
+	/// </summary>
+	public enum HeaderNameCase
+	{
 		/// <summary>
-		/// Gets the header key for "setting" purposes (full validation is performed). Validates the header name and returns it in lower-case form.
+		/// Header names are normalized to title case (for HTTP 1.1).
 		/// </summary>
-		/// <param name="headerName">Header name.</param>
-		/// <returns></returns>
-		private static string SetKey(string headerName)
-		{
-			return ValidateHeaderName(headerName).ToLower();
-		}
+		TitleCase,
 		/// <summary>
-		/// Gets the header key for "getting" purposes (full validation is skipped). Efficiently returns a key which can be used to read the header value if it exists, without performing full validation on the header name.
+		/// Header names are normalized to lower case (for HTTP 2.0).
 		/// </summary>
-		/// <param name="headerName">Header name.</param>
-		/// <returns></returns>
-		private static string GetKey(string headerName)
+		LowerCase
+	}
+
+	// Rewrite this class to use a List<HttpHeader> with locked access.
+	// The existing API for querying single headers should continue to combine header values, but do it at query time instead of add time.
+	// Iterating should deliver duplicate header values as individual key value pairs.
+
+	/// <summary>
+	/// <para>Provides thread-safe (sychronized) read/write access to HTTP headers using case-insensitive keying.</para>
+	/// <para>Note: The HttpHeader instances in this collection have mutable values, meaning their values could change at any time if they are being accessed by other threads.</para>
+	/// <para>All header names are automatically normalized to title case for HTTP 1.1 unless otherwise specified in the HttpHeaderCollection constructor.</para>
+	/// <para>This class preserves the order in which headers were added.</para>
+	/// <para>Revised in 2024-11, this class no longer combines the values of headers sharing the same key, except in special cases:</para>
+	/// <para>* Headers named "Cookie" are combined into one when added, with the values separated by semicolon and space: ("; ").</para>
+	/// <para>* Some methods and properties return combined values if there are multiple headers with the same key.</para>
+	/// </summary>
+	public class HttpHeaderCollection : IEnumerable<HttpHeader>
+	{
+		/// <summary>
+		/// Lock to hold while internally accessing the header collection.
+		/// </summary>
+		protected object myLock = new object();
+
+		/// <summary>
+		/// A list of headers in the order in which they were added to the collection.
+		/// </summary>
+		protected List<HttpHeader> headers = new List<HttpHeader>();
+
+		/// <summary>
+		/// Specifies how header names are normalized.
+		/// </summary>
+		public readonly HeaderNameCase NameCase;
+
+		/// <summary>
+		/// Constructs a new empty HttpHeaderCollection.
+		/// </summary>
+		/// <param name="NameCase">Specifies how header names are normalized.</param>
+		public HttpHeaderCollection(HeaderNameCase NameCase = HeaderNameCase.TitleCase)
 		{
-			return headerName == null ? "" : headerName.ToLower();
+			this.NameCase = NameCase;
 		}
 
 		/// <summary>
-		/// Normalized the header name according to the method defined by <see cref="NameCase"/>.
+		/// Constructs a new HttpHeaderCollection from the given list of Key/Value pairs.
 		/// </summary>
-		/// <param name="headerName">HTTP header name which may not be normalized yet.</param>
-		/// <returns>The normalized header name.</returns>
-		/// <exception cref="ArgumentException">If the given header name is invalid.</exception>
-		public string NormalizeHeaderName(string headerName)
+		/// <param name="NameCase">Specifies how header names are normalized.</param>
+		/// <param name="headers">Collection of Key/Value pairs.</param>
+		public static HttpHeaderCollection FromPairs(HeaderNameCase NameCase, IEnumerable<KeyValuePair<string, string>> headers)
 		{
-			return NormalizeHeaderName(NameCase, headerName);
+			if (headers != null)
+			{
+				HttpHeaderCollection c = new HttpHeaderCollection(NameCase);
+				foreach (KeyValuePair<string, string> kvp in headers)
+					c.Add(kvp);
+				return c;
+			}
+			return null;
+		}
+		/// <summary>
+		/// <para>Gets or sets the value of the header matching this key, or null.</para>
+		/// <para>WARNING: Many headers can exist multiple times; if that happens this method returns their values concatenated with ", " as the separator.</para>
+		/// <para>This is equivalent to using <see cref="Get(string)"/> or <see cref="Set(string, string)"/>.</para>
+		/// </summary>
+		/// <param name="headerName">Header Name (not case-sensitive).</param>
+		/// <returns></returns>
+		public string this[string headerName]
+		{
+			get => this.Get(headerName);
+			set => this.Set(headerName, value);
+		}
+		/// <summary>
+		/// <para>Gets an array of all the current HTTP Headers in the order in which they were added.</para>
+		/// <para>Multiple headers may exist with the same key.</para>
+		/// <para>Note: The HttpHeader instances in this collection have mutable values, meaning their values could change at any time if they are being accessed by other threads.</para>
+		/// </summary>
+		/// <returns></returns>
+		public HttpHeader[] GetHeaderArray()
+		{
+			lock (myLock)
+				return headers.ToArray();
+		}
+		/// <inheritdoc />
+		public IEnumerator<HttpHeader> GetEnumerator()
+		{
+			lock (myLock)
+				return ((IEnumerable<HttpHeader>)GetHeaderArray()).GetEnumerator();
+		}
+
+		/// <inheritdoc />
+		IEnumerator IEnumerable.GetEnumerator()
+		{
+			lock (myLock)
+				return GetHeaderArray().GetEnumerator();
 		}
 
 		/// <summary>
-		/// Normalized the header name according to the method specified.
+		/// Gets the number of headers in the collection.
 		/// </summary>
-		/// <param name="nameCase">Specifies how header names are normalized.</param>
-		/// <param name="headerName">HTTP header name which may not be normalized yet.</param>
-		/// <returns>The normalized header name.</returns>
-		/// <exception cref="ArgumentException">If the given header name is invalid.</exception>
-		public static string NormalizeHeaderName(HeaderNameCase nameCase, string headerName)
+		public int Count()
 		{
-			ValidateHeaderName(headerName);
-			if (nameCase == HeaderNameCase.LowerCase)
-				return headerName.ToLower();
+			lock (myLock)
+				return headers.Count;
+		}
+
+		/// <summary>
+		/// <para>Adds the specified header to the collection.</para>
+		/// <para>(some headers can not exist more than once; this method will add or edit the existing value as needed)</para>
+		/// </summary>
+		/// <param name="headerName">Header Name (not case-sensitive; will be normalized according to <see cref="NameCase"/>)</param>
+		/// <param name="value">Header Value (not allowed to be null or empty)</param>
+		public void Add(string headerName, string value)
+		{
+			if (value == null)
+				throw new ArgumentNullException(nameof(value));
+			if (value == "")
+				throw new ArgumentException("Value cannot be empty", nameof(value));
+			lock (myLock)
+			{
+				if (headerName.IEquals("Cookie"))
+				{
+					HttpHeader cookieHeader = GetHeaders(headerName)?.FirstOrDefault();
+					if (cookieHeader != null)
+					{
+						cookieHeader.Value = cookieHeader.Value + "; " + value;
+						return;
+					}
+				}
+				headers.Add(new HttpHeader(NameCase, headerName, value));
+			}
+		}
+
+		/// <summary>
+		/// <para>Adds the specified header to the collection.</para>
+		/// <para>(some headers can not exist more than once; this method will add or edit the existing value as needed)</para>
+		/// </summary>
+		/// <param name="item">Header name and value.</param>
+		public void Add(KeyValuePair<string, string> item)
+		{
+			Add(item.Key, item.Value);
+		}
+
+		/// <summary>
+		/// <para>Copies the specified header and adds the copy to the collection, enforcing this collection's <see cref="NameCase"/>.</para>
+		/// <para>(some headers can not exist more than once; this method will add or edit the existing value as needed)</para>
+		/// </summary>
+		/// <param name="item">Header to add.</param>
+		public void Add(HttpHeader item)
+		{
+			Add(item.Key, item.Value);
+		}
+
+		/// <summary>
+		/// Removes all headers from this collection, making it as if it was freshly constructed.
+		/// </summary>
+		public void Clear()
+		{
+			lock (myLock)
+			{
+				headers.Clear();
+			}
+		}
+
+		/// <summary>
+		/// Returns true if this collection contains a header with the given name (not case-sensitive).
+		/// </summary>
+		/// <param name="headerName">Header name (not case-sensitive).</param>
+		/// <returns></returns>
+		public bool ContainsKey(string headerName)
+		{
+			lock (myLock)
+			{
+				return headers.Any(h => h.Key.IEquals(headerName));
+			}
+		}
+
+		/// <summary>
+		/// Removes all headers with the given name, returning true if any were removed, false if none were found.
+		/// </summary>
+		/// <param name="headerName">Header name (not case-sensitive).</param>
+		/// <returns></returns>
+		public bool Remove(string headerName)
+		{
+			lock (myLock)
+			{
+				int removed = headers.RemoveAll(h => h.Key.IEquals(headerName));
+				return removed > 0;
+			}
+		}
+
+		/// <summary>
+		/// <para>Tries to get the header values with the specified name (not case-sensitive), returning true if successful, false if no header(s) existed with the specified name.  If no matching header existed, the <paramref name="values"/> output parameter will be an empty array.</para>
+		/// </summary>
+		/// <param name="headerName">Header name (not case-sensitive).</param>
+		/// <param name="values">(Output) Header values.</param>
+		/// <returns></returns>
+		public bool TryGetValues(string headerName, out string[] values)
+		{
+			values = GetValues(headerName);
+			return values.Length > 0;
+		}
+
+		/// <summary>
+		/// <para>Tries to get the value of the first header with the specified name (not case-sensitive), returning true if successful, false if no header(s) existed with the specified name.  If no matching header existed, the <paramref name="value"/> output parameter will be set to <c>null</c>.</para>
+		/// <para>WARNING: Many headers can exist multiple times; if that happens this method returns their values concatenated with ", " as the separator.</para>
+		/// </summary>
+		/// <param name="headerName">Header name (not case-sensitive).</param>
+		/// <param name="value">(Output) Header value.</param>
+		/// <returns></returns>
+#if NET6_0
+		public bool TryGetValue(string headerName, [MaybeNullWhen(false)] out string value)
+#else
+		public bool TryGetValue(string headerName, out string value)
+#endif
+		{
+			value = Get(headerName);
+			return value != null;
+		}
+
+		/// <summary>
+		/// <para>Gets the values of the headers with the specified name, or an empty array if the header does not exist.</para>
+		/// </summary>
+		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
+		/// <returns></returns>
+		public string[] GetValues(string headerName)
+		{
+			lock (myLock)
+			{
+				return headers.Where(h => h.Key.IEquals(headerName)).Select(h => h.Value).ToArray();
+			}
+		}
+
+		/// <summary>
+		/// <para>Gets the value header with the specified name, or null if the header does not exist.</para>
+		/// <para>WARNING: Many headers can exist multiple times; if that happens this method returns their values concatenated with ", " as the separator.</para>
+		/// </summary>
+		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
+		/// <returns></returns>
+		public string Get(string headerName)
+		{
+			string[] values = GetValues(headerName);
+			if (values.Length == 0)
+				return null;
+			else
+				return string.Join(", ", values);
+		}
+
+		/// <summary>
+		/// <para>Gets an array of HttpHeaders with the specified name, or empty array if no matching header exists.</para>
+		/// </summary>
+		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
+		/// <returns></returns>
+		public HttpHeader[] GetHeaders(string headerName)
+		{
+			lock (myLock)
+			{
+				return headers.Where(h => h.Key.IEquals(headerName)).ToArray();
+			}
+		}
+		/// <summary>
+		/// <para>If zero headers exist with the given name, this method adds a new header with the given name and value.</para>
+		/// <para>If one header exists with the given name, this method changes its value (keeping its place in the order).</para>
+		/// <para>If multiple headers exists with the given name, this method changes the value of the first matching header (keeping its place in the order) and removes the other matching headers.</para>
+		/// <para>(this is a convenience method intended to assign values to headers that must only exist once (such as "Content-Type")</para>
+		/// </summary>
+		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
+		/// <param name="value">Value to set.  If null or empty, all headers matching <paramref name="headerName"/> are removed from the collection.</param>
+		public void Set(string headerName, string value)
+		{
+			if (value == null || value.Length == 0)
+				Remove(headerName);
 			else
 			{
-				// Capitalizes the first character of each hyphen-separated word while making the rest of the characters lowercase.
-				string[] words = headerName.Split('-');
-				for (int i = 0; i < words.Length; i++)
+				lock (myLock)
 				{
-					if (words[i].Length > 0)
-						words[i] = char.ToUpper(words[i][0]) + words[i].Substring(1).ToLower();
+					HttpHeader hdr = headers.FirstOrDefault(h => h.Key.IEquals(headerName));
+					if (hdr == null)
+						Add(headerName, value);
+					else
+					{
+						hdr.Value = value;
+						headers.RemoveAll(h => h != hdr && h.Key.IEquals(headerName));
+					}
 				}
-				return string.Join("-", words);
 			}
 		}
 		/// <summary>
 		/// <para>Given a complete HTTP header ("Name: value"), attempts to assign the header to this collection.</para>
-		/// <para>If there is no colon in the header string, the header is removed from the header collection.</para>
+		/// <para>If there is no colon in the header string, the the string is interpreted as a header name only and any headers with this name are removed from the collection.</para>
+		/// <para>The full string value including any commas are assigned to a single header.  This method does not split the value into multiple headers.</para>
 		/// <para>Throw an exception upon failure.</para>
 		/// </summary>
 		/// <param name="header">A complete HTTP header ("Name: value")</param>
