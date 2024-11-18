@@ -23,6 +23,14 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public string Value { get; set; }
 		/// <summary>
+		/// Maximum length we allow for an HTTP header key.
+		/// </summary>
+		public const int MAX_HEADER_KEY_LENGTH = 16384;
+		/// <summary>
+		/// Maximum length we allow for an HTTP header value.
+		/// </summary>
+		public const int MAX_HEADER_VALUE_LENGTH = 32768;
+		/// <summary>
 		/// Initializes an empty new instance of the HttpHeader class.
 		/// </summary>
 		public HttpHeader() { }
@@ -34,8 +42,8 @@ namespace BPUtil.SimpleHttp
 		/// <param name="value">The value of the HTTP header.</param>
 		public HttpHeader(HeaderNameCase NameCase, string key, string value)
 		{
-			Key = key;
-			Value = value;
+			Key = NormalizeHeaderName(NameCase, key);
+			Value = ValidateHeaderValue(value);
 		}
 		/// <inheritdoc />
 		public int CompareTo(HttpHeader other)
@@ -114,11 +122,25 @@ namespace BPUtil.SimpleHttp
 		{
 			if (string.IsNullOrEmpty(headerName))
 				throw new ArgumentException("Header name cannot be null or empty.");
-			if (headerName.Length > 16384)
-				throw new ArgumentException("Header name is too long at " + headerName.Length + " characters.  Max supported length: 16384 characters.");
+			if (headerName.Length > MAX_HEADER_KEY_LENGTH)
+				throw new ArgumentException("Header name is too long at " + headerName.Length + " characters.  Max supported length: " + MAX_HEADER_KEY_LENGTH + " characters.");
 			if (!headerName.All(HeaderNameValidCharacters.Contains))
 				throw new ArgumentException("Header name contains invalid characters: " + headerName + ".");
 			return headerName;
+		}
+		/// <summary>
+		/// Throws ArgumentException if the header value is null or is too long.
+		/// </summary>
+		/// <param name="headerValue">HTTP header value.</param>
+		/// <returns>The header value.</returns>
+		/// <exception cref="ArgumentException">If the given header value is invalid.</exception>
+		public static string ValidateHeaderValue(string headerValue)
+		{
+			if (headerValue == null)
+				throw new ArgumentException("Header value cannot be null.");
+			if (headerValue.Length > MAX_HEADER_VALUE_LENGTH)
+				throw new ArgumentException("Header value is too long at " + headerValue.Length + " characters.  Max supported length: " + MAX_HEADER_VALUE_LENGTH + " characters.");
+			return headerValue;
 		}
 	}
 	/// <summary>
@@ -242,13 +264,11 @@ namespace BPUtil.SimpleHttp
 		/// <para>(some headers can not exist more than once; this method will add or edit the existing value as needed)</para>
 		/// </summary>
 		/// <param name="headerName">Header Name (not case-sensitive; will be normalized according to <see cref="NameCase"/>)</param>
-		/// <param name="value">Header Value (not allowed to be null or empty)</param>
+		/// <param name="value">Header Value (not allowed to be null)</param>
 		public void Add(string headerName, string value)
 		{
 			if (value == null)
 				throw new ArgumentNullException(nameof(value));
-			if (value == "")
-				throw new ArgumentException("Value cannot be empty", nameof(value));
 			lock (myLock)
 			{
 				if (headerName.IEquals("Cookie"))
@@ -398,10 +418,10 @@ namespace BPUtil.SimpleHttp
 		/// <para>(this is a convenience method intended to assign values to headers that must only exist once (such as "Content-Type")</para>
 		/// </summary>
 		/// <param name="headerName">HTTP Header name (not case-sensitive)</param>
-		/// <param name="value">Value to set.  If null or empty, all headers matching <paramref name="headerName"/> are removed from the collection.</param>
+		/// <param name="value">Value to set.  If null, all headers matching <paramref name="headerName"/> are removed from the collection.</param>
 		public void Set(string headerName, string value)
 		{
-			if (value == null || value.Length == 0)
+			if (value == null)
 				Remove(headerName);
 			else
 			{
