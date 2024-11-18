@@ -90,7 +90,9 @@ namespace BPUtil.SimpleHttp
 			ValidateHeaderName(headerName);
 			if (nameCase == HeaderNameCase.LowerCase)
 				return headerName.ToLower();
-			else
+			else if (nameCase == HeaderNameCase.NoChange)
+				return headerName;
+			else if (nameCase == HeaderNameCase.TitleCase)
 			{
 				// Capitalizes the first character of each hyphen-separated word while making the rest of the characters lowercase.
 				string[] words = headerName.Split('-');
@@ -101,6 +103,8 @@ namespace BPUtil.SimpleHttp
 				}
 				return string.Join("-", words);
 			}
+			else
+				throw new ArgumentException("HTTP Header name case was unsupported: " + nameCase, nameof(nameCase));
 		}
 
 		private static readonly HashSet<char> HeaderNameValidCharacters = CreateHttpHeaderValidCharsHashSet();
@@ -155,7 +159,11 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Header names are normalized to lower case (for HTTP 2.0).
 		/// </summary>
-		LowerCase
+		LowerCase,
+		/// <summary>
+		/// Header names are left exactly as entered (for testing).
+		/// </summary>
+		NoChange
 	}
 
 	// Rewrite this class to use a List<HttpHeader> with locked access.
