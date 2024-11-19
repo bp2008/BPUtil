@@ -114,6 +114,8 @@
     <Compile Include="SimpleHttp\Streams\GlobalThrottledStream.cs" />
     <Compile Include="SimpleHttp\Streams\ReadableChunkedTransferEncodingStream.cs" />
     <Compile Include="SimpleHttp\Streams\WritableChunkedTransferEncodingStream.cs" />
+    <Compile Include="SimpleHttp\TLS\CertificateSelectors\ReloadingCertificateSelector.cs" />
+    <Compile Include="SimpleHttp\TLS\CertificateStoreUpdater.cs" />
     <Compile Include="SimpleHttp\TLS\ITlsCipherSuiteSet.cs" />
     <Compile Include="SimpleHttp\TLS\TlsNegotiate.cs" />
     <Compile Include="SimpleHttp\WebSockets\WebSocketState.cs" />
