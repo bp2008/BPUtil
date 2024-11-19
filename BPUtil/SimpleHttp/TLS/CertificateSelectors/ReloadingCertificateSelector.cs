@@ -72,7 +72,7 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Initializes a new instance of the <see cref="ReloadingCertificateSelector"/> class.
 		/// </summary>
-		/// <param name="certificateInfoProvider">A function that returns a CertificatePfxInfo containing the path of the certificate and an optional password.  This will be called every time the web server needs to negotiate a TLS connection, so it should be very efficient.</param>
+		/// <param name="certificateInfoProvider">A function that returns a CertificatePfxInfo containing the path of the certificate and an optional password.  This will be called every time the web server needs to negotiate a TLS connection, so it should be very efficient.  If no certificate is available, the method can return null or a CertificatePfxInfo with null properties.</param>
 		public ReloadingCertificateSelector(Func<CertificatePfxInfo> certificateInfoProvider)
 		{
 			this.certificateInfoProvider = certificateInfoProvider ?? throw new ArgumentNullException(nameof(certificateInfoProvider));
@@ -119,14 +119,17 @@ namespace BPUtil.SimpleHttp
 				return true; // We haven't reloaded the certificate in over a day.
 
 			CertificatePfxInfo cpi = certificateInfoProvider();
-			if (!cpi.Equals(lastCertificatePfxInfo))
-				return true;
-
-			if (isRecheck || checkLastWriteTimeCd.Consume())
+			if (cpi != null)
 			{
-				DateTime lastModifiedUtc = File.GetLastWriteTimeUtc(cpi.FilePath);
-				if (cc.FileLastModifiedUTC != lastModifiedUtc)
+				if (!cpi.Equals(lastCertificatePfxInfo))
 					return true;
+
+				if (!string.IsNullOrWhiteSpace(cpi.FilePath) && (isRecheck || checkLastWriteTimeCd.Consume()))
+				{
+					DateTime lastModifiedUtc = File.GetLastWriteTimeUtc(cpi.FilePath);
+					if (cc.FileLastModifiedUTC != lastModifiedUtc)
+						return true;
+				}
 			}
 
 			return false;
@@ -135,6 +138,8 @@ namespace BPUtil.SimpleHttp
 		private void ReloadCertificate()
 		{
 			CertificatePfxInfo cpi = certificateInfoProvider();
+			if (cpi == null || string.IsNullOrWhiteSpace(cpi.FilePath))
+				return;
 			FileInfo fi = new FileInfo(cpi.FilePath);
 			if (fi.Exists)
 			{
