@@ -235,6 +235,51 @@ namespace BPUtil
 
 			return result;
 		}
+		/// <summary>
+		/// Converts a ushort to a float using binary16 (half) encoding.
+		/// </summary>
+		/// <param name="binary16">A ushort containing floating point data.</param>
+		/// <returns></returns>
+		public static float DecodeHalf(ushort binary16)
+		{
+			// Extract the sign (1 bit), exponent (5 bits), and fraction (10 bits)
+			int sign = (binary16 >> 15) & 0x0001;
+			int exponent = (binary16 >> 10) & 0x001F;
+			int fraction = binary16 & 0x03FF;
+
+			// Handle special cases
+			if (exponent == 0)
+			{
+				// Subnormal number or zero
+				if (fraction == 0)
+				{
+					// Zero
+					return (sign == 1) ? -0.0f : 0.0f;
+				}
+				else
+				{
+					// Subnormal number
+					return (float)((sign == 1 ? -1 : 1) * Math.Pow(2, -14) * (fraction / 1024.0));
+				}
+			}
+			else if (exponent == 0x1F)
+			{
+				// Infinity or NaN
+				if (fraction == 0)
+				{
+					// Infinity
+					return (sign == 1) ? float.NegativeInfinity : float.PositiveInfinity;
+				}
+				else
+				{
+					// NaN
+					return float.NaN;
+				}
+			}
+
+			// Normalized number
+			return (float)((sign == 1 ? -1 : 1) * Math.Pow(2, exponent - 15) * (1 + fraction / 1024.0));
+		}
 		#region byte[] Buffer Pooling
 		/// <summary>
 		/// The size of the buffers, in bytes, that are returned from <see cref="BufferGet"/> and accepted by <see cref="BufferRecycle(byte[])"/>.
@@ -791,6 +836,16 @@ namespace BPUtil
 			return buf;
 		}
 		/// <summary>
+		/// Returns a new array containing the specified bytes from the source array.  This overload copies all bytes after the specified offset.
+		/// </summary>
+		/// <param name="buf">The source byte array.</param>
+		/// <param name="offset">The offset to begin copying bytes at.</param>
+		/// <returns></returns>
+		public static byte[] SubArray(byte[] buf, int offset)
+		{
+			return SubArray(buf, offset, buf.Length - offset);
+		}
+		/// <summary>
 		/// Returns a new array containing the specified bytes from the source array.
 		/// </summary>
 		/// <param name="buf">The source byte array.</param>
@@ -880,7 +935,7 @@ namespace BPUtil
 				throw new ArgumentException("WriteUtf8_16 method cannot accept a string with length greater than " + ushort.MaxValue, "str");
 			int maxLength = buffer.Length - (offset + 2);
 			if (str.Length > maxLength)
-				throw new ArgumentException("WriteUtf8_16(string, byte[], int) method received a string that is too large for the buffer it would be written to");
+				throw new ArgumentException("WriteUtf8_16(string, byte[], int) method received a string that is too large for the buffer it would be written to.");
 			byte[] bytes = Utf8NoBOM.GetBytes(str);
 			if (bytes.Length > ushort.MaxValue)
 				throw new ArgumentException("WriteUtf8_16 method cannot accept a string with UTF8 length greater than " + ushort.MaxValue, "str");
@@ -900,13 +955,92 @@ namespace BPUtil
 		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static uint WriteUtf8_32(string str, byte[] buffer, int offset)
 		{
-			int maxLength = buffer.Length - (offset + 2);
+			int maxLength = buffer.Length - (offset + 4);
 			if (str.Length > maxLength)
-				throw new ArgumentException("WriteUtf8_16(string, byte[], int) method received a string that is too large for the buffer it would be written to");
+				throw new ArgumentException("WriteUtf8_32(string, byte[], int) method received a string that is too large for the buffer it would be written to.");
 			byte[] bytes = Utf8NoBOM.GetBytes(str);
 			if (bytes.Length > maxLength)
-				throw new ArgumentException("WriteUtf8(string, byte[], int) method received a string that is too large for the buffer it would be written to, once UTF8-encoded.");
+				throw new ArgumentException("WriteUtf8_32(string, byte[], int) method received a string that is too large for the buffer it would be written to, once UTF8-encoded.");
 			WriteUInt32((uint)bytes.Length, buffer, offset);
+			Array.Copy(bytes, 0, buffer, offset + 4, bytes.Length);
+			return (uint)bytes.Length;
+		}
+		#endregion
+		#region Write to byte array (Little endian in the buffer)
+		public static void WriteInt16LE(short num, byte[] buffer, int offset)
+		{
+			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 2);
+		}
+		public static void WriteUInt16LE(ushort num, byte[] buffer, int offset)
+		{
+			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 2);
+		}
+		public static void WriteInt32LE(int num, byte[] buffer, int offset)
+		{
+			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 4);
+		}
+		public static void WriteUInt32LE(uint num, byte[] buffer, int offset)
+		{
+			Array.Copy(BitConverter.GetBytes((int)num), 0, buffer, offset, 4);
+		}
+		public static void WriteInt64LE(long num, byte[] buffer, int offset)
+		{
+			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 8);
+		}
+		public static void WriteUInt64LE(ulong num, byte[] buffer, int offset)
+		{
+			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 8);
+		}
+		public static void WriteFloatLE(float num, byte[] buffer, int offset)
+		{
+			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 4);
+		}
+		public static void WriteDoubleLE(double num, byte[] buffer, int offset)
+		{
+			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 8);
+		}
+		/// <summary>
+		/// <para>Writes the length of the string as a 16 bit unsigned integer, then writes the string.</para>
+		/// <para>The string will be encoded as UTF8 with no byte order mark.</para>
+		/// <para>Returns the number of bytes written.</para>
+		/// <para>Throws an exception if the byte array is larger than a 16 bit unsigned integer can hold.</para>
+		/// </summary>
+		/// <param name="str">String to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		public static ushort WriteUtf8_16LE(string str, byte[] buffer, int offset)
+		{
+			if (str.Length > ushort.MaxValue)
+				throw new ArgumentException("WriteUtf8_16LE method cannot accept a string with length greater than " + ushort.MaxValue, "str");
+			int maxLength = buffer.Length - (offset + 2);
+			if (str.Length > maxLength)
+				throw new ArgumentException("WriteUtf8_16LE(string, byte[], int) method received a string that is too large for the buffer it would be written to.");
+			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			if (bytes.Length > ushort.MaxValue)
+				throw new ArgumentException("WriteUtf8_16LE method cannot accept a string with UTF8 length greater than " + ushort.MaxValue, "str");
+			if (bytes.Length > maxLength)
+				throw new ArgumentException("WriteUtf8(string, byte[], int) method received a string that is too large for the buffer it would be written to, once UTF8-encoded.");
+			WriteUInt16LE((ushort)bytes.Length, buffer, offset);
+			Array.Copy(bytes, 0, buffer, offset + 2, bytes.Length);
+			return (ushort)bytes.Length;
+		}
+		/// <summary>
+		/// <para>Writes the length of the string as a 32 bit unsigned integer, then writes the string.</para>
+		/// <para>The string will be encoded as UTF8 with no byte order mark.</para>
+		/// <para>Returns the number of bytes written.</para>
+		/// </summary>
+		/// <param name="str">String to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		public static uint WriteUtf8_32LE(string str, byte[] buffer, int offset)
+		{
+			int maxLength = buffer.Length - (offset + 4);
+			if (str.Length > maxLength)
+				throw new ArgumentException("WriteUtf8_32LE(string, byte[], int) method received a string that is too large for the buffer it would be written to.");
+			byte[] bytes = Utf8NoBOM.GetBytes(str);
+			if (bytes.Length > maxLength)
+				throw new ArgumentException("WriteUtf8_32LE(string, byte[], int) method received a string that is too large for the buffer it would be written to, once UTF8-encoded.");
+			WriteUInt32LE((uint)bytes.Length, buffer, offset);
 			Array.Copy(bytes, 0, buffer, offset + 4, bytes.Length);
 			return (uint)bytes.Length;
 		}
@@ -1015,6 +1149,16 @@ namespace BPUtil
 		{
 			return (ulong)IPAddress.NetworkToHostOrder((long)BitConverter.ToUInt64(buffer, offset));
 		}
+		/// <summary>
+		/// Reads a 2-byte floating point number (binary16) in big endian format where the most significant bit is the sign, then comes 5 exponent bits, then 10 fraction bits.
+		/// </summary>
+		/// <param name="buffer">Buffer to read the 2-byte floating point number from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns></returns>
+		public static float ReadHalf(byte[] buffer, int offset)
+		{
+			return DecodeHalf(ReadUInt16(buffer, offset));
+		}
 		public static float ReadFloat(byte[] buffer, int offset)
 		{
 			return BitConverter.ToSingle(NetworkToHostOrder(buffer, offset, 4), 0);
@@ -1098,6 +1242,50 @@ namespace BPUtil
 				throw new ArgumentException("ReadUtf8_32(byte[" + buffer.Length + "], " + offset + ") method cannot read byte length because there are not enough bytes remaining in the buffer.");
 			strLen = ReadUInt32(buffer, offset);
 			return ReadUtf8(buffer, offset + 4, (int)strLen);
+		}
+		#endregion
+		#region Read from byte array (Little endian in the buffer)
+		public static short ReadInt16LE(byte[] buffer, int offset)
+		{
+			return BitConverter.ToInt16(buffer, offset);
+		}
+		public static ushort ReadUInt16LE(byte[] buffer, int offset)
+		{
+			return BitConverter.ToUInt16(buffer, offset);
+		}
+		public static int ReadInt32LE(byte[] buffer, int offset)
+		{
+			return BitConverter.ToInt32(buffer, offset);
+		}
+		public static uint ReadUInt32LE(byte[] buffer, int offset)
+		{
+			return BitConverter.ToUInt32(buffer, offset);
+		}
+		public static long ReadInt64LE(byte[] buffer, int offset)
+		{
+			return BitConverter.ToInt64(buffer, offset);
+		}
+		public static ulong ReadUInt64LE(byte[] buffer, int offset)
+		{
+			return BitConverter.ToUInt64(buffer, offset);
+		}
+		/// <summary>
+		/// Reads a 2-byte floating point number (binary16) in little endian format where the most significant bit is the sign, then comes 5 exponent bits, then 10 fraction bits.
+		/// </summary>
+		/// <param name="buffer">Buffer to read the 2-byte floating point number from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns></returns>
+		public static float ReadHalfLE(byte[] buffer, int offset)
+		{
+			return DecodeHalf(ReadUInt16LE(buffer, offset));
+		}
+		public static float ReadFloatLE(byte[] buffer, int offset)
+		{
+			return BitConverter.ToSingle(buffer, offset);
+		}
+		public static double ReadDoubleLE(byte[] buffer, int offset)
+		{
+			return BitConverter.ToDouble(buffer, offset);
 		}
 		#endregion
 		#region Read from stream (Big endian on the stream)

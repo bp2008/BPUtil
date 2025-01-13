@@ -80,6 +80,7 @@
     <Compile Include="CountdownStopwatch.cs" />
     <Compile Include="Debounce.cs" />
     <Compile Include="DummyValues.cs" />
+    <Compile Include="Forms\FormUtil.cs" />
     <Compile Include="Forms\TrayIconAppHiddenForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -93,6 +94,7 @@
     <Compile Include="Linux\PortHelper.cs" />
     <Compile Include="MVC\ControllerAsync.cs" />
     <Compile Include="MVC\RequiresHttpMethodAttribute.cs" />
+    <Compile Include="NativeWin\UdpInfoTable.cs" />
     <Compile Include="ObjectCacheSimple.cs" />
     <Compile Include="ObjectMerge.cs" />
     <Compile Include="ObjectChangeReplay.cs" />

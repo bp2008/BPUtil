@@ -210,5 +210,34 @@ namespace UnitTests
 			ByteUtil.DiscardUntilEndOfStream(ms.Substream(ms.Length));
 			Assert.AreEqual(len, ms.Position);
 		}
+		[TestMethod]
+		public void TestReadHalf()
+		{
+			TestHalf(0f, 0x00, 0x00);
+			TestHalf(0.000000059604645f, 0x00, 0x01);
+			TestHalf(0.000060975552f, 0x03, 0xff);
+			TestHalf(0.00006103515625f, 0x04, 0x00);
+			TestHalf(0.33325195f, 0x35, 0x55);
+			TestHalf(0.99951172f, 0x3b, 0xff);
+			TestHalf(1f, 0x3c, 0x00);
+			TestHalf(1.00097656f, 0x3c, 0x01);
+			TestHalf(65504f, 0x7b, 0xff);
+			TestHalf(float.PositiveInfinity, 0x7c, 0x00);
+			TestHalf(-0f, 0x80, 0x00);
+			TestHalf(-2, 0xc0, 0x00);
+			TestHalf(float.NegativeInfinity, 0xfc, 0x00);
+		}
+		private void TestHalf(float expectedValue, byte b1, byte b2)
+		{
+			float result = ByteUtil.ReadHalf(new byte[] { b1, b2 }, 0);
+			//if (tolerateLowPrecision)
+			//	Assert.IsTrue(Math.Abs(expectedValue - result) < 0.000001, "Expected " + expectedValue + ", got " + result);
+			//else
+			Assert.AreEqual(expectedValue, result, "Expected " + expectedValue + ", got " + result);
+
+			// Ensure the other decoding methods yield the same value.
+			float differentResult = ByteUtil.ReadHalfLE(new byte[] { b2, b1 }, 0);
+			Assert.AreEqual(result, differentResult, "Expected " + result + ", got " + differentResult);
+		}
 	}
 }

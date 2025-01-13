@@ -106,6 +106,18 @@ namespace BPUtil
 			return sb.ToString();
 		}
 		/// <summary>
+		/// Returns true if the given string consists of only ASCII characters between 32 (inclusive) and 127 (exclusive).
+		/// </summary>
+		/// <param name="str">String to test.</param>
+		/// <returns></returns>
+		public static bool IsAsciiPrintable(string str)
+		{
+			for (int i = 0; i < str.Length; i++)
+				if (str[i] < 32 || str[i] >= 127)
+					return false;
+			return true;
+		}
+		/// <summary>
 		/// This string contains one of every alphanumeric character except:
 		/// B 8 G 6 I 1 l O 0 Q D S 5 Z 2
 		/// </summary>
