@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,13 +11,59 @@ using System.Threading.Tasks;
 namespace BPUtil
 {
 	/// <summary>
+	/// Enumeration of compression methods.
+	/// </summary>
+	public enum BPCompressionMethod
+	{
+#if NET6_0
+		/// <summary>
+		/// The "Brotli" algorithm. Brotli is more advanced than Gzip.
+		/// </summary>
+		Brotli,
+#endif
+		/// <summary>
+		/// The "Gzip" algorithm.  Gzip is basically just Deflate with an additional header and checksum.
+		/// </summary>
+		Gzip,
+		/// <summary>
+		/// The "DEFLATE" algorithm.
+		/// </summary>
+		Deflate
+	}
+	/// <summary>
 	/// <para>Provides static methods for compression and decompression.</para>
 	/// <para>Supported Methods:</para>
 	/// <para>DEFLATE</para>
 	/// <para>GZip (Same as DEFLATE but adds a header and checksum)</para>
+	/// <para>Brotli (more advanced compression common on the web), requires .NET 6.0 or newer build of BPUtil.</para>
 	/// </summary>
 	public static class Compression
 	{
+		#region Compression Shared
+		/// <summary>
+		/// Returns a new stream that compresses data when written to and decompresses data when read from.
+		/// </summary>
+		/// <param name="compressionMethod">The compression algorithm that determines which type of stream is created.</param>
+		/// <param name="baseStream">The stream which will be passed into the compression stream's constructor, for it to be based on.  For Compression methods, this is the output stream.  For Decompression methods, this is the input stream.</param>
+		/// <returns></returns>
+		private static Stream GetCompressionStream(BPCompressionMethod compressionMethod, Stream baseStream)
+		{
+			switch (compressionMethod)
+			{
+#if NET6_0
+				case BPCompressionMethod.Brotli:
+					return new BrotliStream(baseStream, CompressionLevel.Optimal, true);
+#endif
+				case BPCompressionMethod.Gzip:
+					return new GZipStream(baseStream, CompressionLevel.Optimal, true);
+				case BPCompressionMethod.Deflate:
+					return new DeflateStream(baseStream, CompressionLevel.Optimal, true);
+				default:
+					throw new Exception("Unsupported BPCompressionMethod: " + compressionMethod);
+			}
+		}
+		#endregion
+		#region LEGACY API: Compress using a byte[] as input and byte[] as output
 #if NET6_0
 		/// <summary>
 		/// Compresses a buffer using Brotli.
@@ -25,33 +72,7 @@ namespace BPUtil
 		/// <returns>Compressed data.</returns>
 		public static byte[] BrotliCompress(byte[] buffer)
 		{
-			using (MemoryStream ms = new MemoryStream())
-			{
-				using (BrotliStream stream = new BrotliStream(ms, CompressionLevel.Optimal, true))
-				{
-					stream.Write(buffer, 0, buffer.Length);
-				}
-				return ms.ToArray();
-			}
-		}
-		/// <summary>
-		/// Decompresses a buffer using Brotli.
-		/// </summary>
-		/// <param name="buffer">Brotli-compressed data.</param>
-		/// <returns>Decompressed data.</returns>
-		public static byte[] BrotliDecompress(byte[] buffer)
-		{
-			using (MemoryStream outStream = new MemoryStream())
-			{
-				using (MemoryStream inStream = new MemoryStream(buffer))
-				{
-					using (BrotliStream stream = new BrotliStream(inStream, CompressionMode.Decompress, true))
-					{
-						stream.CopyTo(outStream);
-					}
-				}
-				return outStream.ToArray();
-			}
+			return Compress(BPCompressionMethod.Brotli, buffer);
 		}
 #endif
 		/// <summary>
@@ -61,33 +82,7 @@ namespace BPUtil
 		/// <returns>Compressed data.</returns>
 		public static byte[] GZipCompress(byte[] buffer)
 		{
-			using (MemoryStream ms = new MemoryStream())
-			{
-				using (GZipStream gZipStream = new GZipStream(ms, CompressionLevel.Optimal, true))
-				{
-					gZipStream.Write(buffer, 0, buffer.Length);
-				}
-				return ms.ToArray();
-			}
-		}
-		/// <summary>
-		/// Decompresses a buffer using GZip.
-		/// </summary>
-		/// <param name="buffer">GZip-compressed data.</param>
-		/// <returns>Decompressed data.</returns>
-		public static byte[] GZipDecompress(byte[] buffer)
-		{
-			using (MemoryStream outStream = new MemoryStream())
-			{
-				using (MemoryStream inStream = new MemoryStream(buffer))
-				{
-					using (GZipStream gZipStream = new GZipStream(inStream, CompressionMode.Decompress, true))
-					{
-						gZipStream.CopyTo(outStream);
-					}
-				}
-				return outStream.ToArray();
-			}
+			return Compress(BPCompressionMethod.Gzip, buffer);
 		}
 		/// <summary>
 		/// Compresses a buffer using DEFLATE.
@@ -96,14 +91,29 @@ namespace BPUtil
 		/// <returns>Compressed data.</returns>
 		public static byte[] DeflateCompress(byte[] buffer)
 		{
-			using (MemoryStream ms = new MemoryStream())
-			{
-				using (DeflateStream deflateStream = new DeflateStream(ms, CompressionLevel.Optimal, true))
-				{
-					deflateStream.Write(buffer, 0, buffer.Length);
-				}
-				return ms.ToArray();
-			}
+			return Compress(BPCompressionMethod.Deflate, buffer);
+		}
+		#endregion
+		#region LEGACY API: Decompress using a byte[] as input and byte[] as output
+#if NET6_0
+		/// <summary>
+		/// Decompresses a buffer using Brotli.
+		/// </summary>
+		/// <param name="buffer">Brotli-compressed data.</param>
+		/// <returns>Decompressed data.</returns>
+		public static byte[] BrotliDecompress(byte[] buffer)
+		{
+			return Decompress(BPCompressionMethod.Brotli, buffer);
+		}
+#endif
+		/// <summary>
+		/// Decompresses a buffer using GZip.
+		/// </summary>
+		/// <param name="buffer">GZip-compressed data.</param>
+		/// <returns>Decompressed data.</returns>
+		public static byte[] GZipDecompress(byte[] buffer)
+		{
+			return Decompress(BPCompressionMethod.Gzip, buffer);
 		}
 		/// <summary>
 		/// Decompresses a buffer using DEFLATE.
@@ -112,19 +122,161 @@ namespace BPUtil
 		/// <returns>Decompressed data.</returns>
 		public static byte[] DeflateDecompress(byte[] buffer)
 		{
+			return Decompress(BPCompressionMethod.Deflate, buffer);
+		}
+		#endregion
+		#region Compression Methods (2025+) byte[] Input, byte[] output
+		/// <summary>
+		/// Compresses a buffer using the specified compression method.
+		/// </summary>
+		/// <param name="compressionMethod">A <see cref="BPCompressionMethod"/> that determines which algorithm is used.</param>
+		/// <param name="buffer">Uncompressed data.</param>
+		/// <returns>Compressed data.</returns>
+		public static byte[] Compress(BPCompressionMethod compressionMethod, byte[] buffer)
+		{
 			using (MemoryStream outStream = new MemoryStream())
 			{
-				using (MemoryStream inStream = new MemoryStream(buffer))
+				using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream))
 				{
-					using (DeflateStream deflateStream = new DeflateStream(inStream, CompressionMode.Decompress, true))
-					{
-						deflateStream.CopyTo(outStream);
-					}
+					compressionStream.Write(buffer, 0, buffer.Length);
 				}
 				return outStream.ToArray();
 			}
 		}
-
+		/// <summary>
+		/// Decompresses a buffer using the specified compression method.
+		/// </summary>
+		/// <param name="compressionMethod">A <see cref="BPCompressionMethod"/> that determines which algorithm is used.</param>
+		/// <param name="buffer">Compressed data.</param>
+		/// <returns>Decompressed data.</returns>
+		public static byte[] Decompress(BPCompressionMethod compressionMethod, byte[] buffer)
+		{
+			using (MemoryStream outStream = new MemoryStream())
+			{
+				using (MemoryStream inStream = new MemoryStream(buffer))
+				using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream))
+				{
+					compressionStream.CopyTo(outStream);
+				}
+				return outStream.ToArray();
+			}
+		}
+		#endregion
+		#region Compression Methods (2025+) File Input, byte[] output
+		/// <summary>
+		/// Compresses a file using the specified compression method.
+		/// </summary>
+		/// <param name="compressionMethod">A <see cref="BPCompressionMethod"/> that determines which algorithm is used.</param>
+		/// <param name="filePathInput">Path of the input file.</param>
+		/// <param name="fileShareInput">A constant that determines how the input file will be shared by processes.</param>
+		/// <returns>Compressed data.</returns>
+		public static byte[] Compress(BPCompressionMethod compressionMethod, string filePathInput, FileShare fileShareInput = FileShare.ReadWrite)
+		{
+			using (FileStream inStream = new FileStream(filePathInput, FileMode.Open, FileAccess.Read, fileShareInput))
+			using (MemoryStream outStream = new MemoryStream())
+			{
+				using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream))
+				{
+					inStream.CopyTo(compressionStream);
+				}
+				return outStream.ToArray();
+			}
+		}
+		/// <summary>
+		/// Decompresses a file using the specified compression method.
+		/// </summary>
+		/// <param name="compressionMethod">A <see cref="BPCompressionMethod"/> that determines which algorithm is used.</param>
+		/// <param name="filePathInput">Path of the input file.</param>
+		/// <param name="fileShareInput">A constant that determines how the input file will be shared by processes.</param>
+		/// <returns>Decompressed data.</returns>
+		public static byte[] Decompress(BPCompressionMethod compressionMethod, string filePathInput, FileShare fileShareInput = FileShare.ReadWrite)
+		{
+			using (FileStream inStream = new FileStream(filePathInput, FileMode.Open, FileAccess.Read, fileShareInput))
+			using (MemoryStream outStream = new MemoryStream())
+			{
+				using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream))
+				{
+					compressionStream.CopyTo(outStream);
+				}
+				return outStream.ToArray();
+			}
+		}
+		#endregion
+		#region Compression Methods (2025+) File Input, File output
+		/// <summary>
+		/// <summary>
+		/// Compresses a file using the specified compression method.
+		/// </summary>
+		/// <param name="compressionMethod">A <see cref="BPCompressionMethod"/> that determines which algorithm is used.</param>
+		/// <param name="filePathInput">Path of the input file.</param>
+		/// <param name="filePathOutput">Path of the output file.</param>
+		/// <param name="fileShareInput">A constant that determines how the input file will be shared by processes.</param>
+		/// <param name="fileShareOutput">A constant that determines how the output file will be shared by processes.</param>
+		/// <param name="fileModeOutput">A constant that determines how to operate if the output file already exists or not.</param>
+		public static void Compress(BPCompressionMethod compressionMethod, string filePathInput, string filePathOutput, FileShare fileShareInput = FileShare.ReadWrite, FileShare fileShareOutput = FileShare.Read, FileMode fileModeOutput = FileMode.Create)
+		{
+			using (FileStream inStream = new FileStream(filePathInput, FileMode.Open, FileAccess.Read, fileShareInput))
+			using (FileStream outStream = new FileStream(filePathOutput, fileModeOutput, FileAccess.Write, fileShareOutput))
+			using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream))
+			{
+				inStream.CopyTo(compressionStream);
+			}
+		}
+		/// <summary>
+		/// Decompresses a file using the specified compression method.
+		/// </summary>
+		/// <param name="compressionMethod">A <see cref="BPCompressionMethod"/> that determines which algorithm is used.</param>
+		/// <param name="filePathInput">Path of the input file.</param>
+		/// <param name="filePathOutput">Path of the output file.</param>
+		/// <param name="fileShareInput">A constant that determines how the input file will be shared by processes.</param>
+		/// <param name="fileShareOutput">A constant that determines how the output file will be shared by processes.</param>
+		/// <param name="fileModeOutput">A constant that determines how to operate if the output file already exists or not.</param>
+		public static void Decompress(BPCompressionMethod compressionMethod, string filePathInput, string filePathOutput, FileShare fileShareInput = FileShare.ReadWrite, FileShare fileShareOutput = FileShare.Read, FileMode fileModeOutput = FileMode.Create)
+		{
+			using (FileStream inStream = new FileStream(filePathInput, FileMode.Open, FileAccess.Read, fileShareInput))
+			using (FileStream outStream = new FileStream(filePathOutput, fileModeOutput, FileAccess.Write, fileShareOutput))
+			using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream))
+			{
+				compressionStream.CopyTo(outStream);
+			}
+		}
+		#endregion
+		#region Compression Methods (2025+) byte[] Input, File output
+		/// <summary>
+		/// Compresses a buffer using the specified compression method.
+		/// </summary>
+		/// <param name="compressionMethod">A <see cref="BPCompressionMethod"/> that determines which algorithm is used.</param>
+		/// <param name="buffer">Uncompressed data.</param>
+		/// <param name="filePathOutput">Path of the output file.</param>
+		/// <param name="fileShareOutput">A constant that determines how the output file will be shared by processes.</param>
+		/// <param name="fileModeOutput">A constant that determines how to operate if the output file already exists or not.</param>
+		public static void DeflateCompress(BPCompressionMethod compressionMethod, byte[] buffer, string filePathOutput, FileShare fileShareOutput = FileShare.Read, FileMode fileModeOutput = FileMode.Create)
+		{
+			using (FileStream outStream = new FileStream(filePathOutput, fileModeOutput, FileAccess.Write, fileShareOutput))
+			using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream))
+			{
+				compressionStream.Write(buffer, 0, buffer.Length);
+			}
+		}
+		/// <summary>
+		/// Decompresses a buffer using the specified compression method.
+		/// </summary>
+		/// <param name="compressionMethod">A <see cref="BPCompressionMethod"/> that determines which algorithm is used.</param>
+		/// <param name="buffer">Compressed data.</param>
+		/// <param name="filePathOutput">Path of the output file.</param>
+		/// <param name="fileShareOutput">A constant that determines how the output file will be shared by processes.</param>
+		/// <param name="fileModeOutput">A constant that determines how to operate if the output file already exists or not.</param>
+		public static void DeflateDecompress(BPCompressionMethod compressionMethod, byte[] buffer, string filePathOutput, FileShare fileShareOutput = FileShare.Read, FileMode fileModeOutput = FileMode.Create)
+		{
+			using (FileStream outStream = new FileStream(filePathOutput, fileModeOutput, FileAccess.Write, fileShareOutput))
+			using (MemoryStream inStream = new MemoryStream(buffer))
+			using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream))
+			{
+				compressionStream.CopyTo(outStream);
+			}
+		}
+		#endregion
+		#region Zip Files
 		/// <summary>
 		/// Adds a file to a .zip file, creating the zip file if necessary, otherwise opening and modifying it if it already exists.
 		/// </summary>
@@ -173,5 +325,6 @@ namespace BPUtil
 				}
 			}, 50, 6, cancellationToken).ConfigureAwait(false);
 		}
+		#endregion
 	}
 }

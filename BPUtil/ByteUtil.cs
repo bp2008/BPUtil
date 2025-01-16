@@ -215,6 +215,19 @@ namespace BPUtil
 			return sBuilder.ToString();
 		}
 		/// <summary>
+		/// Converts a byte to a hexidecimal string using either upper or lower case letters.
+		/// </summary>
+		/// <param name="b">The byte array to convert.</param>
+		/// <param name="capitalLetters">If true, letters will be upper case.</param>
+		/// <returns></returns>
+		public static string ToHex(byte b, bool capitalLetters = true)
+		{
+			if (capitalLetters)
+				return b.ToString("X2");
+			else
+				return b.ToString("x2");
+		}
+		/// <summary>
 		/// Concatenates a variable number of byte arrays into one byte array.
 		/// </summary>
 		/// <param name="arrays">The byte arrays to concatenate.</param>
@@ -722,6 +735,15 @@ namespace BPUtil
 					}
 				}
 			}
+		}
+		/// <summary>
+		/// Reads a signed byte from the specified stream.
+		/// </summary>
+		/// <param name="stream">Stream to read from.</param>
+		/// <returns></returns>
+		public static sbyte ReadSByte(Stream stream)
+		{
+			return (sbyte)stream.ReadByte();
 		}
 		#endregion
 		#region ReadNBytes
@@ -1313,6 +1335,15 @@ namespace BPUtil
 		{
 			return (ulong)IPAddress.NetworkToHostOrder((long)BitConverter.ToUInt64(ReadNBytes(s, 8), 0));
 		}
+		/// <summary>
+		/// Reads a 2-byte floating point number (binary16) in big endian format where the most significant bit is the sign, then comes 5 exponent bits, then 10 fraction bits.
+		/// </summary>
+		/// <param name="s">Stream to read the 2-byte floating point number from.</param>
+		/// <returns></returns>
+		public static float ReadHalf(Stream s)
+		{
+			return DecodeHalf(ReadUInt16(s));
+		}
 		public static float ReadFloat(Stream s)
 		{
 			return BitConverter.ToSingle(ReadNBytesFromNetworkOrder(s, 4), 0);
@@ -1388,6 +1419,15 @@ namespace BPUtil
 			if (BitConverter.IsLittleEndian)
 				return BitConverter.ToUInt64(ReadNBytes(s, 8), 0);
 			return ReadUInt64(s);
+		}
+		/// <summary>
+		/// Reads a 2-byte floating point number (binary16) in little endian format where the most significant bit is the sign, then comes 5 exponent bits, then 10 fraction bits.
+		/// </summary>
+		/// <param name="s">Stream to read the 2-byte floating point number from.</param>
+		/// <returns></returns>
+		public static float ReadHalfLE(Stream s)
+		{
+			return DecodeHalf(ReadUInt16LE(s));
 		}
 		public static float ReadFloatLE(Stream s)
 		{

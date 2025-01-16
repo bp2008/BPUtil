@@ -128,6 +128,10 @@ namespace BPUtil.IO
 		{
 			return ByteUtil.ReadUInt64(this);
 		}
+		public float ReadHalf()
+		{
+			return ByteUtil.ReadHalf(this);
+		}
 		public float ReadFloat()
 		{
 			return ByteUtil.ReadFloat(this);
@@ -183,6 +187,58 @@ namespace BPUtil.IO
 		public override void Write(byte[] buffer, int offset, int count)
 		{
 			originalStream.Write(buffer, offset, count);
+		}
+		/// <summary>
+		/// Moves the current position by the specified number of bytes.
+		/// </summary>
+		/// <param name="numBytes">Number of bytes to offset the current seek position.</param>
+		public void Skip(int numBytes)
+		{
+			Seek(numBytes, SeekOrigin.Current);
+		}
+		public sbyte ReadSByte()
+		{
+			return ByteUtil.ReadSByte(this);
+		}
+		public byte ReadActualByte()
+		{
+			return (byte)ReadByte();
+		}
+		public short ReadInt16LE()
+		{
+			return ByteUtil.ReadInt16LE(this);
+		}
+		public ushort ReadUInt16LE()
+		{
+			return ByteUtil.ReadUInt16LE(this);
+		}
+		public int ReadInt32LE()
+		{
+			return ByteUtil.ReadInt32LE(this);
+		}
+		public uint ReadUInt32LE()
+		{
+			return ByteUtil.ReadUInt32LE(this);
+		}
+		public long ReadInt64LE()
+		{
+			return ByteUtil.ReadInt64LE(this);
+		}
+		public ulong ReadUInt64LE()
+		{
+			return ByteUtil.ReadUInt64LE(this);
+		}
+		public float ReadHalfLE()
+		{
+			return ByteUtil.ReadHalfLE(this);
+		}
+		public float ReadFloatLE()
+		{
+			return ByteUtil.ReadFloatLE(this);
+		}
+		public double ReadDoubleLE()
+		{
+			return ByteUtil.ReadDoubleLE(this);
 		}
 
 		#region Stream abstract members / Trivial implementations

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -23,6 +24,8 @@ namespace BPUtil.IO
 		int WriteUtf8(string str);
 		ushort WriteUtf8_16(string str);
 		uint WriteUtf8_32(string str);
+		sbyte ReadSByte();
+		byte ReadActualByte();
 		int ReadByte();
 		short ReadInt16();
 		ushort ReadUInt16();
@@ -30,12 +33,27 @@ namespace BPUtil.IO
 		uint ReadUInt32();
 		long ReadInt64();
 		ulong ReadUInt64();
+		float ReadHalf();
 		float ReadFloat();
 		double ReadDouble();
 		string ReadUtf8(int lengthBytes);
 		string ReadUtf8_16();
 		string ReadUtf8_32();
+		short ReadInt16LE();
+		ushort ReadUInt16LE();
+		int ReadInt32LE();
+		uint ReadUInt32LE();
+		long ReadInt64LE();
+		ulong ReadUInt64LE();
+		float ReadHalfLE();
+		float ReadFloatLE();
+		double ReadDoubleLE();
 		byte[] ReadNBytes(int length);
 		byte[] ReadNBytesFromNetworkOrder(int length);
+		/// <summary>
+		/// Moves the current position by the specified number of bytes.
+		/// </summary>
+		/// <param name="numBytes">Number of bytes to offset the current seek position.</param>
+		void Skip(int numBytes);
 	}
 }

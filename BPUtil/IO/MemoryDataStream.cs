@@ -11,6 +11,7 @@ namespace BPUtil.IO
 {
 	public class MemoryDataStream : MemoryStream, IDataStream
 	{
+		private byte[] _mdsBuffer;
 		/// <summary>
 		/// Initializes a new non-resizable instance of the MemoryDataStream class by reading a specified number of bytes from the provided IDataStream.
 		/// </summary>
@@ -18,6 +19,7 @@ namespace BPUtil.IO
 		/// <param name="length">The number of bytes to read from the IDataStream.  This will be the size of the new MemoryDataStream.</param>
 		public MemoryDataStream(IDataStream stream, int length) : base(ByteUtil.ReadNBytes(stream, length))
 		{
+			_mdsBuffer = PrivateAccessor.GetFieldValue<byte[]>(this, "_buffer");
 		}
 
 		/// <summary>
@@ -27,6 +29,7 @@ namespace BPUtil.IO
 		/// <param name="length">The number of bytes to read from the Stream.  This will be the size of the new MemoryDataStream.</param>
 		public MemoryDataStream(Stream stream, int length) : base(ByteUtil.ReadNBytes(stream, length))
 		{
+			_mdsBuffer = PrivateAccessor.GetFieldValue<byte[]>(this, "_buffer");
 		}
 
 		/// <summary>
@@ -35,6 +38,7 @@ namespace BPUtil.IO
 		/// <param name="buffer">The array of unsigned bytes from which to create the current stream.</param>
 		public MemoryDataStream(byte[] buffer) : base(buffer)
 		{
+			_mdsBuffer = buffer;
 		}
 
 		/// <summary>
@@ -51,7 +55,16 @@ namespace BPUtil.IO
 		public MemoryDataStream()
 		{
 		}
-
+		public override byte[] GetBuffer()
+		{
+			if (_mdsBuffer != null)
+				return _mdsBuffer;
+			return base.GetBuffer();
+		}
+		/// <summary>
+		/// Gets the number of bytes remaining to be read (Length - Position).
+		/// </summary>
+		public long Remaining => Length - Position;
 		/// <summary>
 		/// Writes a block of bytes to the current stream using data read from a buffer. With this overload, the entire buffer will be written.
 		/// </summary>
@@ -147,6 +160,10 @@ namespace BPUtil.IO
 		{
 			return ByteUtil.ReadUInt64(this);
 		}
+		public float ReadHalf()
+		{
+			return ByteUtil.ReadHalf(this);
+		}
 		public float ReadFloat()
 		{
 			return ByteUtil.ReadFloat(this);
@@ -192,6 +209,67 @@ namespace BPUtil.IO
 		public byte[] ReadNBytesFromNetworkOrder(int length)
 		{
 			return ByteUtil.ReadNBytesFromNetworkOrder((Stream)this, length);
+		}
+		/// <summary>
+		/// Moves the current position by the specified number of bytes.
+		/// </summary>
+		/// <param name="numBytes">Number of bytes to offset the current seek position.</param>
+		public void Skip(int numBytes)
+		{
+			Seek(numBytes, SeekOrigin.Current);
+		}
+		public sbyte ReadSByte()
+		{
+			return ByteUtil.ReadSByte(this);
+		}
+		public byte ReadActualByte()
+		{
+			return (byte)ReadByte();
+		}
+		/// <summary>
+		/// Returns the next byte without affecting the stream's Position.
+		/// </summary>
+		/// <param name="offset">Offset to add when reading the byte. You can read any byte in the buffer by using offsets. Out-of-range read attempts yield an exception.</param>
+		/// <returns></returns>
+		public byte Peek(int offset = 0)
+		{
+			return GetBuffer()[Position + offset];
+		}
+		public short ReadInt16LE()
+		{
+			return ByteUtil.ReadInt16LE(this);
+		}
+		public ushort ReadUInt16LE()
+		{
+			return ByteUtil.ReadUInt16LE(this);
+		}
+		public int ReadInt32LE()
+		{
+			return ByteUtil.ReadInt32LE(this);
+		}
+		public uint ReadUInt32LE()
+		{
+			return ByteUtil.ReadUInt32LE(this);
+		}
+		public long ReadInt64LE()
+		{
+			return ByteUtil.ReadInt64LE(this);
+		}
+		public ulong ReadUInt64LE()
+		{
+			return ByteUtil.ReadUInt64LE(this);
+		}
+		public float ReadHalfLE()
+		{
+			return ByteUtil.ReadHalfLE(this);
+		}
+		public float ReadFloatLE()
+		{
+			return ByteUtil.ReadFloatLE(this);
+		}
+		public double ReadDoubleLE()
+		{
+			return ByteUtil.ReadDoubleLE(this);
 		}
 	}
 }
