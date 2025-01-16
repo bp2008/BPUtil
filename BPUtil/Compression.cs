@@ -46,18 +46,27 @@ namespace BPUtil
 		/// <param name="compressionMethod">The compression algorithm that determines which type of stream is created.</param>
 		/// <param name="baseStream">The stream which will be passed into the compression stream's constructor, for it to be based on.  For Compression methods, this is the output stream.  For Decompression methods, this is the input stream.</param>
 		/// <returns></returns>
-		private static Stream GetCompressionStream(BPCompressionMethod compressionMethod, Stream baseStream)
+		private static Stream GetCompressionStream(BPCompressionMethod compressionMethod, Stream baseStream, bool compress)
 		{
 			switch (compressionMethod)
 			{
 #if NET6_0
 				case BPCompressionMethod.Brotli:
-					return new BrotliStream(baseStream, CompressionLevel.Optimal, true);
+					if (compress)
+						return new BrotliStream(baseStream, CompressionLevel.Optimal, true);
+					else
+						return new BrotliStream(baseStream, CompressionMode.Decompress, true);
 #endif
 				case BPCompressionMethod.Gzip:
-					return new GZipStream(baseStream, CompressionLevel.Optimal, true);
+					if (compress)
+						return new GZipStream(baseStream, CompressionLevel.Optimal, true);
+					else
+						return new GZipStream(baseStream, CompressionMode.Decompress, true);
 				case BPCompressionMethod.Deflate:
-					return new DeflateStream(baseStream, CompressionLevel.Optimal, true);
+					if (compress)
+						return new DeflateStream(baseStream, CompressionLevel.Optimal, true);
+					else
+						return new DeflateStream(baseStream, CompressionMode.Decompress, true);
 				default:
 					throw new Exception("Unsupported BPCompressionMethod: " + compressionMethod);
 			}
@@ -136,7 +145,7 @@ namespace BPUtil
 		{
 			using (MemoryStream outStream = new MemoryStream())
 			{
-				using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream))
+				using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream,true))
 				{
 					compressionStream.Write(buffer, 0, buffer.Length);
 				}
@@ -154,7 +163,7 @@ namespace BPUtil
 			using (MemoryStream outStream = new MemoryStream())
 			{
 				using (MemoryStream inStream = new MemoryStream(buffer))
-				using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream))
+				using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream, false))
 				{
 					compressionStream.CopyTo(outStream);
 				}
@@ -175,7 +184,7 @@ namespace BPUtil
 			using (FileStream inStream = new FileStream(filePathInput, FileMode.Open, FileAccess.Read, fileShareInput))
 			using (MemoryStream outStream = new MemoryStream())
 			{
-				using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream))
+				using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream, true))
 				{
 					inStream.CopyTo(compressionStream);
 				}
@@ -194,7 +203,7 @@ namespace BPUtil
 			using (FileStream inStream = new FileStream(filePathInput, FileMode.Open, FileAccess.Read, fileShareInput))
 			using (MemoryStream outStream = new MemoryStream())
 			{
-				using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream))
+				using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream, false))
 				{
 					compressionStream.CopyTo(outStream);
 				}
@@ -217,7 +226,7 @@ namespace BPUtil
 		{
 			using (FileStream inStream = new FileStream(filePathInput, FileMode.Open, FileAccess.Read, fileShareInput))
 			using (FileStream outStream = new FileStream(filePathOutput, fileModeOutput, FileAccess.Write, fileShareOutput))
-			using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream))
+			using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream, true))
 			{
 				inStream.CopyTo(compressionStream);
 			}
@@ -235,7 +244,7 @@ namespace BPUtil
 		{
 			using (FileStream inStream = new FileStream(filePathInput, FileMode.Open, FileAccess.Read, fileShareInput))
 			using (FileStream outStream = new FileStream(filePathOutput, fileModeOutput, FileAccess.Write, fileShareOutput))
-			using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream))
+			using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream, false))
 			{
 				compressionStream.CopyTo(outStream);
 			}
@@ -250,10 +259,10 @@ namespace BPUtil
 		/// <param name="filePathOutput">Path of the output file.</param>
 		/// <param name="fileShareOutput">A constant that determines how the output file will be shared by processes.</param>
 		/// <param name="fileModeOutput">A constant that determines how to operate if the output file already exists or not.</param>
-		public static void DeflateCompress(BPCompressionMethod compressionMethod, byte[] buffer, string filePathOutput, FileShare fileShareOutput = FileShare.Read, FileMode fileModeOutput = FileMode.Create)
+		public static void Compress(BPCompressionMethod compressionMethod, byte[] buffer, string filePathOutput, FileShare fileShareOutput = FileShare.Read, FileMode fileModeOutput = FileMode.Create)
 		{
 			using (FileStream outStream = new FileStream(filePathOutput, fileModeOutput, FileAccess.Write, fileShareOutput))
-			using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream))
+			using (Stream compressionStream = GetCompressionStream(compressionMethod, outStream, true))
 			{
 				compressionStream.Write(buffer, 0, buffer.Length);
 			}
@@ -266,11 +275,11 @@ namespace BPUtil
 		/// <param name="filePathOutput">Path of the output file.</param>
 		/// <param name="fileShareOutput">A constant that determines how the output file will be shared by processes.</param>
 		/// <param name="fileModeOutput">A constant that determines how to operate if the output file already exists or not.</param>
-		public static void DeflateDecompress(BPCompressionMethod compressionMethod, byte[] buffer, string filePathOutput, FileShare fileShareOutput = FileShare.Read, FileMode fileModeOutput = FileMode.Create)
+		public static void Decompress(BPCompressionMethod compressionMethod, byte[] buffer, string filePathOutput, FileShare fileShareOutput = FileShare.Read, FileMode fileModeOutput = FileMode.Create)
 		{
 			using (FileStream outStream = new FileStream(filePathOutput, fileModeOutput, FileAccess.Write, fileShareOutput))
 			using (MemoryStream inStream = new MemoryStream(buffer))
-			using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream))
+			using (Stream compressionStream = GetCompressionStream(compressionMethod, inStream, false))
 			{
 				compressionStream.CopyTo(outStream);
 			}

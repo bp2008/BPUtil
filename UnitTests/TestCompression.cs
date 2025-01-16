@@ -30,6 +30,18 @@ namespace UnitTests
 				byte[] decompressed = Compression.DeflateDecompress(compressed);
 				Assert.IsTrue(ByteUtil.ByteArraysMatch(highlyCompressibleData, decompressed));
 			}
+			{
+				byte[] compressed = Compression.Compress(BPCompressionMethod.Gzip, highlyCompressibleData);
+				Assert.IsTrue(compressed.Length < highlyCompressibleData.Length);
+				byte[] decompressed = Compression.Decompress(BPCompressionMethod.Gzip, compressed);
+				Assert.IsTrue(ByteUtil.ByteArraysMatch(highlyCompressibleData, decompressed));
+			}
+			{
+				byte[] compressed = Compression.Compress(BPCompressionMethod.Deflate, highlyCompressibleData);
+				Assert.IsTrue(compressed.Length < highlyCompressibleData.Length);
+				byte[] decompressed = Compression.Decompress(BPCompressionMethod.Deflate, compressed);
+				Assert.IsTrue(ByteUtil.ByteArraysMatch(highlyCompressibleData, decompressed));
+			}
 		}
 		private static byte[] GetHighlyCompressibleData()
 		{
