@@ -217,15 +217,28 @@ namespace BPUtil
 		/// <summary>
 		/// Converts a byte to a hexidecimal string using either upper or lower case letters.
 		/// </summary>
-		/// <param name="b">The byte array to convert.</param>
+		/// <param name="v">The value to convert.</param>
 		/// <param name="capitalLetters">If true, letters will be upper case.</param>
 		/// <returns></returns>
-		public static string ToHex(byte b, bool capitalLetters = true)
+		public static string ToHex(byte v, bool capitalLetters = true)
 		{
 			if (capitalLetters)
-				return b.ToString("X2");
+				return v.ToString("X2");
 			else
-				return b.ToString("x2");
+				return v.ToString("x2");
+		}
+		/// <summary>
+		/// Converts a numeric value to a hexidecimal string using either upper or lower case letters and little endian encoding.
+		/// </summary>
+		/// <param name="v">The value to convert.</param>
+		/// <param name="capitalLetters">If true, letters will be upper case.</param>
+		/// <returns></returns>
+		public static string ToHexLE(ulong v, bool capitalLetters = true)
+		{
+			if (capitalLetters)
+				return v.ToString("X2");
+			else
+				return v.ToString("x2");
 		}
 		/// <summary>
 		/// Concatenates a variable number of byte arrays into one byte array.
