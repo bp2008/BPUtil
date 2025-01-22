@@ -233,12 +233,47 @@ namespace BPUtil
 		/// <param name="v">The value to convert.</param>
 		/// <param name="capitalLetters">If true, letters will be upper case.</param>
 		/// <returns></returns>
+		public static string ToHexLE(uint v, bool capitalLetters = true)
+		{
+			byte[] buffer = new byte[4];
+			WriteUInt32LE(v, buffer, 0);
+			return ByteUtil.ToHex(buffer, capitalLetters);
+		}
+		/// <summary>
+		/// Converts a numeric value to a hexidecimal string using either upper or lower case letters and big endian encoding.
+		/// </summary>
+		/// <param name="v">The value to convert.</param>
+		/// <param name="capitalLetters">If true, letters will be upper case.</param>
+		/// <returns></returns>
+		public static string ToHex(uint v, bool capitalLetters = true)
+		{
+			byte[] buffer = new byte[4];
+			WriteUInt32(v, buffer, 0);
+			return ByteUtil.ToHex(buffer, capitalLetters);
+		}
+		/// <summary>
+		/// Converts a numeric value to a hexidecimal string using either upper or lower case letters and little endian encoding.
+		/// </summary>
+		/// <param name="v">The value to convert.</param>
+		/// <param name="capitalLetters">If true, letters will be upper case.</param>
+		/// <returns></returns>
 		public static string ToHexLE(ulong v, bool capitalLetters = true)
 		{
-			if (capitalLetters)
-				return v.ToString("X2");
-			else
-				return v.ToString("x2");
+			byte[] buffer = new byte[8];
+			WriteUInt64LE(v, buffer, 0);
+			return ByteUtil.ToHex(buffer, capitalLetters);
+		}
+		/// <summary>
+		/// Converts a numeric value to a hexidecimal string using either upper or lower case letters and big endian encoding.
+		/// </summary>
+		/// <param name="v">The value to convert.</param>
+		/// <param name="capitalLetters">If true, letters will be upper case.</param>
+		/// <returns></returns>
+		public static string ToHex(ulong v, bool capitalLetters = true)
+		{
+			byte[] buffer = new byte[8];
+			WriteUInt64(v, buffer, 0);
+			return ByteUtil.ToHex(buffer, capitalLetters);
 		}
 		/// <summary>
 		/// Concatenates a variable number of byte arrays into one byte array.

@@ -45,6 +45,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="compressionMethod">The compression algorithm that determines which type of stream is created.</param>
 		/// <param name="baseStream">The stream which will be passed into the compression stream's constructor, for it to be based on.  For Compression methods, this is the output stream.  For Decompression methods, this is the input stream.</param>
+		/// <param name="compress">True if this stream will be used for compression.  False if it will be used for decompression.</param>
 		/// <returns></returns>
 		private static Stream GetCompressionStream(BPCompressionMethod compressionMethod, Stream baseStream, bool compress)
 		{
@@ -212,7 +213,6 @@ namespace BPUtil
 		}
 		#endregion
 		#region Compression Methods (2025+) File Input, File output
-		/// <summary>
 		/// <summary>
 		/// Compresses a file using the specified compression method.
 		/// </summary>
