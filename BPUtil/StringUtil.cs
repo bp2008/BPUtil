@@ -663,6 +663,33 @@ namespace BPUtil
 			return fileName;
 		}
 		/// <summary>
+		/// Given the input text, returns a string that is guaranteed safe to use as a C# variable name by replacing invalid characters with underscore, prepending an underscore if necessary (if the input string begins with a number), and limiting its length to 511 characters.
+		/// </summary>
+		/// <param name="text">A string which may or may not already be safe to use as a C# variable name.</param>
+		/// <returns>A string, derived from the input string, that is guaranteed safe to use as a C# variable name.</returns>
+		public static string MakeSafeForCsVariableName(string text)
+		{
+			if (string.IsNullOrEmpty(text))
+				return "_";
+
+			StringBuilder sb = new StringBuilder();
+			foreach (char c in text)
+			{
+				if (char.IsLetterOrDigit(c) || c == '_')
+					sb.Append(c);
+				else
+					sb.Append('_');
+			}
+
+			if (!char.IsLetter(sb[0]) && sb[0] != '_')
+				sb[0] = '_';
+
+			if (sb.Length > 511)
+				sb.Length = 511;
+
+			return sb.ToString();
+		}
+		/// <summary>
 		/// Creates a Data URI from a given mime type string and data blob.
 		/// </summary>
 		/// <param name="mime">Mime Type (e.g. "image/jpeg")</param>
