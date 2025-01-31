@@ -79,5 +79,29 @@ namespace BPUtil
 		{
 			return ToDHMS(TimeSpan.FromMilliseconds(timeMs));
 		}
+		/// <summary>
+		/// Gets a string representation of the date and time using only characters that are safe in file names.
+		/// </summary>
+		/// <param name="date">date and time</param>
+		/// <param name="includeSpaces">True to include spaces.</param>
+		/// <param name="includeMilliseconds">True to include milliseconds.</param>
+		/// <returns></returns>
+		public static string GetDateSafeForFilename(DateTime date, bool includeSpaces = true, bool includeMilliseconds = false)
+		{
+			if (includeSpaces)
+			{
+				if (includeMilliseconds)
+					return date.ToString("yyyy-MM-dd HH-mm-ss.fff");
+				else
+					return date.ToString("yyyy-MM-dd HH-mm-ss");
+			}
+			else
+			{
+				if (includeMilliseconds)
+					return date.ToString("yyyy-MM-dd_HH-mm-ss.fff");
+				else
+					return date.ToString("yyyy-MM-dd_HH-mm-ss");
+			}
+		}
 	}
 }
