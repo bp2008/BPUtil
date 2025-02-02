@@ -81,6 +81,8 @@ namespace BPUtil.MVC
 			catch (OperationCanceledException) { throw; }
 			catch (Exception ex)
 			{
+				if (HttpProcessor.IsOrdinaryDisconnectException(ex))
+					ex.Rethrow();
 				actionResult = GenerateErrorPage(context, ex);
 			}
 
