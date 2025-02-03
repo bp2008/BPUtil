@@ -35,6 +35,10 @@ namespace BPUtil.Forms
 			MakeUndraggable();
 			AllowTransparency = true;
 		}
+		public MovableOverlay(string title):this()
+		{
+			lblDragMe.Text = title;
+		}
 		private void MovableOverlay_Move(object sender, EventArgs e)
 		{
 			BoundsChanged(sender, IsDragging || IsResizing);
