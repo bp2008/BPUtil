@@ -35,9 +35,23 @@ namespace BPUtil.Forms
 			MakeUndraggable();
 			AllowTransparency = true;
 		}
-		public MovableOverlay(string title):this()
+		public MovableOverlay(string title) : this()
 		{
 			lblDragMe.Text = title;
+		}
+		/// <summary>
+		/// Gets or sets the text in the title bar of this form (shown only while IsDraggable is true).
+		/// </summary>
+		public string TitleBarText
+		{
+			get
+			{
+				return lblDragMe.Text;
+			}
+			set
+			{
+				lblDragMe.Text = value;
+			}
 		}
 		private void MovableOverlay_Move(object sender, EventArgs e)
 		{
