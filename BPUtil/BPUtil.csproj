@@ -81,6 +81,12 @@
     <Compile Include="Debounce.cs" />
     <Compile Include="DummyValues.cs" />
     <Compile Include="Forms\FormUtil.cs" />
+    <Compile Include="Forms\MovableOverlay.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\MovableOverlay.Designer.cs">
+      <DependentUpon>MovableOverlay.cs</DependentUpon>
+    </Compile>
     <Compile Include="Forms\TrayIconAppHiddenForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -313,6 +319,9 @@
     <Compile Include="Zip.cs" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Forms\MovableOverlay.resx">
+      <DependentUpon>MovableOverlay.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Forms\MultiSelect\EditMultiSelect.resx">
       <DependentUpon>EditMultiSelect.cs</DependentUpon>
     </EmbeddedResource>
