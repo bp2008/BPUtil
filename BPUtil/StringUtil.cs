@@ -353,7 +353,7 @@ namespace BPUtil
 
 		/// <summary>
 		/// <para>Encodes a string so it can be safely placed into a JavaScript string literal.</para>
-		/// <para>From .NET reference source.</para>
+		/// <para>From .NET reference source.  Modified by bp2008.</para>
 		/// </summary>
 		/// <param name="value"></param>
 		/// <returns></returns>
@@ -411,6 +411,9 @@ namespace BPUtil
 						break;
 					case '\f':
 						b.Append("\\f");
+						break;
+					case '`':
+						b.Append("\\`");
 						break;
 					default:
 						if (CharRequiresJavaScriptEncoding(c))

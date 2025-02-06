@@ -37,10 +37,10 @@ namespace BPUtil.Forms
 		}
 		public MovableOverlay(string title) : this()
 		{
-			lblDragMe.Text = title;
+			TitleBarText = title;
 		}
 		/// <summary>
-		/// Gets or sets the text in the title bar of this form (shown only while IsDraggable is true).
+		/// Gets or sets the text in the title bar of this form (shown only while IsDraggable is true).  When setting, also sets this.Text which is shown in the taskbar.
 		/// </summary>
 		public string TitleBarText
 		{
@@ -51,6 +51,7 @@ namespace BPUtil.Forms
 			set
 			{
 				lblDragMe.Text = value;
+				this.Text = value;
 			}
 		}
 		private void MovableOverlay_Move(object sender, EventArgs e)
