@@ -791,7 +791,7 @@ namespace BPUtil
 		/// <returns></returns>
 		public static sbyte ReadSByte(Stream stream)
 		{
-			return (sbyte)stream.ReadByte();
+			return (sbyte)ReadNBytes(stream, 1)[0];
 		}
 		#endregion
 		#region ReadNBytes

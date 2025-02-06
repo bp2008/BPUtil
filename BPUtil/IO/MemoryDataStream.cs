@@ -224,7 +224,7 @@ namespace BPUtil.IO
 		}
 		public byte ReadActualByte()
 		{
-			return (byte)ReadByte();
+			return (byte)ReadNBytes(1)[0];
 		}
 		/// <summary>
 		/// Returns the next byte without affecting the stream's Position.
@@ -234,6 +234,32 @@ namespace BPUtil.IO
 		public byte Peek(int offset = 0)
 		{
 			return GetBuffer()[Position + offset];
+		}
+		/// <summary>
+		/// Returns a subset of bytes without affecting the stream's Position.  If offset or count are out of bounds, they will be clamped to the nearest valid values so this method does not throw an exception.
+		/// </summary>
+		/// <param name="offset">Offset from the current position.</param>
+		/// <param name="count">Number of bytes to return.</param>
+		public byte[] Peek(int offset, int count)
+		{
+			int pos = (int)(Position + offset);
+			if (pos < 0)
+				pos = 0;
+			if (pos >= Length)
+				pos = (int)Length;
+			int len = count;
+			if (pos + len > Length)
+				len = (int)(Length - pos);
+			return ByteUtil.SubArray(GetBuffer(), pos, len);
+		}
+		/// <summary>
+		/// Returns a subset of bytes as a hex string without affecting the stream's Position.  If offset or count are out of bounds, they will be clamped to the nearest valid values so this method does not throw an exception.
+		/// </summary>
+		/// <param name="offset">Offset from the current position.</param>
+		/// <param name="count">Number of bytes to return.</param>
+		public string PeekHex(int offset, int count)
+		{
+			return Hex.ToHex(Peek(offset, count));
 		}
 		public short ReadInt16LE()
 		{
