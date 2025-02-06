@@ -35,8 +35,8 @@ namespace BPUtil.Forms
 			this.btnLockPosition = new System.Windows.Forms.Button();
 			this.lblDragMe = new System.Windows.Forms.Label();
 			this.panelResizeMe = new System.Windows.Forms.Panel();
-			this.lblResizeMe = new System.Windows.Forms.Label();
 			this.lblResizeHandle = new System.Windows.Forms.Label();
+			this.lblResizeMe = new System.Windows.Forms.Label();
 			this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
 			this.panelDragMe.SuspendLayout();
 			this.panelResizeMe.SuspendLayout();
@@ -101,17 +101,6 @@ namespace BPUtil.Forms
 			this.panelResizeMe.MouseMove += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseMove);
 			this.panelResizeMe.MouseUp += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseUp);
 			// 
-			// lblResizeMe
-			// 
-			this.lblResizeMe.AutoSize = true;
-			this.lblResizeMe.Location = new System.Drawing.Point(12, 8);
-			this.lblResizeMe.Name = "lblResizeMe";
-			this.lblResizeMe.Size = new System.Drawing.Size(59, 13);
-			this.lblResizeMe.TabIndex = 0;
-			this.lblResizeMe.Text = "Resize me:";
-			this.lblResizeMe.MouseMove += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseMove);
-			this.lblResizeMe.MouseUp += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseUp);
-			// 
 			// lblResizeHandle
 			// 
 			this.lblResizeHandle.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
@@ -129,6 +118,17 @@ namespace BPUtil.Forms
 			this.lblResizeHandle.MouseMove += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseMove);
 			this.lblResizeHandle.MouseUp += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseUp);
 			// 
+			// lblResizeMe
+			// 
+			this.lblResizeMe.AutoSize = true;
+			this.lblResizeMe.Location = new System.Drawing.Point(12, 8);
+			this.lblResizeMe.Name = "lblResizeMe";
+			this.lblResizeMe.Size = new System.Drawing.Size(59, 13);
+			this.lblResizeMe.TabIndex = 0;
+			this.lblResizeMe.Text = "Resize me:";
+			this.lblResizeMe.MouseMove += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseMove);
+			this.lblResizeMe.MouseUp += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseUp);
+			// 
 			// MovableOverlay
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -144,6 +144,7 @@ namespace BPUtil.Forms
 			this.TopMost = true;
 			this.TransparencyKey = System.Drawing.Color.Red;
 			this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.MovableOverlay_FormClosed);
+			this.Load += new System.EventHandler(this.MovableOverlay_Load);
 			this.ResizeEnd += new System.EventHandler(this.MovableOverlay_ResizeEnd);
 			this.MouseUp += new System.Windows.Forms.MouseEventHandler(this.MoveResize_MouseUp);
 			this.Move += new System.EventHandler(this.MovableOverlay_Move);

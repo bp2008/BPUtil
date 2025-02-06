@@ -39,6 +39,11 @@ namespace BPUtil.Forms
 		{
 			TitleBarText = title;
 		}
+		private void MovableOverlay_Load(object sender, EventArgs e)
+		{
+			// Derived classes often have an unintended title set by the form designer.
+			this.Text = TitleBarText;
+		}
 		/// <summary>
 		/// Gets or sets the text in the title bar of this form (shown only while IsDraggable is true).  When setting, also sets this.Text which is shown in the taskbar.
 		/// </summary>
