@@ -16,10 +16,19 @@ namespace BPUtil
 		static StringUtil()
 		{
 #if NET6_0_LINUX
-			// This, along with the nuget package `System.Text.Encoding.CodePages`, allows windows-1252 to be loadable in Linux.
-			Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+			if (Platform.IsUnix())
+			{
+				RegisterCodepagesProvider();
+			}
 #endif
 		}
+#if NET6_0_LINUX
+		private static void RegisterCodepagesProvider()
+		{
+			// This, along with the nuget package `System.Text.Encoding.CodePages`, allows windows-1252 to be loadable in Linux.
+			Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+		}
+#endif
 		/// <summary>
 		/// Gets a random character from the ranges 0-9, A-Z, a-z. There are 62 possible characters this method will return.
 		/// </summary>
