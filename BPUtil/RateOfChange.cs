@@ -52,9 +52,9 @@ namespace BPUtil
 			_stopwatch.Restart();
 
 			if (decimals <= 0)
-				return Math.Round(rateOfChange) + "/sec";
+				return Math.Round(rateOfChange) + label;
 			else
-				return rateOfChange.ToString("0." + new string('#', decimals)) + "/sec";
+				return rateOfChange.ToString("0." + new string('#', decimals)) + label;
 		}
 	}
 }
