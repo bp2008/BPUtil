@@ -107,6 +107,7 @@
     <Compile Include="ObjectFieldMap.cs" />
     <Compile Include="ObjectChangeHelper.cs" />
     <Compile Include="ObjectExtensions.cs" />
+    <Compile Include="PipelineThread.cs" />
     <Compile Include="RamInfo.cs" />
     <Compile Include="RateOfChange.cs" />
     <Compile Include="RollingAverage.cs" />
