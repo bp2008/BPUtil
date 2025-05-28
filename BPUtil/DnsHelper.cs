@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -16,6 +17,7 @@ namespace BPUtil
 	public static class DnsHelper
 	{
 		private static ConcurrentDictionary<string, DnsCacheEntry> cache = new ConcurrentDictionary<string, DnsCacheEntry>();
+		private static Cooldown cacheCleanupCooldown = new Cooldown(TimeSpan.FromSeconds(60));
 
 		/// <summary>
 		/// Asynchronously retrieves an IP address associated with a host.  IPv4 will be preferred over IPv6.
@@ -25,6 +27,17 @@ namespace BPUtil
 		/// <returns>A task that represents the asynchronous operation. The value of the TResult parameter contains an IPAddress for the host that is specified by the hostNameOrAddress parameter.</returns>
 		public static async Task<IPAddress> GetHostAddressAsync(string hostNameOrAddress, CancellationToken cancellationToken = default)
 		{
+			// Cleanup expired cache entries at most once per minute
+			DateTime now = DateTime.UtcNow;
+			if (cacheCleanupCooldown.Consume())
+			{
+				foreach (KeyValuePair<string, DnsCacheEntry> kvp in cache)
+				{
+					if (kvp.Value.Expired)
+						cache.TryRemove(kvp.Key, out _);
+				}
+			}
+
 			IPAddress ip;
 			if (IPAddress.TryParse(hostNameOrAddress, out ip))
 				return ip;
