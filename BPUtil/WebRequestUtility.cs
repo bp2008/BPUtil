@@ -197,6 +197,10 @@ namespace BPUtil
 		}
 		private bool _acceptAnyCert = false;
 #endif
+		/// <summary>
+		/// If true, outgoing requests will be resolved using a custom DNS resolver written into WebRequestUtility.  This can be useful for avoiding possible DNS resolution issues with HttpClient's built-in DNS resolver.
+		/// </summary>
+		public bool UseOwnDnsResolver = false;
 
 		protected HttpClient client;
 		protected HttpClientHandler httpClientHandler;
@@ -433,7 +437,36 @@ namespace BPUtil
 			Stopwatch sw = Stopwatch.StartNew();
 			BpWebResponse response = new BpWebResponse();
 
-			HttpRequestMessage requestMessage = new HttpRequestMessage(method, url);
+			Uri uri = null;
+			string addHostHeader = null;
+			try
+			{
+				uri = new Uri(url, UriKind.Absolute);
+				if (UseOwnDnsResolver)
+				{
+					IPAddress ipAddr = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost).ConfigureAwait(false);
+					if (ipAddr.ToString() != uri.DnsSafeHost)
+					{
+						addHostHeader = uri.DnsSafeHost;
+						UriBuilder builder = new UriBuilder(url);
+						builder.Host = ipAddr.ToString();
+						uri = builder.Uri;
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				response.StatusCode = 0;
+				response.ex = ex;
+				response.data = ByteUtil.Utf8NoBOM.GetBytes(ex.Message);
+				return response;
+			}
+
+			HttpRequestMessage requestMessage = new HttpRequestMessage(method, uri);
+			
+			if (!string.IsNullOrWhiteSpace(addHostHeader))
+				requestMessage.Headers.Host = addHostHeader;
+				
 			if (headers != null)
 			{
 				for (int i = 0; i + 1 < headers.Length; i += 2)
