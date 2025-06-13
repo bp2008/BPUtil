@@ -6,8 +6,9 @@ using System.Linq;
 namespace BPUtil
 {
 	/// <summary>
-	/// Provides temporary storage of key/value pairs, with configurable limits for cache size and item age.
-	/// All public methods of this class use locking to achieve thread-safety, which could have negative performance implications if used very heavily.
+	/// <para>Provides temporary storage of key/value pairs, with configurable limits for cache size (in bytes) and item age.</para>
+	/// <para>All public methods of this class use locking to achieve thread-safety, which could have negative performance implications if used very heavily.</para>
+	/// <para>For a version which skips size measurement and provides a cache size limit as a maximum number of items, see <see cref="ObjectCacheSimple{TKey, TValue}"/>.</para>
 	/// </summary>
 	public class ObjectCache<TKey, TValue>
 	{
