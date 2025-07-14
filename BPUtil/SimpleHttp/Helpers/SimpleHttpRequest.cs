@@ -32,7 +32,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public string HttpProtocolVersionString { get; private set; }
 		/// <summary>
-		/// The requested url.
+		/// The requested url.  May not have the correct hostname in it.
 		/// </summary>
 		public Uri Url { get; private set; }
 		/// <summary>

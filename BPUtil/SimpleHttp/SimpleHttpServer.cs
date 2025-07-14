@@ -91,6 +91,14 @@ namespace BPUtil.SimpleHttp
 		/// <para>In high load conditions, buffers may be smaller and "Connection: keep-alive" may not be allowed.</para>
 		/// </summary>
 		public bool ServerIsUnderHighLoad { get { return srv.IsServerUnderHighLoad(); } }
+		/// <summary>
+		/// True if this connection is from a trusted proxy server, meaning the <see cref="TrueRemoteIPAddress"/> is trusted by the web server's <see cref="HttpServerBase.IsTrustedProxyServer"/> method.
+		/// </summary>
+		public bool IsConnectionViaTrustedProxyServer { get; internal set; }
+		/// <summary>
+		/// True if the <see cref="secure_https"/> property was set based on the <c>X-Forwarded-Proto</c> header value.
+		/// </summary>
+		public bool Trusted_XForwardedProtoHeader { get; internal set; }
 
 		#region Properties dealing with the IP Address of the remote host
 		private int isLanConnection = -1;
@@ -221,9 +229,14 @@ namespace BPUtil.SimpleHttp
 		#endregion
 
 		/// <summary>
-		/// If true, the connection is secured with TLS.
+		/// If true, the connection is secured with TLS.  May be overridden by the <c>X-Forwarded-Proto</c> header if the server is configured to trust that header.
 		/// </summary>
 		public bool secure_https { get; internal set; }
+
+		/// <summary>
+		/// If true, the actual network connection is secured with TLS.  See also <see cref="secure_https"/>.
+		/// </summary>
+		public bool TrueSecureConnection { get; internal set; }
 
 		/// <summary>
 		/// An object responsible for delivering TLS server certificates upon demand.
@@ -480,25 +493,24 @@ namespace BPUtil.SimpleHttp
 				HostName = null;
 
 			IPAddress originalRemoteIp = RemoteIPAddress;
-			if (srv.XRealIPHeader)
+			if (srv.IsTrustedProxyServer(this, originalRemoteIp))
 			{
-				string headerValue = Request.Headers.Get("X-Real-Ip");
-				if (!string.IsNullOrWhiteSpace(headerValue))
+				IsConnectionViaTrustedProxyServer = true;
+
+				if (srv.XRealIPHeader)
 				{
-					if (srv.IsTrustedProxyServer(this, originalRemoteIp))
+					string headerValue = Request.Headers.Get("X-Real-Ip");
+					if (!string.IsNullOrWhiteSpace(headerValue))
 					{
 						headerValue = headerValue.Trim();
 						if (IPAddress.TryParse(headerValue, out IPAddress addr))
 							RemoteIPAddress = addr;
 					}
 				}
-			}
-			if (srv.XForwardedForHeader)
-			{
-				string headerValue = Request.Headers.Get("X-Forwarded-For");
-				if (!string.IsNullOrWhiteSpace(headerValue))
+				if (srv.XForwardedForHeader)
 				{
-					if (srv.IsTrustedProxyServer(this, originalRemoteIp))
+					string headerValue = Request.Headers.Get("X-Forwarded-For");
+					if (!string.IsNullOrWhiteSpace(headerValue))
 					{
 						// Because we trust the source of the header, we must trust that they validated the chain of IP addresses all the way back to the root.
 						// Therefore we should get the leftmost address; this is the true client IP.
@@ -511,10 +523,34 @@ namespace BPUtil.SimpleHttp
 						}
 					}
 				}
+
+				if (srv.XForwardedProtoHeader)
+				{
+					string headerValue = Request.Headers.Get("X-Forwarded-For");
+					if (!string.IsNullOrWhiteSpace(headerValue))
+					{
+						if (headerValue.IEquals("https"))
+							secure_https = true;
+						else
+							secure_https = false;
+						Trusted_XForwardedProtoHeader = true;
+						_SetBaseUriProperties();
+					}
+				}
 			}
 
 			if (shouldLogRequestsToFile())
 				SimpleHttpLogger.LogRequest(DateTime.Now, this.RemoteIPAddressStr, Request.HttpMethod, Request.Url.OriginalString, HostName);
+		}
+		internal void _SetBaseUriProperties()
+		{
+			string scheme = "http" + (secure_https ? "s" : "");
+			IPEndPoint ipEndpoint = (IPEndPoint)tcpClient.Client.LocalEndPoint;
+			string ipEndpointHost = ipEndpoint.Address.AddressFamily == AddressFamily.InterNetworkV6 ? ("[" + ipEndpoint.Address.ToString() + "]") : ipEndpoint.Address.ToString();
+			int defaultPort = secure_https ? 443 : 80;
+			string strPort = ipEndpoint.Port == defaultPort ? "" : ":" + ipEndpoint.Port;
+			base_uri_this_server = new Uri(scheme + "://" + (HostName ?? ipEndpointHost) + strPort, UriKind.Absolute);
+			base_uri_this_server_via_local_endpoint = new Uri(scheme + "://" + ipEndpointHost + strPort, UriKind.Absolute);
 		}
 		/// <summary>
 		/// <para>Handles exception scenarios that are common to both Async and Sync processing methods.</para>
@@ -1372,6 +1408,10 @@ namespace BPUtil.SimpleHttp
 		/// If true, the IP address of remote hosts will be learned from the HTTP header named "X-Forwarded-For".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.
 		/// </summary>
 		public bool XForwardedForHeader = false;
+		/// <summary>
+		/// If true, the protocol reported by <see cref="HttpProcessor.secure_https"/> will be obtained from the HTTP header named "X-Forwarded-Proto".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.
+		/// </summary>
+		public bool XForwardedProtoHeader = false;
 		protected volatile bool stopRequested = false;
 		protected ICertificateSelector certificateSelector;
 		/// <summary>
@@ -1835,7 +1875,7 @@ namespace BPUtil.SimpleHttp
 		}
 
 		/// <summary>
-		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
+		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> and <see cref="XForwardedProtoHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
 		/// </summary>
 		/// <param name="p">HttpProcessor</param>
 		/// <param name="remoteIpAddress">Remote IP address of the client (proxy-related HTTP headers have not been read yet).</param>
@@ -1883,7 +1923,7 @@ namespace BPUtil.SimpleHttp
 			return CurrentNumberOfOpenConnections >= MaxConnections;
 		}
 		/// <summary>
-		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
+		/// Allows the implementor to override which Ssl Protocols are allowed by this server.
 		/// </summary>
 		/// <param name="remoteIpAddress">Remote IP address of the client (proxy-related HTTP headers have not been read yet).</param>
 		/// <param name="defaultProtocols">The SslProtocols which would be used if you hadn't overridden this method.</param>

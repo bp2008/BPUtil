@@ -50,7 +50,7 @@ namespace BPUtil.SimpleHttp.TLS
 		/// <summary>
 		/// <para>Handles TLS negotiation on the given HttpProcessor.</para>
 		/// <para>Returns false if the connection should be closed immediately.</para>
-		/// <para>It is possible for this method to return without performing TLS authentication, if the client did not request it and the HttpProcessor is configured to allow plain HTTP.  Check the HttpProcessor's secure_https flag to know what happened.</para>
+		/// <para>It is possible for this method to return without performing TLS authentication, if the client did not request it and the HttpProcessor is configured to allow plain HTTP.  Check the HttpProcessor's <c>TrueSecureConnection</c> flag to know what happened.</para>
 		/// </summary>
 		/// <param name="p">HttpProcessor</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
@@ -65,11 +65,12 @@ namespace BPUtil.SimpleHttp.TLS
 					// Note it is possible that the client is not using TLS, in which case no certificate will be selected and the request will be processed as plain HTTP.
 					TlsPeekData tlsData;
 					tlsData = await TLS.TlsServerNameReader.TryGetTlsClientHelloServerNamesAsync(p.tcpClient.Client, cancellationToken).ConfigureAwait(false);
+					p.secure_https = p.TrueSecureConnection = tlsData != null;
 					if (tlsData != null)
 					{
 						X509Certificate cert = null;
-						p.secure_https = true;
-						p.HostName = tlsData.ServerName;
+						if (tlsData.ServerName != null)
+							p.HostName = tlsData.ServerName;
 						if (tlsData.IsTlsAlpn01Validation)
 						{
 #if NET6_0
@@ -149,13 +150,7 @@ namespace BPUtil.SimpleHttp.TLS
 					return false;
 				}
 			}
-			string scheme = "http" + (p.secure_https ? "s" : "");
-			IPEndPoint ipEndpoint = (IPEndPoint)p.tcpClient.Client.LocalEndPoint;
-			string ipEndpointHost = ipEndpoint.Address.AddressFamily == AddressFamily.InterNetworkV6 ? ("[" + ipEndpoint.Address.ToString() + "]") : ipEndpoint.Address.ToString();
-			int defaultPort = p.secure_https ? 443 : 80;
-			string strPort = ipEndpoint.Port == defaultPort ? "" : ":" + ipEndpoint.Port;
-			p.base_uri_this_server = new Uri(scheme + "://" + (p.HostName ?? ipEndpointHost) + strPort, UriKind.Absolute);
-			p.base_uri_this_server_via_local_endpoint = new Uri(scheme + "://" + ipEndpointHost + strPort, UriKind.Absolute);
+			p._SetBaseUriProperties();
 			return true;
 		}
 		private static SslStream WrapSslStream(HttpProcessor p)
