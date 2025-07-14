@@ -477,7 +477,7 @@ namespace BPUtil.SimpleHttp
 			Request = null;
 			Response = null;
 			proxyOptions = null;
-			RemoteIPAddress = null;
+			RemoteIPAddress = TrueRemoteIPAddress;
 			secure_https = false;
 			IsConnectionViaTrustedProxyServer = false;
 			Trusted_XForwardedProtoHeader = false;
@@ -515,8 +515,7 @@ namespace BPUtil.SimpleHttp
 			if (string.IsNullOrWhiteSpace(HostName))
 				HostName = null;
 
-			IPAddress originalRemoteIp = RemoteIPAddress;
-			if (srv.IsTrustedProxyServer(this, originalRemoteIp))
+			if (srv.IsTrustedProxyServer(this, TrueRemoteIPAddress))
 			{
 				IsConnectionViaTrustedProxyServer = true;
 
