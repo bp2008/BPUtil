@@ -194,7 +194,26 @@ namespace BPUtil.SimpleHttp
 		/// <summary>
 		/// Returns the remote client's IP address, or null if the remote IP address is somehow not available.
 		/// </summary>
-		public IPAddress RemoteIPAddress { get; private set; }
+		public IPAddress RemoteIPAddress
+		{
+			get
+			{
+				return _remoteIPAddress;
+			}
+			private set
+			{
+				_remoteIPAddress = value;
+				isLanConnection = -1;
+				isLocalConnection = -1;
+				remoteIPAddressBytes = null;
+				remoteIPAddressStr = null;
+				remoteIPAddressInt = 0;
+			}
+		}
+		/// <summary>
+		/// The last known remote client's IP address, or null if the remote IP address is not available.
+		/// </summary>
+		private IPAddress _remoteIPAddress { get; set; }
 
 		protected uint remoteIPAddressInt = 0;
 		/// <summary>
@@ -458,6 +477,10 @@ namespace BPUtil.SimpleHttp
 			Request = null;
 			Response = null;
 			proxyOptions = null;
+			RemoteIPAddress = null;
+			secure_https = false;
+			IsConnectionViaTrustedProxyServer = false;
+			Trusted_XForwardedProtoHeader = false;
 			_lastUnloggedProcessingException = null;
 
 			// While the server is under low load, a larger buffer is allowed for better write performance.
@@ -526,13 +549,10 @@ namespace BPUtil.SimpleHttp
 
 				if (srv.XForwardedProtoHeader)
 				{
-					string headerValue = Request.Headers.Get("X-Forwarded-For");
+					string headerValue = Request.Headers.Get("X-Forwarded-Proto");
 					if (!string.IsNullOrWhiteSpace(headerValue))
 					{
-						if (headerValue.IEquals("https"))
-							secure_https = true;
-						else
-							secure_https = false;
+						secure_https = headerValue.IEquals("https");
 						Trusted_XForwardedProtoHeader = true;
 						_SetBaseUriProperties();
 					}
@@ -549,6 +569,8 @@ namespace BPUtil.SimpleHttp
 			string ipEndpointHost = ipEndpoint.Address.AddressFamily == AddressFamily.InterNetworkV6 ? ("[" + ipEndpoint.Address.ToString() + "]") : ipEndpoint.Address.ToString();
 			int defaultPort = secure_https ? 443 : 80;
 			string strPort = ipEndpoint.Port == defaultPort ? "" : ":" + ipEndpoint.Port;
+			if (Trusted_XForwardedProtoHeader)
+				strPort = ""; // A trusted X-Forwarded-Proto header was received.  Assume this is a proxied connection via a standard port.
 			base_uri_this_server = new Uri(scheme + "://" + (HostName ?? ipEndpointHost) + strPort, UriKind.Absolute);
 			base_uri_this_server_via_local_endpoint = new Uri(scheme + "://" + ipEndpointHost + strPort, UriKind.Absolute);
 		}
