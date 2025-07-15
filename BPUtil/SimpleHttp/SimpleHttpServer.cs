@@ -478,7 +478,7 @@ namespace BPUtil.SimpleHttp
 			Response = null;
 			proxyOptions = null;
 			RemoteIPAddress = TrueRemoteIPAddress;
-			secure_https = false;
+			secure_https = TrueSecureConnection;
 			IsConnectionViaTrustedProxyServer = false;
 			Trusted_XForwardedProtoHeader = false;
 			_lastUnloggedProcessingException = null;
