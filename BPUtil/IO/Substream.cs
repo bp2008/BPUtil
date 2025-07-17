@@ -16,7 +16,7 @@ namespace BPUtil.IO
 	/// <para>If you attempt to write to a Substream more data than the length you specified during Substream construction, an EndOfStreamException will be thrown and the offending call to Write() will have no effect on the underlying stream.</para>
 	/// <para>Operations such as Read/Write, Seek, Position get/set, are only supported if supported by the underlying stream.</para>
 	/// <para>Behavior of the Substream will be incorrect if the underlying stream is modified while you're using the Substream.</para>
-	/// <para>It is not necessary to dispose a Substream.</para>
+	/// <para>It is not necessary to dispose a Substream. Disposing it will not dispose the underlying stream.</para>
 	/// </summary>
 	public class Substream : Stream
 	{

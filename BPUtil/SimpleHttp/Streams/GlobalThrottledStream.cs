@@ -200,7 +200,7 @@ namespace BPUtil.SimpleHttp
 		#region IDisposable Support
 		private bool gts_disposedValue = false; // To detect redundant calls
 
-		protected virtual new void Dispose(bool disposing)
+		protected override void Dispose(bool disposing)
 		{
 			if (!gts_disposedValue)
 			{
@@ -217,13 +217,7 @@ namespace BPUtil.SimpleHttp
 
 				gts_disposedValue = true;
 			}
-		}
-
-		// This code added to correctly implement the disposable pattern.
-		public new void Dispose()
-		{
-			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-			Dispose(true);
+			base.Dispose(disposing);
 		}
 		#endregion
 

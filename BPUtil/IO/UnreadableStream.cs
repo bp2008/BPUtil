@@ -25,6 +25,11 @@ namespace BPUtil.IO
 		/// Queue of unread data buffers.
 		/// </summary>
 		protected Stack<byte[]> unreadData = new Stack<byte[]>();
+		/// <summary>
+		/// Constructs an UnreadableStream from the given <paramref name="originalStream"/>.
+		/// </summary>
+		/// <param name="originalStream">Original stream to use as the underlying stream.</param>
+		/// <param name="leaveOpen">True if the underlying stream should be left open when the UnreadableStream is closed or disposed.</param>
 		public UnreadableStream(Stream originalStream, bool leaveOpen)
 		{
 			this.originalStream = originalStream;
@@ -33,10 +38,14 @@ namespace BPUtil.IO
 		/// <summary>
 		/// Closes the underlying stream if this UnreadableStream was configured to do so during construction.
 		/// </summary>
-		public new void Dispose()
+		protected override void Dispose(bool disposing)
 		{
-			if (!leaveOpen)
-				originalStream.Dispose();
+			if (disposing)
+			{
+				if (!leaveOpen)
+					originalStream.Dispose();
+			}
+			base.Dispose(disposing);
 		}
 
 		#region Stream abstract members / Trivial implementations

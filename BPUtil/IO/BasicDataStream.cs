@@ -27,10 +27,17 @@ namespace BPUtil.IO
 			this.leaveOpen = leaveOpen;
 		}
 
-		public new void Dispose()
+		/// <summary>
+		/// Closes the underlying stream if this BasicDataStream was configured to do so during construction.
+		/// </summary>
+		protected override void Dispose(bool disposing)
 		{
-			if (!leaveOpen)
-				originalStream.Dispose();
+			if (disposing)
+			{
+				if (!leaveOpen)
+					originalStream.Dispose();
+			}
+			base.Dispose(disposing);
 		}
 
 		/// <summary>

@@ -95,6 +95,7 @@
     </Compile>
     <Compile Include="Forms\TrayIconApplication2.cs" />
     <Compile Include="IO\ConcatenatedStream.cs" />
+    <Compile Include="IO\SnoopReadableStream.cs" />
     <Compile Include="IO\Substream.cs" />
     <Compile Include="IpRangeLite.cs" />
     <Compile Include="Linux\PortHelper.cs" />
