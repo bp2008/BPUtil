@@ -9,6 +9,9 @@ using BPUtil;
 
 namespace BPUtil.IO
 {
+	/// <summary>
+	/// A wrapper around <see cref="MemoryStream"/> that implements the <see cref="IDataStream"/> interface.
+	/// </summary>
 	public class MemoryDataStream : MemoryStream, IDataStream
 	{
 		private byte[] _mdsBuffer;
