@@ -41,6 +41,7 @@ namespace BPUtil
 					return false;
 			return true;
 		}
+
 		/// <summary>
 		/// Returns true if <paramref name="thisBytes"/> starts with <paramref name="thatBytes"/>.
 		/// </summary>
@@ -60,6 +61,30 @@ namespace BPUtil
 			}
 			return true;
 		}
+
+		/// <summary>
+		/// Compares two byte arrays and returns an integer indicating the relative position of [a] versus [b]. Uses string ordering rules.
+		/// </summary>
+		/// <param name="a">First byte array.</param>
+		/// <param name="b">Second byte array.</param>
+		/// <returns></returns>
+		public static int CompareByteArraysLikeStrings(byte[] a, byte[] b)
+		{
+			int max = Math.Min(a.Length, b.Length);
+			for (int i = 0; i < max; i++)
+			{
+				if (a[i] < b[i])
+					return -1;
+				else if (b[i] < a[i])
+					return 1;
+			}
+			if (a.Length < b.Length)
+				return -1;
+			else if (b.Length < a.Length)
+				return 1;
+			return 0;
+		}
+
 		/// <summary>
 		/// <para>Returns true if the specified byte arrays `a` and `b` are the same length and if every bit which is set in `mask` is the same between `a` and `b`.</para>
 		/// <para>e.g.</para>
