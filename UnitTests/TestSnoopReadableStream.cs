@@ -58,7 +58,8 @@ namespace UnitTests
 				Assert.AreEqual(bytesRead, snooped.Length, "SnoopReadableStream did not cache the expected number of bytes.");
 				Assert.IsTrue(ByteUtil.ByteArraysMatch(snooped, input));
 
-				Assert.AreEqual("Test", snoop.DataAsUtf8, "SnoopReadableStream DataAsUtf8 did not have expected value.");
+				Assert.AreEqual("Test", snoop.DataUtf8, "SnoopReadableStream DataUtf8 did not have expected value.");
+				Assert.AreEqual("Test", snoop.DataAscii, "SnoopReadableStream DataAscii did not have expected value.");
 			}
 		}
 		[TestMethod]

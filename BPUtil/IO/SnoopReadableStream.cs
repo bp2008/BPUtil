@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace BPUtil.IO
 {
 	/// <summary>
-	/// A stream which preserves a copy of all read data so it can be inspected later. 
+	/// A stream which preserves a copy of all read data so it can be inspected later.
 	/// </summary>
 	public class SnoopReadableStream : Stream
 	{
@@ -33,10 +33,15 @@ namespace BPUtil.IO
 		/// <returns></returns>
 		public byte[] Data => _snoopBuffer.ToArray();
 		/// <summary>
+		/// Gets all buffered data that has been read so far and converts it to a string using ASCII encoding.  This is not efficient.  Make a local reference to this if you need to refer to it multiple times.
+		/// </summary>
+		/// <returns></returns>
+		public string DataAscii => Encoding.ASCII.GetString(Data);
+		/// <summary>
 		/// Gets all buffered data that has been read so far and converts it to a string using UTF-8 encoding.  This is not efficient.  Make a local reference to this if you need to refer to it multiple times.
 		/// </summary>
 		/// <returns></returns>
-		public string DataAsUtf8 => ByteUtil.Utf8NoBOM.GetString(Data);
+		public string DataUtf8 => ByteUtil.Utf8NoBOM.GetString(Data);
 		/// <summary>
 		/// Reads data from the inner stream and also caches it for later retrieval by <see cref="Data"/>.
 		/// </summary>
