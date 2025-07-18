@@ -127,11 +127,18 @@ namespace BPUtil.SimpleHttp
 			{
 				if (preventKeepalive)
 					return 0;
+				// Event streams sent by this server are normally sent in a kept-alive connection using `Transfer-Encoding: chunked`, and it seems to be fine.  To force event streams to use `Connection: close`, uncomment the following lines:
+				//if (IsEventStream) 
+				//	return 0;
 				if (_keepAliveTimeSeconds == null)
 					_keepAliveTimeSeconds = GetKeepAliveTimeSeconds();
 				return _keepAliveTimeSeconds.Value;
 			}
 		}
+		/// <summary>
+		/// Gets a value indicating if the <c>Content-Type</c> response header indicates that this response is an Event Stream (SSE) response. (e.g. <c>"Content-Type: text/event-stream; charset=utf-8"</c>).
+		/// </summary>
+		public bool IsEventStream => ContentType != null && (ContentType.IEquals("text/event-stream") || ContentType.IStartsWith("text/event-stream;"));
 		/// <summary>
 		/// <para>If this is not null when the response header is written, then it will be written as the response body at that time.  Afterward, the response body stream will be null.</para>
 		/// <para>Setting this value also sets the Content-Length header, either to the length of the byte array, or to null.</para>

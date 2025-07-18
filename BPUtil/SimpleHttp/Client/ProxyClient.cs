@@ -495,7 +495,7 @@ namespace BPUtil.SimpleHttp.Client
 					{
 						proxyResponseStream = null;
 						remoteServerWantsKeepalive = false;
-						options.log.AppendLine("Destination server response uses keep-alive did not specify \"Content-Length\" or \"Transfer-Encoding: chunked\". This connection will be dropped without reading the response body.");
+						options.log.AppendLine("Destination server response uses keep-alive and did not specify \"Content-Length\" or \"Transfer-Encoding: chunked\". This connection will be dropped without reading the response body.");
 					}
 				}
 			}
@@ -888,6 +888,10 @@ namespace BPUtil.SimpleHttp.Client
 		{
 			if (proxyResponseStream == null || !options.requiresFullResponseBuffering)
 				return proxyResponseStream;
+			if (p.Response.IsEventStream)
+				return proxyResponseStream; // Do not buffer an event-stream.
+			if (p.Response.Headers["Upgrade"] == "websocket")
+				return proxyResponseStream; // Do not buffer a websocket.
 			if (!DiscoverTextEncodingFromHeaders(responseHeadersFromServer, out Encoding encoding))
 				return proxyResponseStream;
 			int maxMiB = 50;
@@ -991,7 +995,7 @@ namespace BPUtil.SimpleHttp.Client
 		{
 			if (headers.ContainsKey("Content-Type"))
 			{
-				var contentType = headers.GetValues("Content-Type").FirstOrDefault();
+				string contentType = headers.GetValues("Content-Type").FirstOrDefault();
 				if (contentType != null)
 				{
 					// Extract the character encoding from the content type
