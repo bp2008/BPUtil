@@ -224,7 +224,7 @@ namespace BPUtil.SimpleHttp.Client
 				"keep-alive", "transfer-encoding", "te", "connection", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate", "host"
 			});
 			HashSet<string> doNotProxyRequestHeaders = new HashSet<string>(new string[] {
-				"accept-encoding"
+				"accept-encoding", "origin"
 			});
 
 			// Figure out the Connection header
@@ -308,6 +308,8 @@ namespace BPUtil.SimpleHttp.Client
 			if (sendRequestChunked)
 				sbRequestText.AppendLineRN("Transfer-Encoding: chunked");
 			sbRequestText.AppendLineRN("Accept-Encoding: " + requestHeader_AcceptEncoding);
+			if (p.Request.Headers.ContainsKey("Origin"))
+				sbRequestText.AppendLineRN("Origin: " + Origin);
 			ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
 
 			options.RaiseBeforeRequestHeadersSent(this, p);
@@ -800,6 +802,75 @@ namespace BPUtil.SimpleHttp.Client
 				default:
 					throw new Exception("Unhandled options.xRealIp: " + options.xRealIp);
 			}
+		}
+		/// <summary>
+		/// Barely-tested AI generated code to reorder the HTTP request headers based on the desired order.  This is not as efficient as it could be, and so far, has proven worthless to actually do.
+		/// </summary>
+		/// <param name="httpRequest">Http request header text (everything that comes before the request body), including the line that specifies the request method, URL, and protocol version.</param>
+		/// <param name="desiredHeaderOrder">List of http header names specifying the desired order of HTTP request headers.</param>
+		/// <returns>Http request header text with the headers in the desired order.</returns>
+		public static string ReorderHttpHeaders(string httpRequest, List<string> desiredHeaderOrder)
+		{
+			var lines = httpRequest.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+			if (lines.Length == 0) return httpRequest;
+
+			string requestLine = lines[0];
+			var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			var otherHeaders = new List<string>();
+			int i = 1;
+
+			// Parse headers
+			for (; i < lines.Length; i++)
+			{
+				var line = lines[i];
+				if (string.IsNullOrWhiteSpace(line)) break;
+
+				int colonIndex = line.IndexOf(':');
+				if (colonIndex > 0)
+				{
+					string name = line.Substring(0, colonIndex).Trim();
+					string value = line.Substring(colonIndex + 1).Trim();
+					headers[name] = value;
+				}
+				else
+				{
+					otherHeaders.Add(line); // malformed or continuation lines
+				}
+			}
+
+			// Reconstruct the request
+			StringBuilder sb = new StringBuilder();
+			sb.AppendLineRN(requestLine);
+
+			// Add headers in desired order
+			foreach (string headerName in desiredHeaderOrder)
+			{
+				if (headers.TryGetValue(headerName, out var value))
+				{
+					sb.AppendLineRN($"{headerName}: {value}");
+					headers.Remove(headerName);
+				}
+			}
+
+			// Add remaining headers
+			foreach (var kvp in headers)
+			{
+				sb.AppendLineRN($"{kvp.Key}: {kvp.Value}");
+			}
+
+			// Add any malformed or continuation lines
+			foreach (string line in otherHeaders)
+			{
+				sb.AppendLineRN(line);
+			}
+
+			// Add the blank line and body if present
+			for (; i < lines.Length; i++)
+			{
+				sb.AppendLineRN(lines[i]);
+			}
+
+			return sb.ToString();
 		}
 		#endregion
 		#region Helpers
