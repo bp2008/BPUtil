@@ -154,6 +154,11 @@ namespace BPUtil.SimpleHttp.Client
 		/// </summary>
 		public List<KeyValuePair<string, string>> responseRegexReplacements = null;
 		/// <summary>
+		/// True to rewrite the "Origin" request header to match the origin the proxy is connecting to.  False to leave the "Origin" header exactly as the client specified it.  This will not add an "Origin" request header if that header did not already exist in the client's request.
+		/// </summary>
+		public bool rewriteOriginRequestHeader = false;
+
+		/// <summary>
 		/// Gets a value indicating if this options instance is currently configured to fully buffer HTTP response bodies for processing before the body is transmitted to the client.  Doing this increases system resource usage and can add latency to affected requests.
 		/// </summary>
 		public bool requiresFullResponseBuffering =>

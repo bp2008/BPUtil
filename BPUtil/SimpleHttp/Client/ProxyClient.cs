@@ -224,8 +224,10 @@ namespace BPUtil.SimpleHttp.Client
 				"keep-alive", "transfer-encoding", "te", "connection", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate", "host"
 			});
 			HashSet<string> doNotProxyRequestHeaders = new HashSet<string>(new string[] {
-				"accept-encoding", "origin"
+				"accept-encoding"
 			});
+			if (options.rewriteOriginRequestHeader)
+				doNotProxyRequestHeaders.Add("origin");
 
 			// Figure out the Connection header
 			bool ourClientWantsConnectionUpgrade = false;
@@ -308,8 +310,11 @@ namespace BPUtil.SimpleHttp.Client
 			if (sendRequestChunked)
 				sbRequestText.AppendLineRN("Transfer-Encoding: chunked");
 			sbRequestText.AppendLineRN("Accept-Encoding: " + requestHeader_AcceptEncoding);
-			if (p.Request.Headers.ContainsKey("Origin"))
-				sbRequestText.AppendLineRN("Origin: " + Origin);
+			if (options.rewriteOriginRequestHeader)
+			{
+				if (p.Request.Headers.ContainsKey("Origin"))
+					sbRequestText.AppendLineRN("Origin: " + Origin);
+			}
 			ProcessProxyHeaders(p, options); // Manipulate X-Forwarded-For, etc.
 
 			options.RaiseBeforeRequestHeadersSent(this, p);
