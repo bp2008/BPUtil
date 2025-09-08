@@ -38,7 +38,7 @@ namespace BPUtil.Forms
 		/// </summary>
 		/// <param name="Title">The title of the form (will appear in the title bar).</param>
 		/// <param name="ServiceName">The name of the Windows Service.</param>
-		/// <param name="additionalButtons">An array of buttons to add to the bottom of the form.  May be null.  You may specify the Text and Click handler for each button.  `null` buttons will still take up space, allowing more control over the layout.</param>
+		/// <param name="additionalButtons">An array of buttons to add to the bottom of the form.  May be null.  You may specify the Text and Click handler for each button.  <c>null</c> buttons will still take up space, allowing more control over the layout.</param>
 		/// <param name="additionalControl">An additional Control to add to the bottom of the form, above any additional buttons.</param>
 		public ServiceManager(string Title, string ServiceName, ButtonDefinition[] additionalButtons = null, Control additionalControl = null)
 		{

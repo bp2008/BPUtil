@@ -34,7 +34,7 @@ namespace BPUtil
 		/// <summary>
 		/// Adds the specified key/value pair if the key does not already exist in the cache. Otherwise, updates the existing item.  If an existing item is updated, its "Created" date is not updated.
 		/// </summary>
-		/// <param name="key">The object to use as dictionary key. `null` is not a valid key.</param>
+		/// <param name="key">The object to use as dictionary key. <c>null</c> is not a valid key.</param>
 		/// <param name="value">The value to add to the cache.</param>
 		public void Add(TKey key, TValue value)
 		{
@@ -74,19 +74,41 @@ namespace BPUtil
 		/// <summary>
 		/// Returns the value that is cached for the given key, or default(<typeparamref name="TValue"/>).
 		/// </summary>
-		/// <param name="key">The object to use as dictionary key. `null` is not a valid key.</param>
+		/// <param name="key">The object to use as dictionary key. <c>null</c> is not a valid key.</param>
 		/// <returns></returns>
 		public TValue Get(TKey key)
 		{
-			return Get(key, out long cacheAgeMs);
+			return Get(key, out _);
 		}
 		/// <summary>
 		/// Returns the value that is cached for the given key, or default(<typeparamref name="TValue"/>).
 		/// </summary>
-		/// <param name="key">The object to use as dictionary key. `null` is not a valid key.</param>
+		/// <param name="key">The object to use as dictionary key. <c>null</c> is not a valid key.</param>
 		/// <param name="cacheAgeMs">Milliseconds age of the cached value.  Will be 0 if no item was cached.</param>
 		/// <returns></returns>
 		public TValue Get(TKey key, out long cacheAgeMs)
+		{
+			TryGet(key, out TValue value, out cacheAgeMs);
+			return value;
+		}
+		/// <summary>
+		/// Returns true if the value that is cached for the given key was found.  The out parameter <c>value</c> will contain the cached value, or <c>default(<typeparamref name="TValue"/>)</c> if not found.
+		/// </summary>
+		/// <param name="key">The object to use as dictionary key. <c>null</c> is not a valid key.</param>
+		/// <param name="value">The value that is cached for the given key, or default(<typeparamref name="TValue"/>)</param>
+		/// <returns></returns>
+		public bool TryGet(TKey key, out TValue value)
+		{
+			return TryGet(key, out value, out _);
+		}
+		/// <summary>
+		/// Returns true if the value that is cached for the given key was found.  The out parameter <c>value</c> will contain the cached value, or <c>default(<typeparamref name="TValue"/>)</c> if not found.
+		/// </summary>
+		/// <param name="key">The object to use as dictionary key. <c>null</c> is not a valid key.</param>
+		/// <param name="value">The value that is cached for the given key, or default(<typeparamref name="TValue"/>)</param>
+		/// <param name="cacheAgeMs">Milliseconds age of the cached value.  Will be 0 if no item was cached.</param>
+		/// <returns></returns>
+		public bool TryGet(TKey key, out TValue value, out long cacheAgeMs)
 		{
 			cacheAgeMs = 0;
 			lock (syncLock)
@@ -98,10 +120,14 @@ namespace BPUtil
 					if (cache.TryGetValue(key, out CacheItem item))
 					{
 						cacheAgeMs = (long)item.Age.TotalMilliseconds;
-						return item.Value;
+						value = item.Value;
+						return true;
 					}
 					else
-						return default(TValue);
+					{
+						value = default(TValue);
+						return false;
+					}
 				}
 				catch (Exception)
 				{

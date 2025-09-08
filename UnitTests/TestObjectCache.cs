@@ -51,7 +51,34 @@ namespace UnitTests
 				Assert.IsTrue((bool)c.Get(1));
 				Assert.AreEqual("test", (string)c.Get(2));
 				Assert.IsNull(c.Get(3));
+				{
+					// Test "TryGet" method.
+					Assert.IsTrue(c.TryGet(0, out object obj));
+					Assert.AreEqual(null, obj);
 
+					Assert.IsTrue(c.TryGet(1, out obj));
+					Assert.IsTrue((bool)obj);
+
+					Assert.IsTrue(c.TryGet(2, out obj));
+					Assert.AreEqual("test", obj.ToString());
+
+					Assert.IsFalse(c.TryGet(3, out obj));
+					Assert.IsFalse(c.TryGet(4, out obj));
+				}
+				{
+					// Test "TryGet" method.
+					Assert.IsTrue(c.TryGet(0, out object obj, out long cacheAgeMs));
+					Assert.AreEqual(null, obj);
+
+					Assert.IsTrue(c.TryGet(1, out obj, out cacheAgeMs));
+					Assert.IsTrue((bool)obj);
+
+					Assert.IsTrue(c.TryGet(2, out obj, out cacheAgeMs));
+					Assert.AreEqual("test", obj.ToString());
+
+					Assert.IsFalse(c.TryGet(3, out obj, out cacheAgeMs));
+					Assert.IsFalse(c.TryGet(4, out obj, out cacheAgeMs));
+				}
 				// Test cache overflow
 				c.Add(3, new byte[20000]);
 				Assert.IsNull(c.Get(0));
