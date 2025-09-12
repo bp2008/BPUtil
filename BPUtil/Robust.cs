@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace BPUtil
 {
 	/// <summary>
-	/// Provides methods to conveniently retry unreliable operations (typically file I/O).
+	/// Provides methods to conveniently retry unreliable operations (such as file I/O).
 	/// </summary>
 	public static class Robust
 	{
@@ -43,11 +43,19 @@ namespace BPUtil
 			action();
 		}
 		/// <summary>
-		/// Runs the specified action. If the action throws an exception, this method sleeps for a time and runs the action again. Sleep time is defined by the [sleepTimeMs] argument, and the maximum number of retries is defined by the [maxRetries] argument.
+		/// <para>Runs the specified action up to <c>[maxRetries] + 1</c> times or until the action does not throw an exception. If the action throws an exception, this method sleeps for a time and runs the action again. Sleep time is defined by the [sleepTimeMs] argument, and the maximum number of retries is defined by the [maxRetries] argument.</para>
+		/// <para>After [maxRetries] are exhausted, if the action still throws an exception, the exception will not be caught by this method.</para>
 		/// </summary>
 		/// <param name="action">Action to run.</param>
 		/// <param name="sleepTimeMs">Time in milliseconds to sleep after the action fails.</param>
-		/// <param name="maxRetries">Maximum number of times to retry.</param>
+		/// <param name="maxRetries">
+		///	<para>
+		/// Maximum number of times to retry.
+		/// </para>
+		/// <para>
+		/// Example: Given a [maxRetries] of 2, the RetryPeriodic method will wait after the first two failures, and if the action fails a third time, the exception is thrown to the caller.
+		/// </para>
+		/// </param>
 		public static void RetryPeriodic(Action action, int sleepTimeMs, int maxRetries)
 		{
 			for (int i = 0; i < maxRetries; i++)
@@ -66,11 +74,19 @@ namespace BPUtil
 			action();
 		}
 		/// <summary>
-		/// Runs the specified action. If the action throws an exception, this method sleeps for a time and runs the action again. Sleep time is defined by the [sleepTimeMs] argument, and the maximum number of retries is defined by the [maxRetries] argument.
+		/// <para>Runs the specified action. If the action throws an exception, this method sleeps for a time and runs the action again. Sleep time is defined by the [sleepTimeMs] argument, and the maximum number of retries is defined by the [maxRetries] argument.</para>
+		/// <para>After [maxRetries] are exhausted, if the action still throws an exception, the exception will not be caught by this method.</para>
 		/// </summary>
 		/// <param name="action">Action to run.</param>
 		/// <param name="sleepTimeMs">Time in milliseconds to sleep after the action fails.</param>
-		/// <param name="maxRetries">Maximum number of times to retry.</param>
+		/// <param name="maxRetries">
+		///	<para>
+		/// Maximum number of times to retry.
+		/// </para>
+		/// <para>
+		/// Example: Given a [maxRetries] of 2, the RetryPeriodicAsync method will wait after the first two failures, and if the action fails a third time, the exception is thrown to the caller.
+		/// </para>
+		/// </param>
 		/// <param name="cancellationToken">Cancellation Token</param>
 		public static async Task RetryPeriodicAsync(Func<Task> action, int sleepTimeMs, int maxRetries, CancellationToken cancellationToken = default)
 		{
