@@ -24,8 +24,7 @@ namespace BPUtil.Forms
 	/// </summary>
 	public class TrayIconApplicationContext : ApplicationContext
 	{
-		private Func<TrayIconApplicationContext, bool> onCreateContextMenu;
-		private Action onDoubleClick;
+		private TrayIconApplicationOptions options;
 
 		/// <summary>
 		/// If true, the context menu will be emptied and the CreateContextMenu event will be raised every time the context menu is opened.
@@ -38,40 +37,84 @@ namespace BPUtil.Forms
 		private bool contextMenuCreated = false;
 
 		/// <summary>
-		/// This class should be created and passed into Application.Run( ... )
+		/// A list of components to dispose when the context is disposed.
+		/// </summary>
+		private IContainer components;
+		/// <summary>
+		/// The icon that sits in the system tray.
+		/// </summary>
+		private NotifyIcon notifyIcon;
+		private DisplayStateListener displayStateListener;
+		/// <summary>
+		/// <para>Gets the current display state.  It will be the "Unknown" state until the first state change message is received from the OS.</para>
+		/// <para>Requires <c>options.ListenForDisplayStateChanges = true</c> or else this value will always be <c>Unknown</c>.</para>
+		/// </summary>
+		public DisplayState CurrentDisplayState => displayStateListener?.CurrentDisplayState ?? DisplayState.Unknown;
+
+		/// <summary>
+		/// <para>(Non-preferred constructor; see instead the constructor overload that accepts a <see cref="TrayIconApplicationOptions"/> object).</para>
+		/// <para>An instance of this class should be created and passed into Application.Run( ... ).</para>
 		/// </summary>
 		/// <param name="trayIcon">The icon to show in the system tray.  You could load this from a Form by copying code from that form's Designer file.</param>
 		/// <param name="tooltipText">(optional) Text to show upon mouseover of the tray icon.</param>
 		/// <param name="onCreateContextMenu">(optional) A callback which is called when it is time to create the context menu. Return true if you have added an Exit button.  If this callback does not exist or returns false, an Exit item is added to the menu automatically.</param>
 		/// <param name="onDoubleClick">A callback which is called when the tray icon is double-clicked. Enabling this disables single-left-click opening of the context menu.</param>
-		public TrayIconApplicationContext(Icon trayIcon, string tooltipText, Func<TrayIconApplicationContext, bool> onCreateContextMenu, Action onDoubleClick)
+		/// <exception cref="ArgumentException">If a tray icon was not provided.</exception>
+		public TrayIconApplicationContext(Icon trayIcon, string tooltipText, Func<TrayIconApplicationContext, bool> onCreateContextMenu, Action onDoubleClick) : this(new TrayIconApplicationOptions(trayIcon)
 		{
-			if (trayIcon == null)
+			tooltipText = tooltipText,
+			onCreateContextMenu = onCreateContextMenu,
+			onDoubleClick = onDoubleClick
+		})
+		{ }
+		/// <summary>
+		/// An instance of this class should be created and passed into Application.Run( ... ).
+		/// </summary>
+		/// <param name="options">Specifies the options for this TrayIconApplicationContext.</param>
+		/// <exception cref="ArgumentNullException">If the options object is null.</exception>
+		/// <exception cref="ArgumentException">If a tray icon was not provided.</exception>
+		public TrayIconApplicationContext(TrayIconApplicationOptions options)
+		{
+			if (options == null)
+				throw new ArgumentNullException(nameof(options));
+			if (options.trayIcon == null)
 				throw new ArgumentException("An icon is required in order to use this class!");
 
 			Application.Idle += new EventHandler(this.OnApplicationIdle);
 
-			this.onCreateContextMenu = onCreateContextMenu;
-			this.onDoubleClick = onDoubleClick;
+			this.options = options;
 
 			components = new Container();
 
 			notifyIcon = new NotifyIcon(components);
 			notifyIcon.ContextMenuStrip = new ContextMenuStrip();
-			notifyIcon.Icon = trayIcon;
-			if (!string.IsNullOrWhiteSpace(tooltipText))
-				notifyIcon.Text = tooltipText;
+			notifyIcon.Icon = options.trayIcon;
+			if (!string.IsNullOrWhiteSpace(options.tooltipText))
+				notifyIcon.Text = options.tooltipText;
 			notifyIcon.Visible = true;
 
 			notifyIcon.ContextMenuStrip.Opening += ContextMenuStrip_Opening;
-			if (onDoubleClick != null)
+			if (options.onDoubleClick != null)
 				notifyIcon.DoubleClick += NotifyIcon_DoubleClick;
 			else
 				notifyIcon.MouseUp += notifyIcon_MouseUp;
 
+			if (options.ListenForDisplayStateChanges)
+			{
+				displayStateListener = new DisplayStateListener();
+				displayStateListener.DisplayStateChanged += OnDisplayStateChanged;
+				displayStateListener.Start();
+			}
+
 			// The first context menu show will fail, so do it now, and the menu will be opened but canceled on the first attempt.
 			DoShowContextMenu();
 		}
+
+		private void OnDisplayStateChanged(object sender, DisplayState state)
+		{
+			options.RaiseDisplayStateChangedEvent(state);
+		}
+
 		#region UI Thread Invoker
 		private TaskScheduler taskScheduler = null;
 		private object taskSchedulerLock = new object();
@@ -147,7 +190,7 @@ namespace BPUtil.Forms
 		#endregion
 		private void NotifyIcon_DoubleClick(object sender, EventArgs e)
 		{
-			onDoubleClick();
+			options.onDoubleClick();
 		}
 
 		/// <summary>
@@ -172,7 +215,7 @@ namespace BPUtil.Forms
 			if (CreateContextMenuAtEveryOpen || !contextMenuCreated)
 			{
 				notifyIcon.ContextMenuStrip.Items.Clear();
-				if (onCreateContextMenu == null || !onCreateContextMenu(this))
+				if (options.onCreateContextMenu == null || !options.onCreateContextMenu(this))
 					AddToolStripMenuItem("E&xit", exitItem_Click);
 			}
 			if (!contextMenuCreated)
@@ -217,15 +260,6 @@ namespace BPUtil.Forms
 		}
 
 		/// <summary>
-		/// A list of components to dispose when the context is disposed.
-		/// </summary>
-		private IContainer components;
-
-		/// <summary>
-		/// The icon that sits in the system tray.
-		/// </summary>
-		private NotifyIcon notifyIcon;
-		/// <summary>
 		/// When the application context is disposed, dispose things like the notify icon.
 		/// </summary>
 		/// <param name="disposing"></param>
@@ -236,6 +270,7 @@ namespace BPUtil.Forms
 				components?.Dispose();
 				Application.Idle -= new EventHandler(this.OnApplicationIdle);
 			}
+			displayStateListener?.Dispose();
 		}
 		/// <summary>
 		/// When the exit menu item is clicked, make a call to terminate the ApplicationContext.

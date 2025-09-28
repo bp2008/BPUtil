@@ -87,6 +87,7 @@
     <Compile Include="Forms\MovableOverlay.Designer.cs">
       <DependentUpon>MovableOverlay.cs</DependentUpon>
     </Compile>
+    <Compile Include="Forms\DisplayStateListener.cs" />
     <Compile Include="Forms\TrayIconAppHiddenForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -94,6 +95,7 @@
       <DependentUpon>TrayIconAppHiddenForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Forms\TrayIconApplication2.cs" />
+    <Compile Include="Forms\TrayIconApplicationOptions.cs" />
     <Compile Include="IO\ConcatenatedStream.cs" />
     <Compile Include="IO\SnoopReadableStream.cs" />
     <Compile Include="IO\Substream.cs" />
