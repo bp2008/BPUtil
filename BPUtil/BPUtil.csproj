@@ -221,6 +221,7 @@
     <Compile Include="StringParser.cs" />
     <Compile Include="StringSorting.cs" />
     <Compile Include="TempDir.cs" />
+    <Compile Include="TokenBucketDictionary.cs" />
     <Compile Include="TokenBucket.cs" />
     <Compile Include="WaitingQueue.cs" />
     <Compile Include="CachedObject.cs" />

@@ -61,7 +61,7 @@ namespace BPUtil
 		/// <summary>
 		/// Returns the current number of full and partial tokens in the bucket without consuming any.
 		/// </summary>
-		/// <returns></returns>
+		/// <returns>The number of full and partial tokens in the bucket.</returns>
 		public double Peek()
 		{
 			lock (_lock)
