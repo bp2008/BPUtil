@@ -21,7 +21,7 @@ namespace BPUtil
 		public static void ShowError(string message)
 		{
 			c.RedLine(message);
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 			if (Environment.UserInteractive)
 				System.Windows.Forms.MessageBox.Show(message);
 #endif

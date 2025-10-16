@@ -1,4 +1,4 @@
-﻿#if NET6_0_LINUX
+﻿#if NET6_PLUS_LINUX
 
 using System;
 using System.Collections.Generic;

@@ -46,7 +46,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
 		public static async Task WriteAsync(this TextWriter tw, StringBuilder sb, CancellationToken cancellationToken = default)
 		{
-#if NET6_0
+#if NET6_0_OR_GREATER
 			await tw.WriteAsync(sb, cancellationToken).ConfigureAwait(false);
 #else
 			try
@@ -61,7 +61,7 @@ namespace BPUtil.SimpleHttp
 			}
 #endif
 		}
-#if NET6_0
+#if NET6_0_OR_GREATER
 		/// <summary>
 		/// Writes text, followed by the "\r\n" line terminator, regardless of which platform this program is run on.
 		/// </summary>

@@ -47,7 +47,7 @@ namespace BPUtil
 				if (cache.TryGetValue(hostNameOrAddress, out DnsCacheEntry cacheEntry) && !cacheEntry.Expired)
 					return cacheEntry.Address;
 
-#if NET6_0
+#if NET6_0_OR_GREATER
 			IPAddress[] addresses = await Dns.GetHostAddressesAsync(hostNameOrAddress, cancellationToken).ConfigureAwait(false);
 #else
 				IPAddress[] addresses = await Dns.GetHostAddressesAsync(hostNameOrAddress).ConfigureAwait(false);

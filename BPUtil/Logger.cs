@@ -5,7 +5,7 @@ using System.Text;
 using System.IO;
 using System.Collections.Concurrent;
 using System.Threading;
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 using System.Windows.Forms;
 #endif
 
@@ -155,7 +155,7 @@ namespace BPUtil
 					return;
 				didDefaultCatchAll = true;
 				AppDomain.CurrentDomain.UnhandledException += HandleUnhandledException;
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 				Application.ThreadException += HandleThreadException;
 #endif
 			}
@@ -183,7 +183,7 @@ namespace BPUtil
 					didDefaultCatchAll = false;
 					AppDomain.CurrentDomain.UnhandledException -= HandleUnhandledException;
 
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 					Application.ThreadException -= HandleThreadException;
 #endif
 
@@ -194,7 +194,7 @@ namespace BPUtil
 				callback("AppDomain.CurrentDomain.UnhandledException", e.ExceptionObject as Exception);
 			};
 
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 			Application.ThreadException += (sender, e) =>
 			{
 				callback("Application.ThreadException", e.Exception);

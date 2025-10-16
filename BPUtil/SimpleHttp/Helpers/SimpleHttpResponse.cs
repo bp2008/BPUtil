@@ -722,7 +722,7 @@ namespace BPUtil.SimpleHttp
 						// ETag structure: Hash of [file content]
 						stream = fs;
 					}
-#if NET6_0
+#if NET6_0_OR_GREATER
 					byte[] hash = await sha.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
 #else
 					byte[] hash = await TaskHelper.RunBlockingCodeSafely(() => sha.ComputeHash(stream), cancellationToken).ConfigureAwait(false);
@@ -1123,7 +1123,7 @@ namespace BPUtil.SimpleHttp
 			if (_compressionstream != null)
 			{
 				// It is safe to dispose the compression stream because it was created with the leaveOpen option.
-#if NET6_0
+#if NET6_0_OR_GREATER
 				await _compressionstream.DisposeAsync().ConfigureAwait(false);
 #else
 				_compressionstream.Dispose();

@@ -533,9 +533,5 @@ namespace BPUtil
 		internal ObjectFieldMapLoopException(string message, Exception innerException) : base(message, innerException)
 		{
 		}
-
-		internal ObjectFieldMapLoopException(SerializationInfo info, StreamingContext context) : base(info, context)
-		{
-		}
 	}
 }

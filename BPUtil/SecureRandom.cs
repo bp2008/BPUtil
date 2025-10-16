@@ -114,7 +114,7 @@ namespace BPUtil
 		/// </summary>
 		private class CryptoRandom : Random
 		{
-#if !NET6_0
+#if !NET6_0_OR_GREATER
 			private RNGCryptoServiceProvider _rng = new RNGCryptoServiceProvider();
 #endif
 
@@ -169,7 +169,7 @@ namespace BPUtil
 						_buffer = new byte[4];
 				}
 
-#if NET6_0
+#if NET6_0_OR_GREATER
 				RandomNumberGenerator.Fill(_buffer);
 #else
 				_rng.GetBytes(_buffer);
@@ -283,7 +283,7 @@ namespace BPUtil
 					{
 						// Draw bytes directly from the RNGCryptoProvider
 
-#if NET6_0
+#if NET6_0_OR_GREATER
 						RandomNumberGenerator.Fill(_buffer);
 #else
 						_rng.GetBytes(_buffer);

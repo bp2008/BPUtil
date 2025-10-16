@@ -20,9 +20,5 @@ namespace BPUtil.MVC
 		public ClientException(string message, Exception innerException) : base(message, innerException)
 		{
 		}
-
-		protected ClientException(SerializationInfo info, StreamingContext context) : base(info, context)
-		{
-		}
 	}
 }

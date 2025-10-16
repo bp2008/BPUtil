@@ -369,7 +369,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="headerName">Header name (not case-sensitive).</param>
 		/// <param name="value">(Output) Header value.</param>
 		/// <returns></returns>
-#if NET6_0
+#if NET6_0_OR_GREATER
 		public bool TryGetValue(string headerName, [MaybeNullWhen(false)] out string value)
 #else
 		public bool TryGetValue(string headerName, out string value)

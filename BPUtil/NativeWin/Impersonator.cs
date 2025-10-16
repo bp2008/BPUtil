@@ -5,7 +5,7 @@ using System.ComponentModel;
 
 namespace BPUtil.NativeWin
 {
-#if NET6_0_WIN
+#if NET6_PLUS_WIN
 	/// <summary>
 	/// <para>
 	/// ORIGINALLY FROM https://www.codeproject.com/Articles/10090/A-small-C-Class-for-impersonating-a-User

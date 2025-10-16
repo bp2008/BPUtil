@@ -35,9 +35,9 @@ namespace BPUtil
 		/// <typeparam name="ServiceType">Type of Service class.</typeparam>
 		/// <param name="options">Optional options for service initialization.</param>
 		public static void WindowsService<ServiceType>(WindowsServiceInitOptions options = null)
-#if NET6_0_LINUX
+#if NET6_PLUS_LINUX
 			where ServiceType : new()
-#elif NETFRAMEWORK || NET6_0_WIN
+#elif NETFRAMEWORK || NET6_PLUS_WIN
 			where ServiceType : ServiceBase, new()
 #endif
 		{
@@ -68,7 +68,7 @@ namespace BPUtil
 				if (settingsObj.FileExists() && !settingsObj.Load())
 				{
 					c.RedLine("Failed to load settings file.");
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 					if (Environment.UserInteractive)
 					{
 						System.Windows.Forms.MessageBox.Show("Failed to load settings file.");
@@ -80,14 +80,14 @@ namespace BPUtil
 				settingsObj.SaveIfNoExist();
 			}
 
-#if NETFRAMEWORK || NET6_0_LINUX
+#if NETFRAMEWORK || NET6_PLUS_LINUX
 			if (Platform.IsUnix() || Platform.IsRunningOnMono())
 			{
 				LinuxWindowsService(myService, options, settingsObj);
 				return;
 			}
 #endif
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 			string serviceName = !string.IsNullOrWhiteSpace(options.ServiceName) ? options.ServiceName : myService.ServiceName;
 			if (Environment.UserInteractive)
 			{
@@ -142,9 +142,9 @@ namespace BPUtil
 		/// <param name="options">Options</param>
 		/// <param name="settingsObj">Optional settings object.  If provided, a "savesettings" argument will be exposed.</param>
 		private static void LinuxWindowsService<ServiceType>(ServiceType myService, WindowsServiceInitOptions options, SerializableObjectBase settingsObj)
-#if NET6_0_LINUX
+#if NET6_PLUS_LINUX
 			where ServiceType : new()
-#elif NETFRAMEWORK || NET6_0_WIN
+#elif NETFRAMEWORK || NET6_PLUS_WIN
 			where ServiceType : ServiceBase, new()
 #endif
 		{
@@ -455,7 +455,7 @@ WantedBy=multi-user.target";
 		/// <param name="variableValue">Environment variable value.  Null to remove the environment variable.</param>
 		public static void SetEnvironmentVariableInWindowsService(string serviceName, string variableName, string variableValue)
 		{
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 			if (string.IsNullOrWhiteSpace(serviceName))
 				throw new ArgumentException(nameof(serviceName) + " is invalid", nameof(serviceName));
 			if (string.IsNullOrWhiteSpace(variableName) || variableName.Contains('='))

@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 using System.Windows.Forms;
-#elif NET6_0_LINUX
+#elif NET6_PLUS_LINUX
 using BPUtil.Forms;
 #endif
 
@@ -18,7 +18,7 @@ namespace BPUtil
 	public static class SetTimeout
 	{
 
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 		/// <summary>
 		/// Invokes on the GUI thread the specified action after the specified timeout.
 		/// </summary>
@@ -46,7 +46,7 @@ namespace BPUtil
 			return _internal_setTimeout(TheAction, Timeout, false, null, ReportException);
 		}
 
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 		/// <summary>
 		/// Invokes a call to SetTimeout.OnBackground on the Gui Thread, so that other UI events have a chance to finish first.
 		/// This timeout will not be cancelable.

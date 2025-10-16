@@ -122,7 +122,7 @@ namespace BPUtil.SimpleHttp
 		/// <returns></returns>
 		private bool TryStartWebpack()
 		{
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 			try
 			{
 				string npmPath = NativeWin.PathCheck.GetFullPath("npm.cmd");

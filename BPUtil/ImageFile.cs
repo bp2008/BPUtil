@@ -1,4 +1,4 @@
-﻿#if NETFRAMEWORK || NET6_0_WIN
+﻿#if NETFRAMEWORK || NET6_PLUS_WIN
 
 using System;
 using System.Collections.Generic;

@@ -444,7 +444,7 @@ namespace BPUtil.SimpleHttp
 				{
 					if (tcpStream != null)
 					{
-#if NET6_0
+#if NET6_0_OR_GREATER
 						await tcpStream.DisposeAsync().ConfigureAwait(false);
 #else
 						tcpStream.Dispose();
@@ -816,7 +816,9 @@ namespace BPUtil.SimpleHttp
 					if (acceptAnyCert)
 						certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
 					proxyStream = new SslStream(proxyStream, false, certCallback, null);
+#pragma warning disable SYSLIB0039 // Type or member is obsolete
 					((SslStream)proxyStream).AuthenticateAsClient(host, null, TLS.TlsNegotiate.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls, false);
+#pragma warning restore SYSLIB0039 // Type or member is obsolete
 				}
 
 				// Begin proxying by sending what we've already read from this.inputStream.
@@ -1509,7 +1511,7 @@ namespace BPUtil.SimpleHttp
 			Interlocked.Increment(ref _totalRequestsServed);
 		}
 
-#if NET6_0
+#if NET6_0_OR_GREATER
 		private static bool? _cipherSuitesPolicySupported = null;
 #endif
 		/// <summary>
@@ -1519,17 +1521,19 @@ namespace BPUtil.SimpleHttp
 		/// <returns>Returns true if the SslServerAuthenticationOptions.CipherSuitesPolicy property can be used on this platform.</returns>
 		public static bool IsTlsCipherSuitesPolicySupported()
 		{
-#if NET6_0
+#if NET6_0_OR_GREATER
 			bool? v = _cipherSuitesPolicySupported;
 			if (v == null)
 			{
 				SslServerAuthenticationOptions sslServerOptions = new SslServerAuthenticationOptions();
 				try
 				{
+#pragma warning disable CA1416 // Validate platform compatibility
 					sslServerOptions.CipherSuitesPolicy = new CipherSuitesPolicy(new TlsCipherSuite[]
 						{
 						TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 						});
+#pragma warning restore CA1416 // Validate platform compatibility
 					_cipherSuitesPolicySupported = v = true;
 				}
 				catch (PlatformNotSupportedException)
@@ -1675,7 +1679,7 @@ namespace BPUtil.SimpleHttp
 				}
 				catch
 				{
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 					try
 					{
 						fiExe = new FileInfo(System.Windows.Forms.Application.ExecutablePath);
@@ -1728,7 +1732,7 @@ namespace BPUtil.SimpleHttp
 						byte[] certData = ssl_certificate.Export(X509ContentType.Pfx, autoCertPassword);
 						File.WriteAllBytes(fiCert.FullName, certData);
 					}
-#elif NET6_0
+#elif NET6_0_OR_GREATER
 					// Native cert generator. .NET 4.7.2 required.
 					using (System.Security.Cryptography.RSA key = System.Security.Cryptography.RSA.Create(2048))
 					{
@@ -1954,7 +1958,7 @@ namespace BPUtil.SimpleHttp
 			return defaultProtocols;
 		}
 
-#if NET6_0
+#if NET6_0_OR_GREATER
 		/// <summary>
 		/// Gets a collection of allowed TLS cipher suites for the given connection.  Returns null if the default set of cipher suites should be allowed (which varies by platform).
 		/// </summary>

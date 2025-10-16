@@ -172,7 +172,7 @@ namespace BPUtil
 				httpClientHandler.AllowAutoRedirect = value;
 			}
 		}
-#if NET6_0
+#if NET6_0_OR_GREATER
 		/// <summary>
 		/// Gets or sets a value indicating if this WebRequestUtility will accept all TLS certificates, even invalid ones.  May throw a <see cref="PlatformNotSupportedException"/> on some platforms.
 		/// </summary>

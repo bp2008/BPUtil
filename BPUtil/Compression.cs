@@ -15,7 +15,7 @@ namespace BPUtil
 	/// </summary>
 	public enum BPCompressionMethod
 	{
-#if NET6_0
+#if NET6_0_OR_GREATER
 		/// <summary>
 		/// The "Brotli" algorithm. Brotli is more advanced than Gzip.
 		/// </summary>
@@ -51,7 +51,7 @@ namespace BPUtil
 		{
 			switch (compressionMethod)
 			{
-#if NET6_0
+#if NET6_0_OR_GREATER
 				case BPCompressionMethod.Brotli:
 					if (compress)
 						return new BrotliStream(baseStream, CompressionLevel.Optimal, true);
@@ -74,7 +74,7 @@ namespace BPUtil
 		}
 		#endregion
 		#region LEGACY API: Compress using a byte[] as input and byte[] as output
-#if NET6_0
+#if NET6_0_OR_GREATER
 		/// <summary>
 		/// Compresses a buffer using Brotli.
 		/// </summary>
@@ -105,7 +105,7 @@ namespace BPUtil
 		}
 		#endregion
 		#region LEGACY API: Decompress using a byte[] as input and byte[] as output
-#if NET6_0
+#if NET6_0_OR_GREATER
 		/// <summary>
 		/// Decompresses a buffer using Brotli.
 		/// </summary>

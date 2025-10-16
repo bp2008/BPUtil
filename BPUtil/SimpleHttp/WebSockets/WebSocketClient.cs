@@ -46,7 +46,9 @@ namespace BPUtil.SimpleHttp.WebSockets
 				if (acceptAnyCert)
 					certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
 				SslStream sslStream = new SslStream(this.tcpStream, false, certCallback, null);
+#pragma warning disable SYSLIB0039
 				sslStream.AuthenticateAsClient(uri.DnsSafeHost, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+#pragma warning restore SYSLIB0039
 				this.tcpStream = sslStream;
 			}
 

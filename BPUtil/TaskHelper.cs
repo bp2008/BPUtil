@@ -13,7 +13,7 @@ namespace BPUtil
 	/// </summary>
 	public static class TaskHelper
 	{
-#if !NET6_0
+#if !NET6_0_OR_GREATER
 		/// <summary>A task that has already completed successfully.</summary>
 		private static Task s_completedTask;
 #endif
@@ -24,7 +24,7 @@ namespace BPUtil
 		{
 			get
 			{
-#if NET6_0
+#if NET6_0_OR_GREATER
 				return Task.CompletedTask;
 #else
 				Task completedTask = s_completedTask;

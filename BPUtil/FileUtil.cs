@@ -12,7 +12,7 @@ namespace BPUtil
 {
 	public static class FileUtil
 	{
-#if NETFRAMEWORK || NET6_0_WIN
+#if NETFRAMEWORK || NET6_PLUS_WIN
 		/// <summary>
 		/// Allows "Full Control" permission to "Users".
 		/// </summary>
@@ -191,7 +191,7 @@ namespace BPUtil
 		/// <returns>A task that represents the asynchronous read operation, which wraps the string containing all text in the file.</returns>
 		public static Task<string> ReadAllTextAsync(string path, Encoding encoding, CancellationToken cancellationToken = default)
 		{
-#if NET6_0
+#if NET6_0_OR_GREATER
 			return File.ReadAllTextAsync(path, encoding, cancellationToken);
 #else
 			using (StreamReader sr = new StreamReader(path, encoding))
@@ -208,7 +208,7 @@ namespace BPUtil
 		/// <returns>A task that represents the asynchronous write operation.</returns>
 		public static Task WriteAllTextAsync(string path, string contents, Encoding encoding, CancellationToken cancellationToken = default)
 		{
-#if NET6_0
+#if NET6_0_OR_GREATER
 			return File.WriteAllTextAsync(path, contents, encoding, cancellationToken);
 #else
 			using (StreamWriter sw = new StreamWriter(path, false, encoding))

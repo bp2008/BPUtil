@@ -24,7 +24,7 @@ namespace BPUtil.SimpleHttp.TLS
 		/// </summary>
 		public const SslProtocols Tls13 = (SslProtocols)12288;
 
-#if NET6_0
+#if NET6_0_OR_GREATER
 		private static ConcurrentDictionary<X509Certificate, SslStreamCertificateContext> tlsCertContexts = new ConcurrentDictionary<X509Certificate, SslStreamCertificateContext>();
 		private static SslStreamCertificateContext CreateSslStreamCertificateContextFromCert(X509Certificate cert)
 		{
@@ -73,7 +73,7 @@ namespace BPUtil.SimpleHttp.TLS
 							p.HostName = tlsData.ServerName;
 						if (tlsData.IsTlsAlpn01Validation)
 						{
-#if NET6_0
+#if NET6_0_OR_GREATER
 							cert = await p.certificateSelector.GetAcmeTls1Certificate(p, tlsData.ServerName).ConfigureAwait(false);
 							if (cert == null)
 							{
@@ -100,7 +100,7 @@ namespace BPUtil.SimpleHttp.TLS
 							return false;
 						}
 						SslStream ss = WrapSslStream(p);
-#if NET6_0
+#if NET6_0_OR_GREATER
 						SslServerAuthenticationOptions sslServerOptions = new SslServerAuthenticationOptions();
 						sslServerOptions.ServerCertificateContext = tlsCertContexts.GetOrAdd(cert, CreateSslStreamCertificateContextFromCert);
 						sslServerOptions.EnabledSslProtocols = p.srv.ChooseSslProtocols(p.RemoteIPAddress, SslProtocols.Tls12 | SslProtocols.Tls13);
@@ -109,7 +109,11 @@ namespace BPUtil.SimpleHttp.TLS
 						{
 							IEnumerable<TlsCipherSuite> suites = p.srv.GetAllowedCipherSuites(p);
 							if (suites != null)
+							{
+#pragma warning disable CA1416
 								sslServerOptions.CipherSuitesPolicy = new CipherSuitesPolicy(suites);
+#pragma warning restore CA1416
+							}
 						}
 
 						await TaskHelper.DoWithTimeout(ss.AuthenticateAsServerAsync(sslServerOptions, cancellationToken), HttpProcessor.readTimeoutSeconds * 1000).ConfigureAwait(false);

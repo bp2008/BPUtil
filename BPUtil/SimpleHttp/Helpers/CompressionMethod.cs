@@ -64,7 +64,7 @@ namespace BPUtil.SimpleHttp.Helpers
 		{
 			if (Algorithm != null)
 			{
-#if NET6_0
+#if NET6_0_OR_GREATER
 				if (Algorithm == CompressionAlgorithm.br)
 					return new BrotliStream(baseStream, CompressionLevel.Optimal, true);
 #endif
@@ -84,7 +84,7 @@ namespace BPUtil.SimpleHttp.Helpers
 		{
 			if (Algorithm != null)
 			{
-#if NET6_0
+#if NET6_0_OR_GREATER
 				if (Algorithm == CompressionAlgorithm.br)
 					return new BrotliStream(baseStream, CompressionMode.Decompress, true);
 #endif
@@ -183,7 +183,7 @@ namespace BPUtil.SimpleHttp.Helpers
 	/// </summary>
 	public enum CompressionAlgorithm
 	{
-#if NET6_0
+#if NET6_0_OR_GREATER
 		/// <summary>
 		/// Brotli.  Optimal compression level strongly recommended, as SmallestSize is far slower to compress.
 		/// </summary>

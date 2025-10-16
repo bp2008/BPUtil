@@ -218,7 +218,7 @@ namespace BPUtil.SimpleHttp
 				// Attempt to discard a certain amount of unread request body, to allow for simple web servers to ignore request bodies.
 				int bytesToRead = 125000;
 				ByteUtil.DiscardToEndResult discardResult = await ByteUtil.DiscardUntilEndOfStreamWithMaxLengthAsync(RequestBodyStream, bytesToRead, timeoutMilliseconds, cancellationToken).ConfigureAwait(false);
-#if NET6_0
+#if NET6_0_OR_GREATER
 				await RequestBodyStream.DisposeAsync().ConfigureAwait(false);
 #else
 				RequestBodyStream.Dispose();

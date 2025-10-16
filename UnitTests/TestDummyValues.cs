@@ -67,6 +67,7 @@ namespace UnitTests
 			Assert.AreEqual("test", so._stringArray[0]);
 			Assert.AreEqual("test", so._stringArray[1]);
 		}
+#pragma warning disable CS0649
 		class CO
 		{
 			public string _string;
@@ -93,6 +94,7 @@ namespace UnitTests
 			public byte[] _byteArray;
 			public string[] _stringArray;
 		}
+#pragma warning restore CS0649
 		enum EN
 		{
 			None = 0

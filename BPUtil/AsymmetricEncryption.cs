@@ -1,4 +1,4 @@
-﻿#if NETFRAMEWORK || NET6_0_WIN
+﻿#if NETFRAMEWORK || NET6_PLUS_WIN
 
 using System;
 using System.Collections.Generic;
@@ -329,7 +329,7 @@ namespace BPUtil
 			if (keystore == Keystore.Machine)
 			{
 				cspParams.Flags |= CspProviderFlags.UseMachineKeyStore;
-#if !NET6_0
+#if !NET6_0_OR_GREATER
 				CryptoKeyAccessRule rule = new CryptoKeyAccessRule("everyone", CryptoKeyRights.FullControl, AccessControlType.Allow);
 				cspParams.CryptoKeySecurity = new CryptoKeySecurity();
 				cspParams.CryptoKeySecurity.SetAccessRule(rule);

@@ -614,7 +614,7 @@ namespace BPUtil.SimpleHttp.Client
 				{
 					proxyTiming?.Start("Connect");
 					options.bet?.Start("Connect");
-#if NET6_0
+#if NET6_0_OR_GREATER
 
 					await TaskHelper.DoWithTimeout(proxyClient.ConnectAsync(ip, uri.Port, options.cancellationToken).AsTask(), options.connectTimeoutMs,
 						() => throw new GatewayTimeoutException("ProxyClient outgoing connection attempt timed out.")).ConfigureAwait(false);
@@ -647,10 +647,12 @@ namespace BPUtil.SimpleHttp.Client
 							certCallback = (sender, certificate, chain, sslPolicyErrors) => true;
 						SslStream ss = new SslStream(pStream, false, certCallback, null);
 						pStream = ss;
-#if NET6_0
+#if NET6_0_OR_GREATER
 						SslClientAuthenticationOptions sslClientOptions = new SslClientAuthenticationOptions();
 						sslClientOptions.AllowRenegotiation = false; // Client-side renegotiation is viewed as insecure by the industry and is not available in TLS 1.3.
+#pragma warning disable SYSLIB0039
 						sslClientOptions.EnabledSslProtocols = TLS.TlsNegotiate.Tls13 | SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls;
+#pragma warning restore SYSLIB0039
 						sslClientOptions.EncryptionPolicy = EncryptionPolicy.RequireEncryption;
 						if (certCallback != null)
 						{
@@ -1150,13 +1152,6 @@ namespace BPUtil.SimpleHttp.Client
 			public GatewayTimeoutException(string message, Exception innerException) : base(message, innerException)
 			{
 			}
-
-			/// <summary>
-			/// Thrown by ProxyClient in several situations where a timeout occurs attempting to contact the destination server.
-			/// </summary>
-			protected GatewayTimeoutException(SerializationInfo info, StreamingContext context) : base(info, context)
-			{
-			}
 		}
 
 		[Serializable]
@@ -1171,10 +1166,6 @@ namespace BPUtil.SimpleHttp.Client
 			}
 
 			public TLSNegotiationFailedException(string message, Exception innerException) : base(message, innerException)
-			{
-			}
-
-			protected TLSNegotiationFailedException(SerializationInfo info, StreamingContext context) : base(info, context)
 			{
 			}
 		}

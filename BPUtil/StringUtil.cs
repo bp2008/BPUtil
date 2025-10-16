@@ -15,14 +15,14 @@ namespace BPUtil
 	{
 		static StringUtil()
 		{
-#if NET6_0_LINUX
+#if NET6_PLUS_LINUX
 			if (Platform.IsUnix())
 			{
 				RegisterCodepagesProvider();
 			}
 #endif
 		}
-#if NET6_0_LINUX
+#if NET6_PLUS_LINUX
 		private static void RegisterCodepagesProvider()
 		{
 			// This, along with the nuget package `System.Text.Encoding.CodePages`, allows windows-1252 to be loadable in Linux.
@@ -978,7 +978,7 @@ namespace BPUtil
 			//				{
 			//					// Failed to decode the file using the BOM/UT8. 
 			//					// Assume it's local ANSI
-			//#if NET6_0
+			//#if NET6_0_OR_GREATER
 			//					detectedEncoding = CodePagesEncodingProvider.Instance.GetEncoding(1252);
 			//#else
 			//					detectedEncoding = Encoding.GetEncoding("windows-1252");

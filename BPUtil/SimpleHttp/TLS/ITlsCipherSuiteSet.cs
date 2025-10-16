@@ -1,4 +1,4 @@
-﻿#if NET6_0
+﻿#if NET6_0_OR_GREATER
 using System.Net.Security;
 
 namespace BPUtil.SimpleHttp.TLS
