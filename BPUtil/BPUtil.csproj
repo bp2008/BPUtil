@@ -1,358 +1,86 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-  <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{A4981D8D-DEBF-4B34-B9CE-FF25520A02B7}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>BPUtil</RootNamespace>
-    <AssemblyName>BPUtil</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <SccProjectName>
-    </SccProjectName>
-    <SccLocalPath>
-    </SccLocalPath>
-    <SccAuxPath>
-    </SccAuxPath>
-    <SccProvider>
-    </SccProvider>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>TRACE;DEBUG;NETFRAMEWORK</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-    <DocumentationFile>bin\Debug\BPUtil.xml</DocumentationFile>
-    <NoWarn>CS1591</NoWarn>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE;NETFRAMEWORK</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Release\BPUtil.XML</DocumentationFile>
-    <NoWarn>1591</NoWarn>
-    <Prefer32Bit>false</Prefer32Bit>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Design" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.IO.Compression" />
-    <Reference Include="System.Management" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Security" />
-    <Reference Include="System.ServiceProcess" />
-    <Reference Include="System.Web" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Xml" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="AsymmetricEncryption.cs" />
-    <Compile Include="BackupRotate.cs" />
-    <Compile Include="Base64UrlMod.cs" />
-    <Compile Include="BitRateCalculator.cs" />
-    <Compile Include="BPMessage.cs" />
-    <Compile Include="BPQueue.cs" />
-    <Compile Include="BranchStatus.cs" />
-    <Compile Include="CertificateValidation.cs" />
-    <Compile Include="ComparableIPAddress.cs" />
-    <Compile Include="Compass.cs" />
-    <Compile Include="Cooldown.cs" />
-    <Compile Include="CountdownStopwatch.cs" />
-    <Compile Include="Debounce.cs" />
-    <Compile Include="DummyValues.cs" />
-    <Compile Include="Forms\FormUtil.cs" />
-    <Compile Include="Forms\MovableOverlay.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Forms\MovableOverlay.Designer.cs">
-      <DependentUpon>MovableOverlay.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Forms\DisplayStateListener.cs" />
-    <Compile Include="Forms\TrayIconAppHiddenForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Forms\TrayIconAppHiddenForm.Designer.cs">
-      <DependentUpon>TrayIconAppHiddenForm.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Forms\TrayIconApplication2.cs" />
-    <Compile Include="Forms\TrayIconApplicationOptions.cs" />
-    <Compile Include="IO\ConcatenatedStream.cs" />
-    <Compile Include="IO\SnoopReadableStream.cs" />
-    <Compile Include="IO\Substream.cs" />
-    <Compile Include="IpRangeLite.cs" />
-    <Compile Include="Linux\PortHelper.cs" />
-    <Compile Include="MVC\ControllerAsync.cs" />
-    <Compile Include="MVC\RequiresHttpMethodAttribute.cs" />
-    <Compile Include="NativeWin\UdpInfoTable.cs" />
-    <Compile Include="ObjectCacheSimple.cs" />
-    <Compile Include="ObjectMerge.cs" />
-    <Compile Include="ObjectChangeReplay.cs" />
-    <Compile Include="ObjectFieldMap.cs" />
-    <Compile Include="ObjectChangeHelper.cs" />
-    <Compile Include="ObjectExtensions.cs" />
-    <Compile Include="PipelineThread.cs" />
-    <Compile Include="RamInfo.cs" />
-    <Compile Include="RateOfChange.cs" />
-    <Compile Include="RollingAverage.cs" />
-    <Compile Include="SimpleHttp\Helpers\AllowedConnectionTypes.cs" />
-    <Compile Include="SimpleHttp\Helpers\CompressionMethod.cs" />
-    <Compile Include="SimpleHttp\Helpers\Cookies.cs" />
-    <Compile Include="SimpleHttp\Helpers\SimpleHttpRequest.cs" />
-    <Compile Include="SimpleHttp\Helpers\SimpleHttpExtensions.cs" />
-    <Compile Include="SimpleHttp\Helpers\HttpMethods.cs" />
-    <Compile Include="SimpleHttp\Helpers\SimpleHttpLogger.cs" />
-    <Compile Include="SimpleHttp\Helpers\SimpleHttpResponse.cs" />
-    <Compile Include="SimpleHttp\Helpers\StaticFileOptions.cs" />
-    <Compile Include="SimpleHttp\Streams\GlobalThrottledStream.cs" />
-    <Compile Include="SimpleHttp\Streams\ReadableChunkedTransferEncodingStream.cs" />
-    <Compile Include="SimpleHttp\Streams\WritableChunkedTransferEncodingStream.cs" />
-    <Compile Include="SimpleHttp\TLS\CertificateSelectors\ReloadingCertificateSelector.cs" />
-    <Compile Include="SimpleHttp\TLS\CertificateStoreUpdater.cs" />
-    <Compile Include="SimpleHttp\TLS\ITlsCipherSuiteSet.cs" />
-    <Compile Include="SimpleHttp\TLS\TlsNegotiate.cs" />
-    <Compile Include="SimpleHttp\WebSockets\WebSocketState.cs" />
-    <Compile Include="TaskHelper.cs" />
-    <Compile Include="TemporaryDirectory.cs" />
-    <Compile Include="Throttle.cs" />
-    <Compile Include="DescriptionAttribute.cs" />
-    <Compile Include="DnsHelper.cs" />
-    <Compile Include="EConsole.cs" />
-    <Compile Include="Encryption.cs" />
-    <Compile Include="EnumHelper.cs" />
-    <Compile Include="FileUtil.cs" />
-    <Compile Include="Forms\MultiSelect\EditMultiSelect.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Forms\MultiSelect\EditMultiSelect.Designer.cs">
-      <DependentUpon>EditMultiSelect.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Forms\MultiSelect\MultiSelectCompact.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
-    <Compile Include="Forms\MultiSelect\MultiSelectCompact.Designer.cs">
-      <DependentUpon>MultiSelectCompact.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Forms\MultiSelect\MultiSelectListItem.cs" />
-    <Compile Include="Forms\PasswordDialog.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Forms\PasswordDialog.Designer.cs">
-      <DependentUpon>PasswordDialog.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Forms\InputDialog.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Forms\InputDialog.Designer.cs">
-      <DependentUpon>InputDialog.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Forms\MultiSelect\UserControlBase.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
-    <Compile Include="ImageFile.cs" />
-    <Compile Include="IntervalSleeper.cs" />
-    <Compile Include="IO\BasicDataStream.cs" />
-    <Compile Include="IPAddressRange.cs" />
-    <Compile Include="MVC\ClientException.cs" />
-    <Compile Include="MVC\Json.cs" />
-    <Compile Include="NativeWin\Admin.cs" />
-    <Compile Include="NativeWin\Audio.cs" />
-    <Compile Include="NativeWin\AudioManager.cs" />
-    <Compile Include="NativeWin\Impersonator.cs" />
-    <Compile Include="NativeWin\KeyboardHook.cs" />
-    <Compile Include="NativeWin\Mouse.cs" />
-    <Compile Include="ObjectCache.cs" />
-    <Compile Include="ObjectSize.cs" />
-    <Compile Include="PasswordReset\AccountInfo.cs" />
-    <Compile Include="PasswordReset\Implementations\ExamplePasswordReset.cs" />
-    <Compile Include="PasswordReset\PasswordResetRequest.cs" />
-    <Compile Include="PasswordReset\SecureToken.cs" />
-    <Compile Include="PasswordReset\StatelessPasswordResetBase.cs" />
-    <Compile Include="Robust.cs" />
-    <Compile Include="SevenZip.cs" />
-    <Compile Include="SignatureFactory.cs" />
-    <Compile Include="SimpleHttp\Client\ProxyClient.cs" />
-    <Compile Include="SimpleHttp\Client\ProxyHeaderBehavior.cs" />
-    <Compile Include="SimpleHttp\Client\ProxyOptions.cs" />
-    <Compile Include="SimpleHttp\Client\ProxyResult.cs" />
-    <Compile Include="SimpleHttp\Helpers\HttpHeaderCollection.cs" />
-    <Compile Include="SimpleHttp\TLS\CertificateSelectors\ICertificateSelector.cs" />
-    <Compile Include="SimpleHttp\TLS\CertificateSelectors\ServerNameCertificateSelector.cs" />
-    <Compile Include="SimpleHttp\TLS\CertificateSelectors\SelfSignedCertificateSelector.cs" />
-    <Compile Include="SimpleHttp\TLS\CertificateSelectors\SimpleCertificateSelector.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\Enums\ContentType.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\FragmentStream.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\DefaultExtension.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\Extension.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\Enums\ExtensionType.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\ApplicationLayerProtocolNegotiationExtension.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\Extensions\ServerNameExtension.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeMessage.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\Enums\HandshakeType.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\HandshakeBody.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\ProtocolVersion.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\HandshakeBodies\ClientHello.cs" />
-    <Compile Include="SimpleHttp\TLS\Implementation\TLSPlaintext.cs" />
-    <Compile Include="SimpleHttp\TLS\TlsServerNameReader.cs" />
-    <Compile Include="IO\UnreadableStream.cs" />
-    <Compile Include="SimpleHttp\WebDevProxies\ViteProxy.cs" />
-    <Compile Include="SimpleHttp\WebSockets\WebSocketClient.cs" />
-    <Compile Include="StackHelper.cs" />
-    <Compile Include="StringCache.cs" />
-    <Compile Include="StringParser.cs" />
-    <Compile Include="StringSorting.cs" />
-    <Compile Include="TempDir.cs" />
-    <Compile Include="TokenBucketDictionary.cs" />
-    <Compile Include="TokenBucket.cs" />
-    <Compile Include="WaitingQueue.cs" />
-    <Compile Include="CachedObject.cs" />
-    <Compile Include="Compression.cs" />
-    <Compile Include="CSV.cs" />
-    <Compile Include="AppInit.cs" />
-    <Compile Include="Forms\TrayIconApplicationContext.cs" />
-    <Compile Include="IPUtil.cs" />
-    <Compile Include="MVC\ActionResult.cs" />
-    <Compile Include="MVC\ControllerInfo.cs" />
-    <Compile Include="MVC\ExceptionHtmlResult.cs" />
-    <Compile Include="MVC\MVCGlobals.cs" />
-    <Compile Include="MVC\MVCMain.cs" />
-    <Compile Include="MVC\Controller.cs" />
-    <Compile Include="AutoDisposeHandle.cs" />
-    <Compile Include="BasicEventTimer.cs" />
-    <Compile Include="BPMath.cs" />
-    <Compile Include="BPMisc.cs" />
-    <Compile Include="ByteUtil.cs" />
-    <Compile Include="ConsoleAppHelper.cs" />
-    <Compile Include="ConsoleKeyHelper.cs" />
-    <Compile Include="AdvWebClient.cs" />
-    <Compile Include="Extensions.cs" />
-    <Compile Include="Forms\SelfCenteredForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Forms\ServiceManager.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Forms\ServiceManager.Designer.cs">
-      <DependentUpon>ServiceManager.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Globals.cs" />
-    <Compile Include="Hash.cs" />
-    <Compile Include="Hex.cs" />
-    <Compile Include="IO\IDataStream.cs" />
-    <Compile Include="IO\MemoryDataStream.cs" />
-    <Compile Include="Linux\InputListener\AllKeyboardListener.cs" />
-    <Compile Include="Linux\KeyCode.cs" />
-    <Compile Include="Linux\InputListener\KeyEventType.cs" />
-    <Compile Include="Linux\InputListener\LinuxInputEvent.cs" />
-    <Compile Include="Linux\InputListener\LinuxInputEventArgs.cs" />
-    <Compile Include="Linux\InputListener\LinuxInputEventType.cs" />
-    <Compile Include="Linux\InputListener\LinuxInputHelper.cs" />
-    <Compile Include="Linux\InputListener\LinuxInputListener.cs" />
-    <Compile Include="Logger.cs" />
-    <Compile Include="LogReader.cs" />
-    <Compile Include="MVC\RequestContext.cs" />
-    <Compile Include="MVC\ViewBagContainer.cs" />
-    <Compile Include="MVC\ViewDataContainer.cs" />
-    <Compile Include="MVC\ViewResult.cs" />
-    <Compile Include="NativeWin\LastInput.cs" />
-    <Compile Include="NativeWin\SingleInstance.cs" />
-    <Compile Include="NativeWin\WinConsole.cs" />
-    <Compile Include="NativeWin\NativeMethods.cs" />
-    <Compile Include="NativeWin\PathCheck.cs" />
-    <Compile Include="NativeWin\Win32Helper.cs" />
-    <Compile Include="NumberUtil.cs" />
-    <Compile Include="ObjectPool.cs" />
-    <Compile Include="Platform.cs" />
-    <Compile Include="PrivateAccessor.cs" />
-    <Compile Include="NativeWin\ProcessHelper.cs" />
-    <Compile Include="ProcessRunner.cs" />
-    <Compile Include="RegistryUtil.cs" />
-    <Compile Include="SecureRandom.cs" />
-    <Compile Include="SerializableObjectBase.cs" />
-    <Compile Include="SetTimeout.cs" />
-    <Compile Include="SimpleHttp\Crypto\CertProperties.cs" />
-    <Compile Include="SimpleHttp\Crypto\CryptContext.cs" />
-    <Compile Include="SimpleHttp\Crypto\CryptKey.cs" />
-    <Compile Include="SimpleHttp\Crypto\DisposableObject.cs" />
-    <Compile Include="SimpleHttp\Crypto\KeyExchangeKey.cs" />
-    <Compile Include="SimpleHttp\Crypto\KeyType.cs" />
-    <Compile Include="SimpleHttp\Crypto\SignatureKey.cs" />
-    <Compile Include="SimpleHttp\Crypto\Win32ErrorHelper.cs" />
-    <Compile Include="SimpleHttp\Crypto\Win32Native.cs" />
-    <Compile Include="SimpleHttp\Helpers\HttpCompressionHelper.cs" />
-    <Compile Include="SimpleHttp\IProcessor.cs" />
-    <Compile Include="SimpleHttp\Helpers\NetworkAddressInfo.cs" />
-    <Compile Include="SimpleHttp\Client\ProxyDataBuffer.cs" />
-    <Compile Include="SimpleHttp\WebDevProxies\WebpackProxy.cs" />
-    <Compile Include="SimpleHttp\WebSockets\WebSocket.cs" />
-    <Compile Include="SimpleHttp\WebSockets\WebSocketCloseCode.cs" />
-    <Compile Include="SimpleHttp\WebSockets\WebSocketFrame.cs" />
-    <Compile Include="SimpleHttp\WebSockets\WebSocketFrameHeader.cs" />
-    <Compile Include="SimpleHttp\WebSockets\WebSocketOpcode.cs" />
-    <Compile Include="SimpleHttp\WebSockets\WebSocketException.cs" />
-    <Compile Include="SimpleThreadPool.cs" />
-    <Compile Include="SimpleHttp\Helpers\Mime.cs" />
-    <Compile Include="SimpleHttp\SimpleHttpServer.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="StaticRandom.cs" />
-    <Compile Include="StringUtil.cs" />
-    <Compile Include="TimeUtil.cs" />
-    <Compile Include="Try.cs" />
-    <Compile Include="UdpBroadcaster.cs" />
-    <Compile Include="WaitProgressivelyLonger.cs" />
-    <Compile Include="WebRequestUtility.cs" />
-    <Compile Include="xxHash.cs" />
-    <Compile Include="Zip.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Forms\MovableOverlay.resx">
-      <DependentUpon>MovableOverlay.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Forms\MultiSelect\EditMultiSelect.resx">
-      <DependentUpon>EditMultiSelect.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Forms\MultiSelect\MultiSelectCompact.resx">
-      <DependentUpon>MultiSelectCompact.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Forms\PasswordDialog.resx">
-      <DependentUpon>PasswordDialog.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Forms\ServiceManager.resx">
-      <DependentUpon>ServiceManager.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Forms\InputDialog.resx">
-      <DependentUpon>InputDialog.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Forms\TrayIconAppHiddenForm.resx">
-      <DependentUpon>TrayIconAppHiddenForm.cs</DependentUpon>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup />
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFrameworks>net45;net6.0-windows;net6.0</TargetFrameworks>
+		<Nullable>disable</Nullable>
+		<BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+		<Configurations>Debug;Release</Configurations>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<RootNamespace>BPUtil</RootNamespace>
+	</PropertyGroup>
+
+	
+	<!-- .NET Framework -->
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net45'">
+		<UseWindowsForms>true</UseWindowsForms>
+		<DefineConstants>$(DefineConstants);NETFRAMEWORK</DefineConstants>
+	</PropertyGroup>
+	
+	<!-- .NET 6 Windows-specific -->
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net6.0-windows'">
+		<UseWindowsForms>true</UseWindowsForms>
+		<DefineConstants>$(DefineConstants);NET6_0_WIN</DefineConstants>
+	</PropertyGroup>
+
+	<!-- .NET 6 Linux/non-Windows -->
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net6.0'">
+		<UseWindowsForms>false</UseWindowsForms>
+		<DefineConstants>$(DefineConstants);NET6_0_LINUX</DefineConstants>
+	</PropertyGroup>
+
+
+	<!-- Debug/Release -->
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<DebugType>embedded</DebugType>
+		<NoWarn>1701;1702;CS1591</NoWarn>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<DebugType>embedded</DebugType>
+		<NoWarn>1701;1702;CS1591</NoWarn>
+	</PropertyGroup>
+
+	
+	<!-- File exclusions -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+		<Compile Remove="Forms\**" />
+		<Compile Remove="NativeWin\**" />
+		<Compile Remove="PasswordReset\**" />
+		<EmbeddedResource Remove="Forms\**" />
+		<EmbeddedResource Remove="NativeWin\**" />
+		<EmbeddedResource Remove="PasswordReset\**" />
+		<None Remove="Forms\**" />
+		<None Remove="NativeWin\**" />
+		<None Remove="PasswordReset\**" />
+	</ItemGroup>
+	
+
+	<!-- Package references -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'net45'">
+		<Reference Include="Microsoft.CSharp" />
+		<Reference Include="System.Data.DataSetExtensions" />
+		<Reference Include="System.Design" />
+		<Reference Include="System.IO.Compression" />
+		<Reference Include="System.Management" />
+		<Reference Include="System.Net.Http" />
+		<Reference Include="System.Security" />
+		<Reference Include="System.ServiceProcess" />
+		<Reference Include="System.Web" />
+	</ItemGroup>
+	
+	<ItemGroup Condition="'$(TargetFramework)' != 'net45'">
+		<PackageReference Include="System.Management" Version="7.0.2" />
+		<PackageReference Include="System.ServiceProcess.ServiceController" Version="7.0.1" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+		<PackageReference Include="System.Drawing.Common" Version="7.0.0" />
+		<PackageReference Include="System.Text.Encoding.CodePages" Version="7.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Properties\**" />
+	  <EmbeddedResource Remove="Properties\**" />
+	  <None Remove="Properties\**" />
+	</ItemGroup>
 </Project>

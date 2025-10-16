@@ -97,13 +97,13 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\BPUtil\BPUtil.csproj">
-      <Project>{a4981d8d-debf-4b34-b9ce-ff25520a02b7}</Project>
-      <Name>BPUtil</Name>
-    </ProjectReference>
+    <Folder Include="MVC\" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="MVC\" />
+    <ProjectReference Include="..\BPUtil\BPUtil.csproj">
+      <Project>{ba014d8d-e1b3-cf10-5d12-419b6960eb72}</Project>
+      <Name>BPUtil</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
