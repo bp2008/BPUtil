@@ -65,9 +65,19 @@ namespace BPUtil.MVC
 		{
 			ResponseHeaders.Add(new KeyValuePair<string, string>(key, value));
 		}
-
+		/// <summary>
+		/// Constructs a RequestContext.
+		/// </summary>
+		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
+		/// <param name="requestPath">(Optional) The path requested by the client.  If this path starts with '/', the '/' will be removed automatically (if there are multiple '/' at the start, only one is removed). (if null, defaults to httpProcessor.Request.Url.PathAndQuery)</param>
+		/// <exception cref="ArgumentNullException"></exception>
 		public RequestContext(HttpProcessor httpProcessor, string requestPath)
 		{
+			if (httpProcessor == null)
+				throw new ArgumentNullException(nameof(httpProcessor));
+
+			EnsureRequestPath(httpProcessor, ref requestPath);
+
 			this.httpProcessor = httpProcessor;
 			this.Server = httpProcessor.srv;
 			this.OriginalRequestPath = requestPath;
@@ -106,6 +116,18 @@ namespace BPUtil.MVC
 		{
 			ActionArgs = new string[] { ActionName }.Union(ActionArgs).ToArray();
 			ActionName = "Index";
+		}
+		/// <summary>
+		/// Assigns the default requestPath if necessary, and guarantees it does not start with a '/' character.
+		/// </summary>
+		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
+		/// <param name="requestPath">(Optional) The path requested by the client.  If this path starts with '/', the '/' will be removed automatically (if there are multiple '/' at the start, only one is removed). (if null, defaults to httpProcessor.Request.Url.PathAndQuery)</param>
+		private static void EnsureRequestPath(HttpProcessor httpProcessor, ref string requestPath)
+		{
+			if (requestPath == null)
+				requestPath = httpProcessor.Request.Url.PathAndQuery;
+			if (requestPath.StartsWith("/"))
+				requestPath = requestPath.Substring(1);
 		}
 	}
 }

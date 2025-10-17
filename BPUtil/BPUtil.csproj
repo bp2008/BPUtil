@@ -9,13 +9,14 @@
 		<RootNamespace>BPUtil</RootNamespace>
 	</PropertyGroup>
 
-	
+
 	<!-- .NET Framework -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net45'">
 		<UseWindowsForms>true</UseWindowsForms>
 		<DefineConstants>$(DefineConstants);NETFRAMEWORK</DefineConstants>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 	</PropertyGroup>
-	
+
 	<!-- .NET 6 Windows-specific -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net6.0-windows'">
 		<UseWindowsForms>true</UseWindowsForms>
@@ -31,15 +32,13 @@
 	<!-- .NET 8 Windows-specific -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
 		<UseWindowsForms>true</UseWindowsForms>
-		<DefineConstants>$(DefineConstants);NET6_PLUS_WIN</DefineConstants>
-		<DefineConstants>$(DefineConstants);NET8_PLUS_WIN</DefineConstants>
+		<DefineConstants>$(DefineConstants);NET6_PLUS_WIN;NET8_PLUS_WIN</DefineConstants>
 	</PropertyGroup>
 
 	<!-- .NET 8 Linux/non-Windows -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
 		<UseWindowsForms>false</UseWindowsForms>
-		<DefineConstants>$(DefineConstants);NET6_PLUS_LINUX</DefineConstants>
-		<DefineConstants>$(DefineConstants);NET8_PLUS_LINUX</DefineConstants>
+		<DefineConstants>$(DefineConstants);NET6_PLUS_LINUX;NET8_PLUS_LINUX</DefineConstants>
 	</PropertyGroup>
 
 
@@ -54,7 +53,7 @@
 		<NoWarn>1701;1702;CS1591</NoWarn>
 	</PropertyGroup>
 
-	
+
 	<!-- File exclusions -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0' or '$(TargetFramework)' == 'net8.0'">
 		<Compile Remove="Forms\**" />
@@ -67,7 +66,7 @@
 		<None Remove="NativeWin\**" />
 		<None Remove="PasswordReset\**" />
 	</ItemGroup>
-	
+
 
 	<!-- Package references -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net45'">
@@ -81,7 +80,7 @@
 		<Reference Include="System.ServiceProcess" />
 		<Reference Include="System.Web" />
 	</ItemGroup>
-	
+
 	<ItemGroup Condition="'$(TargetFramework)' != 'net45'">
 		<PackageReference Include="System.Management" Version="7.0.2" />
 		<PackageReference Include="System.ServiceProcess.ServiceController" Version="7.0.1" />
@@ -93,8 +92,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Compile Remove="Properties\**" />
-	  <EmbeddedResource Remove="Properties\**" />
-	  <None Remove="Properties\**" />
+		<Compile Remove="Properties\**" />
+		<EmbeddedResource Remove="Properties\**" />
+		<None Remove="Properties\**" />
 	</ItemGroup>
 </Project>

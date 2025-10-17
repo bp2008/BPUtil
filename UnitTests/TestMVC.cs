@@ -21,8 +21,7 @@ namespace UnitTests
 		}
 		private string ProcessView(string input, ViewDataContainer ViewData)
 		{
-			ViewResult vr = new ViewResult();
-			vr.ProcessView(input, ViewData);
+			ViewResult vr = ViewResult.FromText(input, ViewData);
 			return Encoding.UTF8.GetString(vr.Body);
 		}
 

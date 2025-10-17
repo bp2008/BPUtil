@@ -65,10 +65,6 @@ namespace BPUtil.MVC
 		{
 			if (httpProcessor.Response.ResponseHeaderWritten)
 				throw new Exception("MVCMain.ProcessRequest was called with an HttpProcessor that had already written a response.");
-			if (requestPath == null)
-				requestPath = httpProcessor.Request.Url.PathAndQuery;
-			if (requestPath.StartsWith("/"))
-				requestPath = requestPath.Substring(1);
 			RequestContext context = new RequestContext(httpProcessor, requestPath);
 			if (!controllerInfoMap.TryGetValue(context.ControllerName.ToUpper(), out ControllerInfo controllerInfo))
 				return false;
@@ -83,7 +79,7 @@ namespace BPUtil.MVC
 			{
 				if (HttpProcessor.IsOrdinaryDisconnectException(ex))
 					ex.Rethrow();
-				actionResult = GenerateErrorPage(context, ex);
+				actionResult = GenerateErrorPage(context, ex, ErrorHandler);
 			}
 
 			if (httpProcessor.Response.ResponseHeaderWritten) // Controller methods may handle their own response, in which case we will ignore the result.
@@ -91,6 +87,38 @@ namespace BPUtil.MVC
 
 			if (actionResult == null)
 				return false; // This could mean the method was not found, or that it decided to not provide a response.
+
+			RespondWithActionResult(httpProcessor, actionResult, context, ErrorHandler);
+			return true;
+		}
+
+		/// <summary>
+		/// <para>Resets the HTTP response and configures it to write the specified <see cref="ActionResult"/>.  This method allows writing an <see cref="ActionResult"/> without using a <see cref="Controller"/>.</para>
+		/// <para>After calling, you can still configure additional response headers.</para>
+		/// <para>This method uses the configured <see cref="ErrorHandler"/> if there is an unexpected error generating the response body.</para>
+		/// <para>See also the <c>p.Response.RespondWithActionResult(...)</c> method.</para>
+		/// </summary>
+		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
+		/// <param name="actionResult">The ActionResult to deliver in the HTTP response.</param>
+		public void WriteActionResult(HttpProcessor httpProcessor, ActionResult actionResult)
+		{
+			RespondWithActionResult(httpProcessor, actionResult, null, ErrorHandler);
+		}
+		/// <summary>
+		/// Configures the HTTP response to deliver the specified ActionResult with optional additional response headers from the context.
+		/// </summary>
+		/// <param name="httpProcessor">The HttpProcessor handling this request.</param>
+		/// <param name="actionResult">The ActionResult to deliver in the HTTP response.</param>
+		/// <param name="context">Request context which may contain a collection of additional response headers.  If null, one will be generated automatically.</param>
+		/// <param name="ErrorHandler">(Optional) An error handling function which will be called if the response body creation yields an exception that is not a <see cref="ClientException"/>. Can be null if unavailable.</param>
+		internal static void RespondWithActionResult(HttpProcessor httpProcessor, ActionResult actionResult, RequestContext context, Action<RequestContext, Exception> ErrorHandler)
+		{
+			if (httpProcessor == null)
+				throw new ArgumentNullException(nameof(httpProcessor));
+			if (actionResult == null)
+				throw new ArgumentNullException(nameof(actionResult));
+			if (context == null)
+				context = new RequestContext(httpProcessor, null);
 
 			byte[] body = null;
 
@@ -100,7 +128,7 @@ namespace BPUtil.MVC
 			}
 			catch (Exception ex)
 			{
-				actionResult = GenerateErrorPage(context, ex);
+				actionResult = GenerateErrorPage(context, ex, ErrorHandler);
 				body = actionResult.Body;
 			}
 
@@ -144,7 +172,6 @@ namespace BPUtil.MVC
 				httpProcessor.Response.Set(actionResult.ContentType, body.Length, actionResult.ResponseStatus, additionalHeaders);
 				httpProcessor.Response.BodyContent = body;
 			}
-			return true;
 		}
 
 		/// <summary>
@@ -161,10 +188,11 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// Returns an error page showing details of an exception that was thrown.
 		/// </summary>
-		/// <param name="context"></param>
-		/// <param name="ex"></param>
+		/// <param name="context">Request context which may contain a collection of additional response headers.</param>
+		/// <param name="ex">The Exception which occurred.</param>
+		/// <param name="ErrorHandler">An error handling function which will be called if the exception is not a <see cref="ClientException"/>. Can be null if unavailable.</param>
 		/// <returns></returns>
-		private ActionResult GenerateErrorPage(RequestContext context, Exception ex)
+		private static ActionResult GenerateErrorPage(RequestContext context, Exception ex, Action<RequestContext, Exception> ErrorHandler)
 		{
 			if (!(ex is ClientException) && ErrorHandler != null)
 			{

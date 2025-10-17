@@ -26,59 +26,69 @@ namespace BPUtil.MVC
 		/// <summary>
 		/// Constructs an empty ViewResult. You should call ProcessView on this instance.
 		/// </summary>
-		public ViewResult() : base(null) { }
+		protected ViewResult() : base(null) { }
 		/// <summary>
 		/// Contructs a ViewResult from the specified file.
 		/// </summary>
-		/// <param name="filePath">Path to a text file containing the view content. If this is a relative path within the current diretory, and the debugger is attached and this is a debug build and the project directory also contains the relative path, then the file is loaded from the project source directory instead of the bin directory.</param>
+		/// <param name="filePath">
+		/// <para>Path to a text file containing the view content.</para>
+		/// <para>SPECIAL CASE TO SUPPORT EASIER DEVELOPMENT:</para>
+		/// <para>* If a debugger is attached, and <c>filePath</c> is a relative path that resolves to a descendant of the current working directory, then we'll try to resolve relative to the project's source directory.  If this does not find a file, we'll fall back to normal path resolution (relative to the current working directory).</para>
+		/// </param>
 		/// <param name="ViewData">A ViewDataContainer containing values for expressions found within the view.</param>
 		public ViewResult(string filePath, ViewDataContainer ViewData) : base(null)
 		{
 			if (System.Diagnostics.Debugger.IsAttached)
 			{
-				FileInfo fi = new FileInfo(filePath);
 				string cwd = Directory.GetCurrentDirectory();
-				if (fi.FullName.StartsWith(cwd))
+				string absolutePath = FileUtil.GetNonEscapingAbsolutePath(cwd, filePath);
+				if (absolutePath != null)
 				{
-					DirectoryInfo di = new DirectoryInfo(cwd);
-					if (di.Name == "Debug")
+					string relativePath = FileUtil.RelativePath(cwd, absolutePath);
+					string binFolderPath = FileUtil.FindAncestorDirectory(cwd, "bin");
+					if (binFolderPath != null)
 					{
-						di = di.Parent;
-						if (di?.Name == "x86" || di?.Name == "x64")
-							di = di.Parent;
-						if (di?.Name == "bin")
-							di = di.Parent;
+						string projectDir = new DirectoryInfo(binFolderPath).Parent.FullName;
+						string sourcePath = Path.Combine(projectDir, relativePath);
+						FileInfo sourceFile = new FileInfo(sourcePath);
+						if (sourceFile.Exists && sourceFile.FullName.StartsWith(projectDir))
+							filePath = sourceFile.FullName;
 					}
-					string debugPath = Path.Combine(di.FullName, filePath);
-					if (File.Exists(debugPath))
-						filePath = debugPath;
 				}
 			}
 			if (File.Exists(filePath))
 			{
-				string text = File.ReadAllText(filePath);
-				ProcessView(text, ViewData);
+				string viewHtml = File.ReadAllText(filePath, ByteUtil.Utf8NoBOM);
+				ProcessView(viewHtml, ViewData);
 			}
 			else
 			{
 				ResponseStatus = "404 Not Found";
 			}
 		}
-		/// <summary>
-		/// Processes the specified text as a view and sets this result body. Do not call this unless the constructor you used says to do so.
-		/// </summary>
-		/// <param name="viewText">The view's text.</param>
-		/// <param name="ViewData">A ViewDataContainer containing values for expressions found within the view.</param>
-		/// <returns></returns>
-		public void ProcessView(string viewText, ViewDataContainer ViewData)
+		/// <param name="viewHtml">The view's HTML markup.</param>
+		/// <param name="ViewData">(Optional) A ViewDataContainer containing values for expressions found within the view.</param>
+		public static ViewResult FromText(string viewHtml, ViewDataContainer ViewData = null)
 		{
+			return new ViewResult().ProcessView(viewHtml, ViewData);
+		}
+		/// <summary>
+		/// Processes the specified text as a view and sets this result body. Do not call this unless the constructor you used says to do so in its documentation.
+		/// </summary>
+		/// <param name="viewHtml">The view's HTML markup.</param>
+		/// <param name="ViewData">A ViewDataContainer containing values for expressions found within the view.</param>
+		/// <returns>A reference to this ViewResult.</returns>
+		protected ViewResult ProcessView(string viewHtml, ViewDataContainer ViewData)
+		{
+			if (viewHtml == null)
+				throw new ArgumentNullException(nameof(viewHtml));
 			if (ViewData != null)
 			{
-				StringBuilder sb = new StringBuilder(viewText.Length);
+				StringBuilder sb = new StringBuilder(viewHtml.Length);
 				StringBuilder expressionBuffer = new StringBuilder();
 				ViewParseState state = ViewParseState.HTML;
 				bool expressionStartedWithParenthesis = false;
-				foreach (char c in viewText)
+				foreach (char c in viewHtml)
 				{
 					if (state == ViewParseState.HTML)
 					{
@@ -134,9 +144,10 @@ namespace BPUtil.MVC
 				}
 				if (state == ViewParseState.Expression)
 					sb.Append(ProcessExpression(expressionBuffer, ViewData));
-				viewText = sb.ToString();
+				viewHtml = sb.ToString();
 			}
-			BodyStr = viewText;
+			BodyStr = viewHtml;
+			return this;
 		}
 
 		/// <summary>

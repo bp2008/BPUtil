@@ -1,4 +1,5 @@
 ﻿using BPUtil.IO;
+using BPUtil.MVC;
 using BPUtil.SimpleHttp.Helpers;
 using System;
 using System.Collections.Generic;
@@ -241,7 +242,7 @@ namespace BPUtil.SimpleHttp
 		#endregion
 		#region Static File
 		/// <summary>
-		/// <para>Synchronously writes a static file response with built-in caching support.</para>
+		/// <para>Resets the response and synchronously writes a static file response with built-in caching support.</para>
 		/// <para>This completes the response.</para>
 		/// </summary>
 		/// <param name="filePath">Path to the file on disk.</param>
@@ -256,7 +257,7 @@ namespace BPUtil.SimpleHttp
 		}
 
 		/// <summary>
-		/// <para>Asynchronously writes a static file response with built-in caching support.</para>
+		/// <para>Resets the response and asynchronously writes a static file response with built-in caching support.</para>
 		/// <para>This completes the response.</para>
 		/// </summary>
 		/// <param name="filePath">Path to the file on disk.</param>
@@ -746,8 +747,7 @@ namespace BPUtil.SimpleHttp
 			FullResponseBytes(ByteUtil.Utf8NoBOM.GetBytes(body), contentType, responseCode);
 		}
 		/// <summary>
-		/// <para>Configures the specified response with the Content-Length header set appropriately.</para>
-		/// <para>Clears the Headers collection and sets ContentLength and ContentType.</para>
+		/// <para>Resets the response and configures the response to deliver the specified payload.</para>
 		/// <para>Does not perform any I/O.  The response will be written later.</para>
 		/// </summary>
 		/// <param name="body">Data to send in the response.  Must be non-null.</param>
@@ -833,7 +833,18 @@ namespace BPUtil.SimpleHttp
 			ResponseHeaderWritten = true;
 		}
 		#endregion
-
+		#region MVC ActionResult
+		/// <summary>
+		/// <para>Resets the response and configures it to write the specified <see cref="ActionResult"/>.  This method allows writing an <see cref="ActionResult"/> without using an <see cref="MVCMain"/> or <see cref="Controller"/>.</para>
+		/// <para>Does not perform any I/O.  The response will be written later.</para>
+		/// </summary>
+		/// <param name="actionResult">The <see cref="ActionResult"/> to deliver in the HTTP response.</param>
+		/// <param name="ErrorHandler">(Optional) An error handling function which will be called if the response body creation yields an exception that is not a <see cref="ClientException"/>. Can be null if unavailable.</param>
+		public void MVCActionResult(ActionResult actionResult, Action<RequestContext, Exception> ErrorHandler)
+		{
+			MVCMain.RespondWithActionResult(p, actionResult, null, ErrorHandler);
+		}
+		#endregion
 		#endregion
 		#region Get Response Stream
 		/// <summary>

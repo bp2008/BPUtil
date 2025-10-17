@@ -220,14 +220,14 @@ namespace BPUtil
 		/// <para>Inputted paths may use either backslash (\) or forward slash (/), but the outputted path will always use forward slash (/).</para>
 		/// <para>Paths are treated as case-sensitive, so, e.g. "C:/Folder" is not equivalent to "c:/Folder" or "C:/folder".</para>
 		/// <para>Examples:</para>
-		/// <para>RelativePath("C:/Folder", "C:/Folder/File.txt") -&gt; "File.txt"</para>
-		/// <para>RelativePath("C:/Folder/", "C:/Folder/File.txt") -&gt; "File.txt"</para>
-		/// <para>RelativePath("C:/Folder", "C:/Folder/Subfolder/File.txt") -&gt; "Subfolder/File.txt"</para>
-		/// <para>RelativePath("C:/Folder", "C:/File.txt") -&gt; "../File.txt"</para>
-		/// <para>RelativePath("C:/Folder", "File.txt") -&gt; "File.txt"</para>
+		/// <para><c>RelativePath("C:/Folder", "C:/Folder/File.txt")</c> -&gt; <c>"File.txt"</c></para>
+		/// <para><c>RelativePath("C:/Folder/", "C:/Folder/File.txt")</c> -&gt; <c>"File.txt"</c></para>
+		/// <para><c>RelativePath("C:/Folder", "C:/Folder/Subfolder/File.txt")</c> -&gt; <c>"Subfolder/File.txt"</c></para>
+		/// <para><c>RelativePath("C:/Folder", "C:/File.txt")</c> throws Exception</para>
+		/// <para><c>RelativePath("C:/Folder", "File.txt")</c> throws Exception</para>
 		/// </summary>
-		/// <param name="rootPath">Path of a folder which shall be the base of the relative path produced by this function. E.g. "C:/Folder".</param>
-		/// <param name="targetPath">The path that defines the target file or folder.  Must begin with <paramref name="rootPath"/>.  (e.g. "C:/Folder/File.txt").</param>
+		/// <param name="rootPath">Absolute path of a folder which shall be the anchor of the relative path produced by this function. E.g. "C:/Folder".</param>
+		/// <param name="targetPath">Absolute path that defines the target file or folder.  Must begin with <paramref name="rootPath"/>.  (e.g. "C:/Folder/File.txt").</param>
 		/// <returns>The target path relative to the root path.</returns>
 		/// <exception cref="ArgumentNullException">If an argument is null.</exception>
 		/// <exception cref="ArgumentException">If an argument does not represent a valid URI.</exception>
@@ -239,9 +239,14 @@ namespace BPUtil
 			if (string.IsNullOrWhiteSpace(targetPath))
 				throw new ArgumentException("Target path is null or empty", nameof(targetPath));
 
-			rootPath = rootPath.Trim().Replace('\\', '/');
+			if (!Path.IsPathRooted(rootPath))
+				throw new ArgumentException("Root path is not an absolute path", nameof(rootPath));
+			if (!Path.IsPathRooted(targetPath))
+				throw new ArgumentException("Target path is not an absolute path", nameof(targetPath));
 
-			targetPath = targetPath.Trim().Replace('\\', '/');
+			rootPath = rootPath.TrimStart().Replace('\\', '/');
+
+			targetPath = targetPath.TrimEnd().Replace('\\', '/');
 
 			if (!targetPath.StartsWith(rootPath))
 				throw new ArgumentException("Target path did not begin with Root path.");
@@ -249,6 +254,7 @@ namespace BPUtil
 			targetPath = targetPath.Substring(rootPath.Length);
 			if (targetPath != "")
 			{
+				// There must be at least one slash between rootPath and targetPath, otherwise it could be a case like "C:/Folder" and "C:/FolderSubfolder/File.txt".
 				if (!rootPath.EndsWith("/") && !targetPath.StartsWith("/"))
 					throw new ArgumentException("Target path is not relative to the root path.");
 				if (targetPath.Contains("../"))
@@ -258,15 +264,19 @@ namespace BPUtil
 			return targetPath;
 		}
 		/// <summary>
-		/// <para>Returns the absolute path to the given relative file.</para>
+		/// <para>Returns the absolute path which the given relative path resolves to.</para>
 		/// <para>Inputted paths may use either backslash (\) or forward slash (/), but the outputted path will always use forward slash (/).</para>
 		/// <para>If the inputted paths are invalid or if the relative path escapes from the root directory (e.g. "../file.txt"), null is returned.</para>
 		/// </summary>
 		/// <param name="rootPath">Path of a root directory from which the relative path is evaluated.</param>
-		/// <param name="relativePath">Path to a file or directory which is relative to <paramref name="rootPath"/>.</param>
-		/// <returns></returns>
+		/// <param name="relativePath">Path to a file or directory which is relative to <paramref name="rootPath"/>.  It can also be an absolute path.</param>
+		/// <returns>The absolute path equivalent to the given relative path when evaluated against the current working directory.</returns>
 		public static string GetNonEscapingAbsolutePath(string rootPath, string relativePath)
 		{
+			if (rootPath == null || relativePath == null)
+				return null;
+			if (!Path.IsPathRooted(rootPath))
+				return null;
 			try
 			{
 				DirectoryInfo diRoot = new DirectoryInfo(rootPath);
