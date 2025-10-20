@@ -1335,10 +1335,7 @@ namespace BPUtil.SimpleHttp
 											if (rbuf != null)
 												s.ReceiveBufferSize = rbuf.Value;
 											IProcessor processor = Server.MakeClientProcessor(s, Server, Server.certificateSelector, Binding.AllowedConnectionTypes);
-											if (Server is HttpServer syncServer)
-												syncServer.pool.Enqueue(processor.Process);
-											else
-												_ = processor.ProcessAsync(cancellationToken).ConfigureAwait(false);
+											Server.AcceptClient(processor, cancellationToken);
 										}
 									}
 									catch (OperationCanceledException)
@@ -1416,6 +1413,13 @@ namespace BPUtil.SimpleHttp
 				return "Listener " + Binding.ToString();
 			}
 		}
+		/// <summary>
+		/// <para>When implemented by a derived class, this method is called with each TCP client that connects to the server, after it is allowed by <see cref="IsServerTooBusyToProcessNewConnection(TcpClient)"/>.</para>
+		/// </summary>
+		/// <param name="processor">client processor instance containing a reference to the TcpClient.</param>
+		/// <param name="cancellationToken">A cancellation token which will be cancelled if the server is shutting down. </param>
+		protected abstract void AcceptClient(IProcessor processor, CancellationToken cancellationToken);
+
 		/// <summary>
 		/// <para>If not null, each TCP connection will be assigned this receive buffer size in bytes (default if unassigned is 8192).</para>
 		/// <para>If your application will be recieving large amounts of data on a single connection, it can improve transfer rate by assigning a larger receive buffer.</para>
@@ -1939,7 +1943,8 @@ namespace BPUtil.SimpleHttp
 			return CurrentNumberOfOpenConnections > Math.Max(0, MaxConnections / 2);
 		}
 		/// <summary>
-		/// Each incoming connection to the server is passed to this method.  If the method returns true, an HTTP "503 Service Unavailable" response will be written and the connection will not be processed by an <see cref="HttpProcessor"/>.
+		/// <para>Each incoming connection to the server is passed to this method.</para>
+		/// <para>If the method returns true, an HTTP "503 Service Unavailable" response will be written, an <see cref="HttpProcessor"/> will not be constructed, and the connection will not be sent to the <see cref="AcceptClient(IProcessor, CancellationToken)"/> method.</para>
 		/// </summary>
 		/// <param name="tcpClient">The new connection from a client.</param>
 		/// <returns>True if the connection should be dismissed with an HTTP 503 response.</returns>
@@ -1970,7 +1975,8 @@ namespace BPUtil.SimpleHttp
 		}
 #endif
 		/// <summary>
-		/// Gets or sets maximum number of connections that should be allowed simultaneously.
+		/// <para>Gets or sets the maximum number of connections that should be allowed to be processed simultaneously.</para>
+		/// <para>A minimum of 1 is required.  This property must be overridden and have a value assigned by derived classes.</para>
 		/// </summary>
 		public virtual int MaxConnections { get; set; }
 		/// <summary>
@@ -1988,11 +1994,14 @@ namespace BPUtil.SimpleHttp
 	public abstract class HttpServer : HttpServerBase
 	{
 		/// <summary>
-		/// The thread pool to use for processing client connections.
+		/// <para>The thread pool to use for processing client connections.</para>
+		/// <para>You can edit or replace this thread pool to affect the web server's ability to handle concurrent connections, but it is recommended to just tweak the <see cref="MaxConnections"/> property instead.</para>
 		/// </summary>
 		public SimpleThreadPool pool = new SimpleThreadPool("SimpleHttp.HttpServer", 6, 48, 5000);
 		/// <summary>
-		/// Gets or sets maximum number of connections that should be allowed simultaneously. A minimum of 1 is required.
+		/// <para>Gets or sets the maximum number of connections that should be allowed to be processed simultaneously.</para>
+		/// <para>A minimum of 1 is required.  Up to [MaxConnections] beyond this limit can be queued for delayed processing, at the cost of response time.</para>
+		/// <para>The default for HttpServer is to always match <c>pool.MaxThreads</c>, which defaults to 48.</para>
 		/// </summary>
 		public override int MaxConnections
 		{
@@ -2038,13 +2047,25 @@ namespace BPUtil.SimpleHttp
 				p.Response.Simple("501 Not Implemented");
 		}
 		/// <summary>
-		/// Each incoming connection to the server is passed to this method.  If the method returns true, an HTTP "503 Service Unavailable" response will be written and the connection will not be processed by an <see cref="HttpProcessor"/>.
+		/// <para>Each incoming connection to the server is passed to this method.</para>
+		/// <para>If the method returns true, an HTTP "503 Service Unavailable" response will be written, an <see cref="HttpProcessor"/> will not be constructed, and the connection will not be sent to the <see cref="AcceptClient(IProcessor, CancellationToken)"/> method.</para>
 		/// </summary>
 		/// <param name="tcpClient">The new connection from a client.</param>
 		/// <returns>True if the connection should be dismissed with an HTTP 503 response.</returns>
 		protected override bool IsServerTooBusyToProcessNewConnection(TcpClient tcpClient)
 		{
-			return pool.QueuedActionCount > pool.MaxThreads.Clamp(24, 256);
+			// At this time of this writing, the SimpleThreadPool places all incoming connections into the action queue, so it is not safe to limit the queued action count to a value smaller than pool.MaxThreads.
+			// The thread pool does not offer a thread-safe way for us to know exactly how many connections we currently are holding open.
+			return pool.QueuedActionCount > pool.MaxThreads.Clamp(24, int.MaxValue);
+		}
+		/// <summary>
+		/// Accepts an incoming TCP connection from a client.
+		/// </summary>
+		/// <param name="processor">client processor instance containing a reference to the TcpClient.</param>
+		/// <param name="cancellationToken">A cancellation token which will be cancelled if the server is shutting down. </param>
+		protected override void AcceptClient(IProcessor processor, CancellationToken cancellationToken)
+		{
+			pool.Enqueue(processor.Process);
 		}
 		public override void Stop()
 		{
@@ -2054,7 +2075,8 @@ namespace BPUtil.SimpleHttp
 		}
 	}
 	/// <summary>
-	/// Base class for Http Web Servers that use an async API.
+	/// <para>Base class for Http Web Servers that use an async API.</para>
+	/// <para>Async web servers are generally more efficient, but are more difficult to program.</para>
 	/// </summary>
 	public abstract class HttpServerAsync : HttpServerBase
 	{
@@ -2063,6 +2085,24 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		/// <param name="certificateSelector">(Optional) Certificate selector to use for https connections.  If null and an https-compatible endpoint was specified, a certificate is automatically created if necessary and loaded from "SimpleHttpServer-SslCert.pfx" in the same directory that the current executable is located in.</param>
 		public HttpServerAsync(ICertificateSelector certificateSelector = null) : base(certificateSelector) { }
+		private int _maxConnections = 256;
+		/// <summary>
+		/// <para>Gets or sets the maximum number of connections that should be allowed to be processed simultaneously.</para>
+		/// <para>The default for HttpServerAsync is 256.</para>
+		/// </summary>
+		public override int MaxConnections
+		{
+			get
+			{
+				return _maxConnections;
+			}
+			set
+			{
+				if (value < 1)
+					throw new ArgumentException("MaxConnections value must be greater than 0.  Value of " + value + " is invalid.");
+				_maxConnections = value.Clamp(1, int.MaxValue);
+			}
+		};
 		/// <summary>
 		/// Asynchronously handles an HTTP request.
 		/// </summary>
@@ -2071,5 +2111,14 @@ namespace BPUtil.SimpleHttp
 		/// <param name="cancellationToken">Cancellation Token</param>
 		/// <returns></returns>
 		public abstract Task handleRequest(HttpProcessor p, string method, CancellationToken cancellationToken = default);
+		/// <summary>
+		/// Accepts an incoming TCP connection from a client.
+		/// </summary>
+		/// <param name="processor">client processor instance containing a reference to the TcpClient.</param>
+		/// <param name="cancellationToken">A cancellation token which will be cancelled if the server is shutting down. </param>
+		protected override void AcceptClient(IProcessor processor, CancellationToken cancellationToken)
+		{
+			_ = processor.ProcessAsync(cancellationToken).ConfigureAwait(false);
+		}
 	}
 }
