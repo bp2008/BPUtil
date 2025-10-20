@@ -132,15 +132,9 @@ namespace BPUtil.MVC
 				body = actionResult.Body;
 			}
 
-			if (body == null)
+			HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
+			if (body != null)
 			{
-				httpProcessor.Response.Set(actionResult.ContentType, 0, actionResult.ResponseStatus, context.additionalResponseHeaders);
-			}
-			else
-			{
-				HttpHeaderCollection additionalHeaders = new HttpHeaderCollection();
-				bool addedContentEncoding = false;
-				bool addedContentType = false;
 				if (actionResult.Compress && body.Length >= 200 && httpProcessor.Request.BestCompressionMethod != null)
 				{
 					byte[] compressed = httpProcessor.Request.BestCompressionMethod.Compress(body);
@@ -150,28 +144,29 @@ namespace BPUtil.MVC
 						body = compressed;
 					}
 				}
-				foreach (HttpHeader header in actionResult.headers)
-				{
-					if (!header.Key.IEquals("Content-Type"))
-					{
-						additionalHeaders.Add(header.Key, header.Value);
-					}
-				}
-				if (context.additionalResponseHeaders != null)
-				{
-					foreach (HttpHeader header in context.additionalResponseHeaders)
-					{
-						if (addedContentEncoding && header.Key.IEquals("Content-Encoding"))
-							continue;
-						else if (addedContentType && header.Key.IEquals("Content-Type"))
-							continue;
-						else
-							additionalHeaders.Add(header);
-					}
-				}
-				httpProcessor.Response.Set(actionResult.ContentType, body.Length, actionResult.ResponseStatus, additionalHeaders);
-				httpProcessor.Response.BodyContent = body;
 			}
+			foreach (HttpHeader header in actionResult.headers)
+			{
+				if (!header.Key.IEquals("Content-Type"))
+				{
+					additionalHeaders.Add(header.Key, header.Value);
+				}
+			}
+			if (context.additionalResponseHeaders != null)
+			{
+				foreach (HttpHeader header in context.additionalResponseHeaders)
+				{
+					if (header.Key.IEquals("Content-Encoding") && additionalHeaders.ContainsKey("Content-Encoding"))
+						continue;
+					else if (header.Key.IEquals("Content-Type") && additionalHeaders.ContainsKey("Content-Type"))
+						continue;
+					else
+						additionalHeaders.Add(header);
+				}
+			}
+
+			httpProcessor.Response.Set(actionResult.ContentType, body?.Length, actionResult.ResponseStatus, additionalHeaders);
+			httpProcessor.Response.BodyContent = body;
 		}
 
 		/// <summary>

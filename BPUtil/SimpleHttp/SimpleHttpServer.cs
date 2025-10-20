@@ -2102,7 +2102,7 @@ namespace BPUtil.SimpleHttp
 					throw new ArgumentException("MaxConnections value must be greater than 0.  Value of " + value + " is invalid.");
 				_maxConnections = value.Clamp(1, int.MaxValue);
 			}
-		};
+		}
 		/// <summary>
 		/// Asynchronously handles an HTTP request.
 		/// </summary>
