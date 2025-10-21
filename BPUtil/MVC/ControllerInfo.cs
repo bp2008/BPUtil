@@ -80,10 +80,10 @@ namespace BPUtil.MVC
 				ControllerAsync controller = (ControllerAsync)Activator.CreateInstance(ControllerType);
 				controller.Context = context;
 				controller.CancellationToken = cancellationToken;
-				ActionResult result = await controller.OnAuthorization();
+				ActionResult result = await controller.OnAuthorization().ConfigureAwait(false);
 				if (result == null)
 					result = await CallActionMethod(controller, methodInfo).ConfigureAwait(false);
-				await controller.PreprocessResult(result);
+				result = await controller.PreprocessResult(result).ConfigureAwait(false);
 				return result;
 			}
 			else
@@ -94,7 +94,7 @@ namespace BPUtil.MVC
 				ActionResult result = controller.OnAuthorization();
 				if (result == null)
 					result = await CallActionMethod(controller, methodInfo).ConfigureAwait(false);
-				controller.PreprocessResult(result);
+				result = controller.PreprocessResult(result);
 				return result;
 			}
 		}
@@ -106,24 +106,37 @@ namespace BPUtil.MVC
 		/// <returns></returns>
 		private async Task<ActionResult> CallActionMethod(Controller controller, MethodInfo mi)
 		{
-			ParameterInfo[] parameters = mi.GetParameters();
-			object[] converted;
 			try
 			{
-				converted = ConvertInputParameters(parameters, controller.Context.ActionArgs);
+				ParameterInfo[] parameters = mi.GetParameters();
+				object[] converted;
+				try
+				{
+					converted = ConvertInputParameters(parameters, controller.Context.ActionArgs);
+				}
+				catch (Exception ex)
+				{
+					throw new ClientException("Invalid arguments to " + controller.GetType().Name + "." + mi.Name + "(" + string.Join(", ", parameters.Select(p => p.ParameterType.Name)) + ")", ex);
+				}
+				if (mi.ReturnType == typeof(Task<ActionResult>))
+				{
+					Task<ActionResult> resultTask = (Task<ActionResult>)mi.Invoke(controller, converted);
+					return await resultTask.ConfigureAwait(false);
+				}
+				else
+				{
+					return await TaskHelper.RunBlockingCodeSafely(() => (ActionResult)mi.Invoke(controller, converted), controller.CancellationToken).ConfigureAwait(false);
+				}
 			}
+			catch (OperationCanceledException) { throw; }
 			catch (Exception ex)
 			{
-				throw new ClientException("Error processing arguments for method " + controller.GetType().FullName + "." + mi.Name + "(" + string.Join(", ", parameters.Select(p => p.ParameterType.Name)) + ")", ex);
-			}
-			if (mi.ReturnType == typeof(Task<ActionResult>))
-			{
-				Task<ActionResult> resultTask = (Task<ActionResult>)mi.Invoke(controller, converted);
-				return await resultTask.ConfigureAwait(false);
-			}
-			else
-			{
-				return await TaskHelper.RunBlockingCodeSafely(() => (ActionResult)mi.Invoke(controller, converted), controller.CancellationToken).ConfigureAwait(false);
+				if (HttpProcessor.IsOrdinaryDisconnectException(ex))
+					ex.Rethrow();
+				if (controller is ControllerAsync ca)
+					return await ca.CallOnActionMethodError(ex).ConfigureAwait(false);
+				else
+					return await TaskHelper.RunBlockingCodeSafely(() => controller.CallOnActionMethodError(ex)).ConfigureAwait(false);
 			}
 		}
 		/// <summary>

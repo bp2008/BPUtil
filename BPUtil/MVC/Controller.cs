@@ -52,21 +52,61 @@ namespace BPUtil.MVC
 		/// </summary>
 		public CancellationToken CancellationToken { get; internal set; } = default;
 
+		/// <summary>
+		/// Constructs a new Controller.
+		/// </summary>
 		public Controller()
 		{
 			ViewBag = new ViewBagContainer(ViewData);
 		}
 
 		/// <summary>
-		/// When overridden in a derived class, this method may allow or disallow access to the controller.  This is called before the client-specified action method is called.  If authorization fails, this should return an appropriate result such as an HTTP 403 Forbidden response. If null, authorization will be assumed to have succeeded.
+		/// When overridden in a derived class, this method may allow or disallow access to the controller.  This is called before the client-specified action method is called.  If authorization fails, this should return an appropriate result such as an HTTP 403 Forbidden response, and the action method will not be called. If null, authorization will be assumed to have succeeded and the action method will be called.
 		/// </summary>
 		/// <returns>If authorization fails, this should return an appropriate result such as an HTTP 403 Forbidden response. If null, authorization will be assumed to have succeeded.</returns>
-		public virtual ActionResult OnAuthorization() { return null; }
+		protected internal virtual ActionResult OnAuthorization() { return null; }
 
 		/// <summary>
-		/// When overridden in a derived class, this method may modify any ActionResult before it is sent to the client.
+		/// <para>When overridden in a derived class, this method may inspect and/or modify any ActionResult before it is sent to the client.</para>
+		/// <para>If the action method throws an exception, the <c>PreprocessResult</c> method will not be called.  <see cref="OnActionMethodError"/> will be called instead.  If you have not overridden <c>OnActionMethodError</c>, the exception will be rethrown and handled by the <see cref="MVCMain"/> class, which converts the Exception into an <see cref="ExceptionHtmlResult"/>.</para>
+		/// <para>Note: ActionResult instances returned by the <see cref="OnAuthorization"/> method ARE sent to <c>PreprocessResult</c>.</para>
 		/// </summary>
-		public virtual void PreprocessResult(ActionResult result) { }
+		protected internal virtual ActionResult PreprocessResult(ActionResult result) { return result; }
+
+		/// <summary>
+		/// <para>This method is called with any Exception thrown by an action method.</para>
+		/// <para>The default implementation of this method simply rethrows the exception.  However, this method can be overridden to return an ActionResult instead.  The ActionResult should gracefully communicate to the client</para>
+		/// <para>When overridden in a derived class, this method may decide how to gracefully handle exceptions thrown by action methods.</para>
+		/// <para>If the action method throws an exception, the ActionResult will be an <see cref="ExceptionHtmlResult"/>, and this method may want to replace it with another type of result (e.g. for API compatibility).</para>
+		/// <para>Some types of errors are not sent through the <c>PreprocessResult</c> method, such as the StatusCodeResult which is generated if the caller used a disallowed HTTP method.</para>
+		/// <para>Note: ActionResult instances returned by the <see cref="OnAuthorization"/> method ARE sent to <c>PreprocessResult</c>.</para>
+		/// </summary>
+		/// <param name="ex">The exception which was thrown by an action method.</param>
+		/// <param name="clientIsAllowedToSeeExceptionDetails">If false, you should not return the exception message or stack trace in the ActionResult you return.</param>
+		/// <exception cref="Exception">The exception which was thrown by an action method.</exception>
+		protected virtual ActionResult OnActionMethodError(Exception ex, bool clientIsAllowedToSeeExceptionDetails)
+		{
+			ex.Rethrow();
+			throw ex; // This line is not reached, but exists to satisfy the compiler.
+		}
+		/// <summary>
+		/// Calls <see cref="OnActionMethodError"/>.
+		/// </summary>
+		/// <param name="ex">Argument to OnActionMethodError.</param>
+		/// <returns>The result of calling <see cref="OnActionMethodError"/>.</returns>
+		internal ActionResult CallOnActionMethodError(Exception ex)
+		{
+			return OnActionMethodError(ex, IsClientAllowedToSeeExceptionDetails(ex));
+		}
+		/// <summary>
+		/// Returns true if the client is allowed to see the details of this exception.
+		/// </summary>
+		/// <param name="ex">Exception which the client may or may not be allowed to see.</param>
+		/// <returns>Returns true if the client is allowed to see the details of this exception.</returns>
+		protected internal bool IsClientAllowedToSeeExceptionDetails(Exception ex)
+		{
+			return MVCGlobals.RemoteClientsMaySeeExceptionDetails || Context.httpProcessor.IsLocalConnection || ex is ClientException;
+		}
 
 		/// <summary>
 		/// Returns a BinaryResult where the body is binary data.
