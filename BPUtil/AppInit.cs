@@ -100,7 +100,7 @@ namespace BPUtil
 					additionalButtons.Add(new ButtonDefinition("Update Settings File", (sender, ignored) =>
 											{
 												settingsObj.Save();
-												ProcessRunner.Start(settingsObj.GetType().Name + ".cfg");
+												ProcessRunner.Start(settingsObj.GetDefaultFilePath());
 											}));
 				if (options.ServiceManagerButtons != null)
 				{
@@ -409,7 +409,7 @@ WantedBy=multi-user.target";
 				c.RedLine("systemctl exited with code " + exitCode);
 		}
 		/// <summary>
-		/// Runs `systemctl daemon-reload`.  Call this after modifying an existing .service file to make systemd reload all .service files.  Afterward, you should probably restart the service that you modified.
+		/// Runs <c>systemctl daemon-reload</c>.  Call this after modifying an existing <c>.service</c> file to make systemd reload all <c>.service</c> files.  Afterward, you should probably restart the service that you modified.
 		/// </summary>
 		public static void RunSystemctlDaemonReload()
 		{
