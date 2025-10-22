@@ -59,8 +59,6 @@ namespace BPUtil
 			applicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
 			applicationDirectoryBase = applicationRoot + "/";
 			writableDirectoryBase = applicationDirectoryBase + writablePath.Trim('\\', '/').Replace('\\', '/') + '/';
-			configFilePath = writableDirectoryBase + "Config.cfg";
-			errorFilePath = writableDirectoryBase + executableNameWithoutExtension + "Errors.txt";
 		}
 		/// <summary>
 		/// Call this to initialize global static variables where the "WritableDirectoryBase" path is a subfolder of <see cref="Environment.SpecialFolder.CommonApplicationData"/>.
@@ -139,7 +137,6 @@ namespace BPUtil
 		{
 			get { return writableDirectoryBase; }
 		}
-		private static string errorFilePath;
 		/// <summary>
 		/// Gets the full path to the error log file.
 		/// </summary>
@@ -148,12 +145,12 @@ namespace BPUtil
 			get
 			{
 				if (GetErrorFilePath != null)
-					return errorFilePath = GetErrorFilePath();
-				return errorFilePath;
+					return GetErrorFilePath();
+				return writableDirectoryBase + executableNameWithoutExtension + "Errors.txt";
 			}
 		}
 		/// <summary>
-		/// If specified, this function overrides <see cref="errorFilePath"/>.
+		/// If specified, this function is called upon each <see cref="ErrorFilePath"/> property get.
 		/// </summary>
 		private static Func<string> GetErrorFilePath = null;
 		/// <summary>
@@ -163,14 +160,6 @@ namespace BPUtil
 		public static void OverrideErrorFilePath(Func<string> newPathFn)
 		{
 			GetErrorFilePath = newPathFn;
-		}
-		private static string configFilePath;
-		/// <summary>
-		/// Gets the full path to the config file.
-		/// </summary>
-		public static string ConfigFilePath
-		{
-			get { return configFilePath; }
 		}
 		/// <summary>
 		/// The BPUtil version number, not to be confused with the version number of the application this is included in.  This version number is often neglected.
