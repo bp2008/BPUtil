@@ -26,7 +26,7 @@
 	<!-- .NET 6 Linux/non-Windows -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net6.0'">
 		<UseWindowsForms>false</UseWindowsForms>
-		<DefineConstants>$(DefineConstants);NET6_PLUS_LINUX</DefineConstants>
+		<DefineConstants>$(DefineConstants);NET6_PLUS_LINUX;LINUX</DefineConstants>
 	</PropertyGroup>
 
 	<!-- .NET 8 Windows-specific -->
@@ -38,7 +38,7 @@
 	<!-- .NET 8 Linux/non-Windows -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
 		<UseWindowsForms>false</UseWindowsForms>
-		<DefineConstants>$(DefineConstants);NET6_PLUS_LINUX;NET8_PLUS_LINUX</DefineConstants>
+		<DefineConstants>$(DefineConstants);NET6_PLUS_LINUX;NET8_PLUS_LINUX;LINUX</DefineConstants>
 	</PropertyGroup>
 
 

@@ -330,6 +330,36 @@ namespace BPUtil
 		}
 
 		/// <summary>
+		/// Returns true if the string is eligible to be used as a systemd service name on linux.
+		/// </summary>
+		/// <param name="str">String to test. E.g. "BPUtil" -> True. "BP Util" -> False.</param>
+		/// <returns></returns>
+		public static bool IsValidSystemdServiceName(string str)
+		{
+			if (str == null
+				|| str.Length == 0
+				|| str.Length + ".service".Length > 255)
+				return false;
+			foreach (char c in str)
+			{
+				if ((c >= 'a' && c <= 'z')
+					|| (c >= 'A' && c <= 'Z')
+					|| (c >= '0' && c <= '9')
+					|| c == '_'
+					|| c == ':'
+					|| c == '-'
+					|| c == '.'
+					|| c == '\\')
+				{
+					// Character is OK
+				}
+				else
+					return false;
+			}
+			return true;
+		}
+
+		/// <summary>
 		/// Returns a copy of the string that has certain special characters replaced with special visualizing characters.
 		/// Note that it is possible for these replacement characters to also exist in the source string and thereby cause some ambiguity.
 		/// </summary>

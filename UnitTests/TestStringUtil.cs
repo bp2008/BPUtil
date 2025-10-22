@@ -488,5 +488,14 @@ namespace UnitTests
 			ms.Write(data, 0, data.Length);
 			return ms;
 		}
+		[TestMethod]
+		public void TestIsValidSystemdServiceName()
+		{
+			Assert.IsTrue(StringUtil.IsValidSystemdServiceName("BPUtil"));
+			Assert.IsTrue(StringUtil.IsValidSystemdServiceName("BP:Util"));
+			Assert.IsTrue(StringUtil.IsValidSystemdServiceName(":-_.\\"));
+			Assert.IsFalse(StringUtil.IsValidSystemdServiceName("BP Util"));
+			Assert.IsFalse(StringUtil.IsValidSystemdServiceName("BP;Util"));
+		}
 	}
 }
