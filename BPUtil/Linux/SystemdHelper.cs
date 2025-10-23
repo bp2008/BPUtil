@@ -60,6 +60,10 @@ WantedBy=multi-user.target
 					return true;
 				}
 			}
+			else
+			{
+				File.WriteAllText(servicePath, cfgFile, ByteUtil.Utf8NoBOM);
+			}
 			return false;
 		}
 		/// <summary>
