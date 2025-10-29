@@ -21,6 +21,7 @@ namespace BPUtil.Linux
 		/// <param name="serviceName">Name of the service.</param>
 		/// <param name="WorkingDirectory">Working directory to assign to the service process.</param>
 		/// <param name="ExecStartCommand">The command to run to start the service.</param>
+		/// <param name="logOutputToSystemdJournal">True to instruct systemd to redirect standard output and error streams to its own log files.</param>
 		/// <returns>Returns true if an existing service definition file was overwritten by this method (in this case it is advisable to call <see cref="DaemonReload"/>).</returns>
 		public static bool Install(string serviceName, string WorkingDirectory, string ExecStartCommand, bool logOutputToSystemdJournal)
 		{
