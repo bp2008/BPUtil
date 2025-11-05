@@ -1,20 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Reflection;
 
 namespace BPUtil
 {
 	/// <summary>
-	/// Attribute which annotates a field or property to provide a description string that can be consumed programmatically.
+	/// Helper methods for <see cref="System.ComponentModel.DescriptionAttribute"/>.
 	/// </summary>
-	[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = false)]
-	public class DescriptionAttribute : Attribute
+	public static class DescriptionHelper
 	{
-		public string Description;
-		public DescriptionAttribute(string Description)
-		{
-			this.Description = Description;
-		}
 		/// <summary>
 		/// Get the descriptions for each field or property in the given type.  Returns a dictionary keyed on field/propery name (case-sensitive), where the value is the description string.  If no description string is available, the field/property will not be in the dictionary.
 		/// </summary>
