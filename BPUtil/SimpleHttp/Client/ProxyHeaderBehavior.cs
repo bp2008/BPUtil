@@ -1,4 +1,6 @@
-﻿namespace BPUtil.SimpleHttp.Client
+﻿using System.ComponentModel;
+
+namespace BPUtil.SimpleHttp.Client
 {
 	/// <summary>
 	/// Defines which behavior the ProxyClient will exhibit when dealing with a specific proxy-related HTTP header.
