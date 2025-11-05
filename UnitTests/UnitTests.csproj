@@ -59,6 +59,7 @@
     <Compile Include="TestChunkedTransferEncodingStreams.cs" />
     <Compile Include="TestCompression.cs" />
     <Compile Include="TestConcatenatedStream.cs" />
+    <Compile Include="TestEnumExtensions.cs" />
     <Compile Include="TestFileUtil.cs" />
     <Compile Include="TestHttpHeaderCollection.cs" />
     <Compile Include="TestIPAddressRange.cs" />
