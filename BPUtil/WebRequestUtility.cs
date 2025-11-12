@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -198,9 +199,15 @@ namespace BPUtil
 		private bool _acceptAnyCert = false;
 #endif
 		/// <summary>
-		/// If true, outgoing requests will be resolved using a custom DNS resolver written into WebRequestUtility.  This can be useful for avoiding possible DNS resolution issues with HttpClient's built-in DNS resolver.
+		/// <para>If true, outgoing requests will be resolved using a custom DNS resolver written into WebRequestUtility.  This can be useful for avoiding possible DNS resolution issues with HttpClient's built-in DNS resolver.</para>
+		/// <para>Ignored if PreferredAddressFamily is set to <see cref="AddressFamily.InterNetwork"/> or <see cref="AddressFamily.InterNetworkV6"/>.</para>
 		/// </summary>
 		public bool UseOwnDnsResolver = false;
+		/// <summary>
+		/// <para>If assigned <see cref="AddressFamily.InterNetwork"/> or <see cref="AddressFamily.InterNetworkV6"/>, the WebRequestUtility will try to resolve hostnames to this type of address first.  If the preferred type is not available, an address of another type may be used.  The default is <see cref="AddressFamily.Unspecified"/>, meaning no preference.</para>
+		/// <para>If an address family is specified, the <see cref="UseOwnDnsResolver"/> flag will be ignored and the custom DNS resolver will be used anyway.</para>
+		/// </summary>
+		public AddressFamily PreferredAddressFamily = AddressFamily.Unspecified;
 
 		protected HttpClient client;
 		protected HttpClientHandler httpClientHandler;
@@ -442,9 +449,10 @@ namespace BPUtil
 			try
 			{
 				uri = new Uri(url, UriKind.Absolute);
-				if (UseOwnDnsResolver)
+				bool customDns = UseOwnDnsResolver || PreferredAddressFamily == AddressFamily.InterNetwork || PreferredAddressFamily == AddressFamily.InterNetworkV6;
+				if (customDns)
 				{
-					IPAddress ipAddr = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost).ConfigureAwait(false);
+					IPAddress ipAddr = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost, preferredAddressFamily: PreferredAddressFamily).ConfigureAwait(false);
 					if (ipAddr.ToString() != uri.DnsSafeHost)
 					{
 						addHostHeader = uri.DnsSafeHost;
@@ -463,10 +471,10 @@ namespace BPUtil
 			}
 
 			HttpRequestMessage requestMessage = new HttpRequestMessage(method, uri);
-			
+
 			if (!string.IsNullOrWhiteSpace(addHostHeader))
 				requestMessage.Headers.Host = addHostHeader;
-				
+
 			if (headers != null)
 			{
 				for (int i = 0; i + 1 < headers.Length; i += 2)
