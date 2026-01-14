@@ -164,5 +164,27 @@ namespace UnitTests
 			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:1111:1111:1111:1111"), 32, 68));
 			Assert.IsFalse(IPUtil.SubnetCompare(IPAddress.Parse("1234:5678:1234:5678:0000:0000:0000:0000"), IPAddress.Parse("1234:5678:1234:5678:1111:1111:1111:1111"), 32, 128));
 		}
+		[TestMethod]
+		public void TestGetIPv4OrIPv6Slash64()
+		{
+			Assert.AreEqual("127.0.0.1", IPUtil.GetIPv4OrIPv6Slash64("127.0.0.1"));
+			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("127.0.0.1 ")); // Invalid input: Trailing space
+			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64(" 127.0.0.1")); // Invalid input: Leading space
+			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64(" 127.0.0.1 ")); // Invalid input: Leading/trailing spaces
+			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("127.256.0.1")); // Invalid input: One octet out of range
+
+			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334"));
+			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000::"));
+			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:000::"));
+			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:00::"));
+			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0::"));
+			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3::"));
+			Assert.AreEqual("2600:1234:5678:9abc::", IPUtil.GetIPv4OrIPv6Slash64("2600:1234:5678:9Abc:dEf0:1234:5678:9ABC")); // Normal test with mixed case A-F hex chars; output should be normalized to lower case.
+			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("[2001:0db8:85a3:0000:0000:8a2e:0370:7334]")); // IPAddress class can parse IPv6 wrapped with brackets
+			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("[2001:0db8:85a3:0000:0000:8a2e:0370:7334")); // Invalid input: Missing closing bracket
+			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334]")); // Invalid input: Missing opening bracket
+			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334 ")); // Invalid input: Trailing space
+			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334:0")); // Invalid input: Too many bytes
+		}
 	}
 }

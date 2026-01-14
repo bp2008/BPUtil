@@ -176,6 +176,38 @@ namespace BPUtil
 			else
 				throw new Exception("AddressFamily of both IP addresses must be the same to be compared. A: " + a.AddressFamily + ", B: " + b.AddressFamily + ".");
 		}
+		/// <summary>
+		/// <para>If input is a valid IPv4 string, returns the canonical dot-decimal IPv4 string. (e.g. "127.0.0.1")</para>
+		/// <para>If input is a valid IPv6 string, returns its /64 network address. (e.g. "2600:1234:5678:9abc::")</para>
+		/// <para>Otherwise returns empty string. Never throws.</para>
+		/// </summary>
+		public static string GetIPv4OrIPv6Slash64(string input)
+		{
+			if (string.IsNullOrWhiteSpace(input))
+				return "";
+
+			if (!IPAddress.TryParse(input, out IPAddress ip))
+				return "";
+
+			if (ip.AddressFamily == AddressFamily.InterNetwork)
+				return ip.ToString(); // IPv4: return canonical dot-decimal
+
+			if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+			{
+				// IPv6: compute /64 network by zeroing the last 8 bytes.
+				byte[] bytes = ip.GetAddressBytes(); // 16 bytes for IPv6
+				if (bytes.Length != 16)
+					return "";
+				for (int i = 8; i < 16; i++)
+					bytes[i] = 0;
+
+				// Rebuild pure network address as string
+				IPAddress network64 = new IPAddress(bytes);
+				return network64.ToString();
+			}
+
+			return "";
+		}
 	}
 	public static class IPAddressExtensions
 	{
