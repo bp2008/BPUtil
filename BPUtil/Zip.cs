@@ -38,6 +38,21 @@ namespace BPUtil
 		{
 			return new ZipArchiveEntryData(entry);
 		}
+		/// <summary>
+		/// Extracts the entry to a file.
+		/// </summary>
+		/// <param name="entry">The entry to extract.</param>
+		/// <param name="filePath">The file path.</param>
+		/// <param name="overwrite">True to overwrite the file if it already exists.</param>
+		public static void ExtractToFile(this ZipArchiveEntry entry, string filePath, bool overwrite = false)
+		{
+			using (FileStream fs = new FileStream(filePath, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.Read))
+			{
+				using (Stream entryStream = entry.Open())
+					entryStream.CopyTo(fs);
+			}
+			File.SetLastWriteTime(filePath, entry.LastWriteTime.DateTime);
+		}
 	}
 	/// <summary>
 	/// Represents the extracted data and last write time of a ZipArchiveEntry.
