@@ -177,6 +177,35 @@ namespace BPUtil
 				throw new Exception("AddressFamily of both IP addresses must be the same to be compared. A: " + a.AddressFamily + ", B: " + b.AddressFamily + ".");
 		}
 		/// <summary>
+		/// <para>Trims leading and trailing whitespace.</para>
+		/// <para>If an IPv4 address string is detected, removes any left-side padding zeros from each octet. E.g. "010.120.055.001" -> "10.120.55.1"</para>
+		/// <para>This is necessary to prevent the <c>IPAddress</c> class from parsing 0-padded octets as base-8 numbers such that, e.g. "001.000.016.000" parses to "1.0.14.0".</para>
+		/// </summary>
+		/// <param name="ip">IPv4 address string that may contain left-side padding zeros in each octet.</param>
+		/// <returns>Standard IPv4 address string.</returns>
+		/// <exception cref="NotImplementedException"></exception>
+		public static string IPPaddingRemove(string ip)
+		{
+			if (ip != null)
+			{
+				ip = ip.Trim();
+				string[] parts = ip.Split('.');
+				if (parts.Length == 4)
+				{
+					int[] octets = new int[4];
+					for (int i = 0; i < parts.Length; i++)
+					{
+						if (int.TryParse(parts[i], out int octet) && octet >= 0 && octet <= 255)
+							octets[i] = octet;
+						else
+							return ip;
+					}
+					return string.Join(".", octets);
+				}
+			}
+			return ip;
+		}
+		/// <summary>
 		/// <para>If input is a valid IPv4 string, returns the canonical dot-decimal IPv4 string. (e.g. "127.0.0.1")</para>
 		/// <para>If input is a valid IPv6 string, returns its /64 network address. (e.g. "2600:1234:5678:9abc::")</para>
 		/// <para>Otherwise returns empty string. Never throws.</para>
@@ -185,6 +214,8 @@ namespace BPUtil
 		{
 			if (string.IsNullOrWhiteSpace(input))
 				return "";
+
+			input = IPPaddingRemove(input);
 
 			if (!IPAddress.TryParse(input, out IPAddress ip))
 				return "";
@@ -219,6 +250,7 @@ namespace BPUtil
 		{
 			if (ipStr == null)
 				return new byte[16];
+			ipStr = IPPaddingRemove(ipStr);
 			IPAddress ip;
 			if (!IPAddress.TryParse(ipStr, out ip))
 				return new byte[16];

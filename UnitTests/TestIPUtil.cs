@@ -168,9 +168,9 @@ namespace UnitTests
 		public void TestGetIPv4OrIPv6Slash64()
 		{
 			Assert.AreEqual("127.0.0.1", IPUtil.GetIPv4OrIPv6Slash64("127.0.0.1"));
-			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("127.0.0.1 ")); // Invalid input: Trailing space
-			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64(" 127.0.0.1")); // Invalid input: Leading space
-			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64(" 127.0.0.1 ")); // Invalid input: Leading/trailing spaces
+			Assert.AreEqual("127.0.0.1", IPUtil.GetIPv4OrIPv6Slash64("127.0.0.1 ")); // Invalid input: Trailing space. Library pre-parses and makes it valid.
+			Assert.AreEqual("127.0.0.1", IPUtil.GetIPv4OrIPv6Slash64(" 127.0.0.1")); // Invalid input: Leading space. Library pre-parses and makes it valid.
+			Assert.AreEqual("127.0.0.1", IPUtil.GetIPv4OrIPv6Slash64(" 127.0.0.1 ")); // Invalid input: Leading/trailing spaces. Library pre-parses and makes it valid.
 			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("127.256.0.1")); // Invalid input: One octet out of range
 
 			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334"));
@@ -183,7 +183,7 @@ namespace UnitTests
 			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("[2001:0db8:85a3:0000:0000:8a2e:0370:7334]")); // IPAddress class can parse IPv6 wrapped with brackets
 			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("[2001:0db8:85a3:0000:0000:8a2e:0370:7334")); // Invalid input: Missing closing bracket
 			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334]")); // Invalid input: Missing opening bracket
-			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334 ")); // Invalid input: Trailing space
+			Assert.AreEqual("2001:db8:85a3::", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334 ")); // Invalid input: Trailing space Library pre-parses and makes it valid.
 			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334:0")); // Invalid input: Too many bytes
 		}
 		[TestMethod]
