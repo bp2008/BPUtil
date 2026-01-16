@@ -208,6 +208,44 @@ namespace BPUtil
 
 			return "";
 		}
+		/// <summary>
+		/// <para>Converts an IP address string to a 16-byte array (big-endian, left-padded).</para>
+		/// <para>IPv4 addresses are mapped to IPv6 addresses like <c>::ffff:192.0.1.128</c>, otherwise written as <c>::FFFF:C000:0180</c> or <c>0x00000000000000000000FFFFC0000180</c>.</para>
+		/// <para>If the input is invalid, returns an array of 16 zero bytes.</para>
+		/// </summary>
+		/// <param name="ipStr">IP Address string</param>
+		/// <returns>IP address as a 16-byte array (big-endian, left-padded).</returns>
+		public static byte[] IpAddressTo16Bytes(string ipStr)
+		{
+			if (ipStr == null)
+				return new byte[16];
+			IPAddress ip;
+			if (!IPAddress.TryParse(ipStr, out ip))
+				return new byte[16];
+			byte[] bytes = ip.GetAddressBytes();
+			if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+			{
+				// IPv4 - convert to IPv6-mapped
+				byte[] ipv6Bytes = new byte[16];
+				ipv6Bytes[10] = 0xFF;
+				ipv6Bytes[11] = 0xFF;
+				Array.Copy(bytes, 0, ipv6Bytes, 12, 4);
+				bytes = ipv6Bytes;
+			}
+			else if (bytes.Length > 16)
+			{
+				byte[] b16 = new byte[16];
+				Array.Copy(bytes, bytes.Length - 16, b16, 0, 16);
+				return b16;
+			}
+			else if (bytes.Length < 16)
+			{
+				byte[] b16 = new byte[16];
+				Array.Copy(bytes, 0, b16, 16 - bytes.Length, bytes.Length);
+				return b16;
+			}
+			return bytes;
+		}
 	}
 	public static class IPAddressExtensions
 	{
@@ -258,6 +296,39 @@ namespace BPUtil
 			IPAddress network2 = address2.GetNetworkAddress(subnetMask);
 
 			return network1.Equals(network2);
+		}
+		/// <summary>
+		/// <para>Converts an IP address string to a 16-byte array (big-endian, left-padded).</para>
+		/// <para>IPv4 addresses are mapped to IPv6 addresses like <c>::ffff:192.0.1.128</c>, otherwise written as <c>::FFFF:C000:0180</c> or <c>0x00000000000000000000FFFFC0000180</c>.</para>
+		/// <para>If the input is invalid, returns an array of 16 zero bytes.</para>
+		/// </summary>
+		/// <param name="address">The IP Address to convert.</param>
+		/// <returns>IP address as a 16-byte array (big-endian, left-padded).</returns>
+		public static byte[] To16Bytes(this IPAddress address)
+		{
+			byte[] bytes = address.GetAddressBytes();
+			if (address.AddressFamily == AddressFamily.InterNetwork)
+			{
+				// IPv4 - convert to IPv6-mapped
+				byte[] ipv6Bytes = new byte[16];
+				ipv6Bytes[10] = 0xFF;
+				ipv6Bytes[11] = 0xFF;
+				Array.Copy(bytes, 0, ipv6Bytes, 12, 4);
+				bytes = ipv6Bytes;
+			}
+			else if (bytes.Length > 16)
+			{
+				byte[] b16 = new byte[16];
+				Array.Copy(bytes, bytes.Length - 16, b16, 0, 16);
+				return b16;
+			}
+			else if (bytes.Length < 16)
+			{
+				byte[] b16 = new byte[16];
+				Array.Copy(bytes, 0, b16, 16 - bytes.Length, bytes.Length);
+				return b16;
+			}
+			return bytes;
 		}
 	}
 }

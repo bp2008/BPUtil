@@ -186,5 +186,31 @@ namespace UnitTests
 			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334 ")); // Invalid input: Trailing space
 			Assert.AreEqual("", IPUtil.GetIPv4OrIPv6Slash64("2001:0db8:85a3:0000:0000:8a2e:0370:7334:0")); // Invalid input: Too many bytes
 		}
+		[TestMethod]
+		public void TestIpAddressTo16Bytes()
+		{
+			AssertIPBytes("0.0.0.0", "00000000000000000000FFFF00000000");
+			AssertIPBytes("192.0.1.128", "00000000000000000000FFFFC0000180");
+			AssertIPBytes("255.0.255.255", "00000000000000000000FFFFFF00FFFF");
+			AssertIPBytes("255.255.255.255", "00000000000000000000FFFFFFFFFFFF");
+			AssertIPBytes("::0", "00000000000000000000000000000000");
+			AssertIPBytes("::1", "00000000000000000000000000000001");
+			AssertIPBytes("::FFFF", "0000000000000000000000000000FFFF");
+			AssertIPBytes("::FFFF:C000:0180", "00000000000000000000FFFFC0000180");
+			AssertIPBytes("FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+		}
+		private static void AssertIPBytes(string ipStr, string expectedHex)
+		{
+			expectedHex = expectedHex.ToUpper();
+
+			byte[] ipBytes = IPUtil.IpAddressTo16Bytes(ipStr);
+			string actualHex = Hex.ToHex(ipBytes, true);
+			Assert.AreEqual(expectedHex, actualHex, "IPUtil.IpAddressTo16Bytes(\"" + ipStr + "\") failed.");
+
+			IPAddress ipAddress = IPAddress.Parse(ipStr);
+			ipBytes = ipAddress.To16Bytes();
+			actualHex = Hex.ToHex(ipBytes, true);
+			Assert.AreEqual(expectedHex, actualHex, "ipAddress.To16Bytes(\"" + ipStr + "\") extension method failed.");
+		}
 	}
 }
