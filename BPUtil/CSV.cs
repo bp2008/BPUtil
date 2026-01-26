@@ -1,13 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace BPUtil
 {
-
 	/// <summary>
 	/// Contains utility methods for CSV (comma-separated values) file formatting.
 	/// </summary>
@@ -49,15 +48,101 @@ namespace BPUtil
 		/// <summary>
 		/// Removes characters that are not allowed in a CSV file according to RFC 4180. Allowed characters are ASCII 10 (\n), 13 (\r), and 32-126. Notably, TAB is not considered a valid character.
 		/// </summary>
-		/// <param name="str">The string to process</param>
-		/// <returns></returns>
+		/// <param name="str">The string to process.</param>
+		/// <returns>The string with invalid characters removed.</returns>
 		public static string StripInvalidCsvCharacters(string str)
 		{
 			StringBuilder sb = new StringBuilder(str.Length);
-			for (int i = 0; i < str.Length; i++)
-				if ((str[i] > (char)31 && str[i] < (char)127) || str[i] == '\r' || str[i] == '\n')
-					sb.Append(str[i]);
+			foreach (char c in str)
+				if ((c > (char)31 && c < (char)127) || c == '\r' || c == '\n')
+					sb.Append(c);
 			return sb.ToString();
+		}
+		/// <summary>
+		/// Throws an exception if the string contains any characters that are not allowed in a CSV file according to RFC 4180. Allowed characters are ASCII 10 (\n), 13 (\r), and 32-126. Notably, TAB is not considered a valid character.
+		/// </summary>
+		/// <param name="str">The string to validate.</param>
+		/// <exception cref="ArgumentException">Thrown if the string contains any invalid characters.</exception>
+		public static void ThrowIfStringIsInvalidCSVValue(string str)
+		{
+			if (str != null)
+			{
+				foreach (char c in str)
+				{
+					if ((c > (char)31 && c < (char)127) || c == '\r' || c == '\n') { }
+					else
+						throw new ArgumentException("Value contained (char)" + ((int)c) + " which is not allowed in CSV (comma-separated values) files.");
+				}
+			}
+		}
+		/// <summary>
+		/// Returns a copy of the given string with any invalid characters replaced with spaces.
+		/// </summary>
+		/// <param name="str">The string to process.</param>
+		/// <returns>The string with invalid characters replaced.</returns>
+		public static string ReplaceInvalidCharactersWithSpaces(string str)
+		{
+			if (str == null)
+				return "";
+			StringBuilder sb = new StringBuilder();
+			foreach (char c in str)
+			{
+				if ((c > (char)31 && c < (char)127) || c == '\r' || c == '\n')
+					sb.Append(c);
+				else
+					sb.Append(' ');
+			}
+			return sb.ToString();
+		}
+		/// <summary>
+		/// RFS 4180 declares that the CSV line ending is CRLF (\r\n).
+		/// </summary>
+		public const string lineEnding = "\r\n";
+		/// <summary>
+		/// Returns a string that contains this table in CSV (comma-separated values) format.
+		/// </summary>
+		/// <param name="table">This DataTable.</param>
+		/// <param name="includeHeaders">If true, the first row of the file will contain the column names.</param>
+		/// <param name="replaceOutOfRangeCharactersWithSpaces">If true, all out-of-range characters will be replaced with spaces.  If false, an exception will be thrown if an out-of-range character is encountered while creating the CSV string.</param>
+		/// <returns>A string that contains this table in CSV (comma-separated values) format.</returns>
+		/// <exception cref="ArgumentException">If any of the values in the table contain a character that is out of range or reserved in CSV files, and <paramref name="replaceOutOfRangeCharactersWithSpaces"/> is false.</exception>
+		public static string ToCommaSeparatedValues(this DataTable table, bool includeHeaders = false, bool replaceOutOfRangeCharactersWithSpaces = false)
+		{
+			StringBuilder result = new StringBuilder();
+
+			// Write column names
+			if (includeHeaders)
+			{
+				for (int i = 0; i < table.Columns.Count; i++)
+				{
+					string str = table.Columns[i].ColumnName;
+					if (replaceOutOfRangeCharactersWithSpaces)
+						str = ReplaceInvalidCharactersWithSpaces(str);
+					else
+						ThrowIfStringIsInvalidCSVValue(str);
+
+					result.Append(LooseEncodeAsCsvField(str));
+					result.Append(i == table.Columns.Count - 1 ? lineEnding : ",");
+				}
+			}
+
+			// Write rows
+			foreach (DataRow row in table.Rows)
+			{
+				for (int i = 0; i < table.Columns.Count; i++)
+				{
+					string str = row[i]?.ToString();
+					if (replaceOutOfRangeCharactersWithSpaces)
+						str = ReplaceInvalidCharactersWithSpaces(str);
+					else
+						ThrowIfStringIsInvalidCSVValue(str);
+
+					result.Append(LooseEncodeAsCsvField(str));
+					result.Append(i == table.Columns.Count - 1 ? lineEnding : ",");
+				}
+			}
+
+			return result.ToString();
 		}
 	}
 	/// <summary>
@@ -97,36 +182,35 @@ namespace BPUtil
 
 		private void LoadCSVString(string csv, bool hasHeadings)
 		{
-			string[] lines = csv.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-			int start = 0;
-			int end = lines.Length;
-			if (end == 0)
-			{
-				Headings = new string[0];
-				Rows = new string[0][];
+			Headings = new string[0];
+			Rows = new string[0][];
+			if (string.IsNullOrEmpty(csv))
 				return;
-			}
-			if (hasHeadings)
+
+			List<string[]> rows = new List<string[]>();
+			using (StringReader sr = new StringReader(csv))
 			{
-				Headings = ParseCSVRow(lines[0]);
-				columnCount = Headings.Length;
-				start = 1;
+				string line;
+				while ((line = ReadLogicalLine(sr)) != null)
+				{
+					string[] row = ParseCSVRow(line);
+					if (row.Length == 0)
+						throw new Exception("Empty CSV row");
+					if (columnCount == 0)
+					{
+						columnCount = row.Length;
+						if (hasHeadings)
+						{
+							Headings = row;
+							continue;
+						}
+					}
+					if (columnCount != row.Length)
+						throw new Exception("Unequal number of columns in CSV rows");
+					rows.Add(row);
+				}
 			}
-			else
-				Headings = new string[0];
-			Rows = new string[end - start][];
-			for (int i = start, n = 0; i < end; i++, n++)
-			{
-				string line = lines[i];
-				string[] row = ParseCSVRow(line);
-				if (columnCount == 0)
-					columnCount = row.Length;
-				if (row.Length == 0)
-					throw new Exception("Empty CSV row");
-				if (columnCount != row.Length)
-					throw new Exception("Unequal number of columns in CSV rows");
-				Rows[n] = row;
-			}
+			Rows = rows.ToArray();
 		}
 
 		private static string[] ParseCSVRow(string line)
@@ -202,13 +286,13 @@ namespace BPUtil
 		/// <para>If rowCallback returns false, the function returns early.</para>
 		/// <para>Exceptions may be thrown if the CSV file is determined to be invalid.</para>
 		/// </summary>
-		/// <param name="sr">A StreamReader positioned at the beginning of a line in a csv file.</param>
+		/// <param name="tr">A <c>TextReader</c> (<c>StreamReader</c> or <c>StringReader</c>) positioned at the beginning of a line in a csv file.</param>
 		/// <param name="rowCallback">A callback method which is called with the value of each row as it is read.  If this function returns false, streaming of the CSV file will end immediately.</param>
-		public static void StreamingRead(StreamReader sr, Func<string[], bool> rowCallback)
+		public static void StreamingRead(TextReader tr, Func<string[], bool> rowCallback)
 		{
 			string line;
 			int columnCount = 0;
-			while ((line = sr.ReadLine()) != null)
+			while ((line = ReadLogicalLine(tr)) != null)
 			{
 				string[] row = ParseCSVRow(line);
 				if (columnCount == 0)
@@ -229,12 +313,12 @@ namespace BPUtil
 		/// <para>If rowCallback returns false, the function returns early.</para>
 		/// <para>Exceptions may be thrown if the CSV file is determined to be invalid.</para>
 		/// </summary>
-		/// <param name="sr">A StreamReader positioned at the beginning of a line in a csv file.</param>
-		public static IEnumerable<string[]> StreamingRead(StreamReader sr)
+		/// <param name="tr">A <c>TextReader</c> (<c>StreamReader</c> or <c>StringReader</c>) positioned at the beginning of a line in a csv file.</param>
+		public static IEnumerable<string[]> StreamingRead(TextReader tr)
 		{
 			string line;
 			int columnCount = 0;
-			while ((line = sr.ReadLine()) != null)
+			while ((line = ReadLogicalLine(tr)) != null)
 			{
 				string[] row = ParseCSVRow(line);
 				if (columnCount == 0)
@@ -245,6 +329,32 @@ namespace BPUtil
 					throw new Exception("Unequal number of columns in CSV rows");
 				yield return row;
 			}
+		}
+
+		private static int CountQuotes(string s)
+		{
+			if (string.IsNullOrEmpty(s))
+				return 0;
+			return s.Count(ch => ch == '"');
+		}
+
+		private static string ReadLogicalLine(TextReader tr)
+		{
+			string line = tr.ReadLine();
+			if (line == null)
+				return null;
+
+			int quoteCount = CountQuotes(line);
+			// Keep reading physical lines until quotes are balanced (even count).
+			while ((quoteCount & 1) == 1)
+			{
+				string next = tr.ReadLine();
+				if (next == null)
+					break;
+				line += Environment.NewLine + next;
+				quoteCount += CountQuotes(next);
+			}
+			return line;
 		}
 
 		/// <summary>

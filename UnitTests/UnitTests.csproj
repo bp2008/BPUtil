@@ -57,6 +57,7 @@
     <Compile Include="TestByteUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TestChunkedTransferEncodingStreams.cs" />
+    <Compile Include="TestCSVFile.cs" />
     <Compile Include="TestCompression.cs" />
     <Compile Include="TestConcatenatedStream.cs" />
     <Compile Include="TestEnumExtensions.cs" />
