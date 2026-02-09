@@ -27,9 +27,9 @@ namespace BPUtil
 		/// <summary>
 		/// Returns true of the content of the specified byte arrays exactly match each other, or if both arrays are null.
 		/// </summary>
-		/// <param name="a">An array to compare.</param>
-		/// <param name="b">An array to compare.</param>
-		/// <returns></returns>
+		/// <param name="a">First array to compare. May be null.</param>
+		/// <param name="b">Second array to compare. May be null.</param>
+		/// <returns>True if both arrays are null or if they have the same length and identical contents; otherwise false.</returns>
 		public static bool ByteArraysMatch(byte[] a, byte[] b)
 		{
 			if (a == null && b == null)
@@ -45,13 +45,15 @@ namespace BPUtil
 		/// <summary>
 		/// Returns true if <paramref name="thisBytes"/> starts with <paramref name="thatBytes"/>.
 		/// </summary>
-		/// <param name="thisBytes">Base byte array</param>
-		/// <param name="thatBytes">Byte array to look for at the start of the base byte array.</param>
-		/// <returns></returns>
+		/// <param name="thisBytes">Base byte array to test. May be null.</param>
+		/// <param name="thatBytes">Prefix byte array to look for. If null, this method returns false unless <paramref name="thisBytes"/> is also null.</param>
+		/// <returns>True when <paramref name="thatBytes"/> is a prefix of <paramref name="thisBytes"/> or both are null; otherwise false.</returns>
 		public static bool StartsWith(byte[] thisBytes, byte[] thatBytes)
 		{
 			if (thisBytes == null)
 				return thatBytes == null;
+			else if (thatBytes == null)
+				return false;
 			for (int i = 0; i < thatBytes.Length; i += 1)
 			{
 				if (i == thisBytes.Length)
@@ -67,7 +69,11 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="a">First byte array.</param>
 		/// <param name="b">Second byte array.</param>
-		/// <returns></returns>
+		/// <returns>
+		/// -1 if <paramref name="a"/> is lexically less than <paramref name="b"/>,
+		/// 1 if <paramref name="a"/> is greater than <paramref name="b"/>,
+		/// 0 if they are equal.
+		/// </returns>
 		public static int CompareByteArraysLikeStrings(byte[] a, byte[] b)
 		{
 			int max = Math.Min(a.Length, b.Length);
@@ -94,8 +100,8 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="a">An array to compare.</param>
 		/// <param name="b">An array to compare.</param>
-		/// <param name="mask">An array of equal or lesser length to `a` and `b`.</param>
-		/// <returns></returns>
+		/// <param name="mask">An array of equal or lesser length to <paramref name="a"/> and <paramref name="b"/>.</param>
+		/// <returns>True if arrays match under the provided mask; otherwise false.</returns>
 		public static bool CompareWithMask(byte[] a, byte[] b, byte[] mask)
 		{
 			if (a == null && b == null)
@@ -113,9 +119,10 @@ namespace BPUtil
 		/// <summary>
 		/// Returns a new array containing the values of the first array XORed with the values of the second array.
 		/// </summary>
-		/// <param name="a">An array.</param>
-		/// <param name="b">An array.</param>
-		/// <returns></returns>
+		/// <param name="a">First input array. Must have same length as <paramref name="b"/>.</param>
+		/// <param name="b">Second input array. Must have same length as <paramref name="a"/>.</param>
+		/// <returns>A new byte array where each element is the XOR of corresponding elements from <paramref name="a"/> and <paramref name="b"/>.</returns>
+		/// <exception cref="ArgumentException">Thrown when arrays have different lengths.</exception>
 		public static byte[] XORByteArrays(byte[] a, byte[] b)
 		{
 			if (a.Length != b.Length)
@@ -129,9 +136,10 @@ namespace BPUtil
 		/// Computes the "bitwise and" of the values in each array, and returns a new array containing the results.
 		/// e.g. [0,1,1] &amp; [1,0,1] = [0,0,1]
 		/// </summary>
-		/// <param name="a">An array.</param>
-		/// <param name="b">An array.</param>
-		/// <returns></returns>
+		/// <param name="a">First input array. Must have same length as <paramref name="b"/>.</param>
+		/// <param name="b">Second input array. Must have same length as <paramref name="a"/>.</param>
+		/// <returns>A new byte array where each element is the bitwise AND of corresponding elements from <paramref name="a"/> and <paramref name="b"/>.</returns>
+		/// <exception cref="ArgumentException">Thrown when arrays have different lengths.</exception>
 		public static byte[] BitwiseAnd(byte[] a, byte[] b)
 		{
 			if (a.Length != b.Length)
@@ -145,9 +153,10 @@ namespace BPUtil
 		/// Computes the "bitwise or" of the values in each array, and returns a new array containing the results.
 		/// e.g. [0,1,1] | [1,0,1] = [1,1,1]
 		/// </summary>
-		/// <param name="a">An array.</param>
-		/// <param name="b">An array.</param>
-		/// <returns></returns>
+		/// <param name="a">First input array. Must have same length as <paramref name="b"/>.</param>
+		/// <param name="b">Second input array. Must have same length as <paramref name="a"/>.</param>
+		/// <returns>A new byte array where each element is the bitwise OR of corresponding elements from <paramref name="a"/> and <paramref name="b"/>.</returns>
+		/// <exception cref="ArgumentException">Thrown when arrays have different lengths.</exception>
 		public static byte[] BitwiseOr(byte[] a, byte[] b)
 		{
 			if (a.Length != b.Length)
@@ -160,8 +169,7 @@ namespace BPUtil
 		/// <summary>
 		/// Inverts every byte in the array. e.g. [0001] => [1110]
 		/// </summary>
-		/// <param name="a">An array.</param>
-		/// <returns></returns>
+		/// <param name="a">Array to invert in-place. If null, the method does nothing.</param>
 		public static void InvertBits(byte[] a)
 		{
 			if (a == null)
@@ -172,8 +180,8 @@ namespace BPUtil
 		/// <summary>
 		/// Returns a new byte array containing the inverse of the values of the source array. e.g. [0001] => [1110]
 		/// </summary>
-		/// <param name="a">An array.</param>
-		/// <returns></returns>
+		/// <param name="a">Source array. May be null.</param>
+		/// <returns>A new array containing inverted bytes, or null if <paramref name="a"/> is null.</returns>
 		public static byte[] GetInverse(byte[] a)
 		{
 			if (a == null)
@@ -186,8 +194,8 @@ namespace BPUtil
 		/// <summary>
 		/// Generates a byte array of the specified length, filled with cryptographically strong random values.
 		/// </summary>
-		/// <param name="numBytes">The length of the byte array to create.</param>
-		/// <returns></returns>
+		/// <param name="numBytes">The length of the byte array to create. Must be &gt;= 0.</param>
+		/// <returns>A new byte array of length <paramref name="numBytes"/> filled with random bytes.</returns>
 		public static byte[] GenerateRandomBytes(int numBytes)
 		{
 			byte[] buf = new byte[numBytes];
@@ -201,9 +209,9 @@ namespace BPUtil
 		/// <para>Any "CR" characters encountered are not added to the output string.</para>
 		/// <para>Null is returned if the line exceeds the specified [maxLength] or if any out-of-range characters are encountered.</para>
 		/// </summary>
-		/// <param name="inputStream"></param>
-		/// <param name="maxLength">Maximum length of the line.</param>
-		/// <returns></returns>
+		/// <param name="inputStream">Stream to read from. Must be readable.</param>
+		/// <param name="maxLength">Maximum length of the line. If exceeded, null is returned.</param>
+		/// <returns>The read line as an ASCII string, or null if the line contains invalid characters or exceeds <paramref name="maxLength"/>.</returns>
 		public static string ReadPrintableASCIILine(Stream inputStream, int maxLength = 32768)
 		{
 			int next_char;
@@ -213,7 +221,7 @@ namespace BPUtil
 				next_char = inputStream.ReadByte();
 				if (next_char == '\n') { break; }
 				if (next_char == '\r') { continue; }
-				if (next_char == -1) { break; };
+				if (next_char == -1) { break; }
 				if (next_char < 32 || next_char > 126)
 					return null;
 				if (data.Count >= maxLength)
@@ -225,9 +233,9 @@ namespace BPUtil
 		/// <summary>
 		/// Converts a byte array to a hexidecimal string using either upper or lower case letters.
 		/// </summary>
-		/// <param name="buffer">The byte array to convert.</param>
-		/// <param name="capitalLetters">If true, letters will be upper case.</param>
-		/// <returns></returns>
+		/// <param name="buffer">The byte array to convert. Must not be null.</param>
+		/// <param name="capitalLetters">If true, letters will be upper case; otherwise lower case.</param>
+		/// <returns>A hexadecimal string representation of <paramref name="buffer"/>.</returns>
 		public static string ToHex(byte[] buffer, bool capitalLetters = true)
 		{
 			StringBuilder sBuilder = new StringBuilder();
@@ -243,8 +251,8 @@ namespace BPUtil
 		/// Converts a byte to a hexidecimal string using either upper or lower case letters.
 		/// </summary>
 		/// <param name="v">The value to convert.</param>
-		/// <param name="capitalLetters">If true, letters will be upper case.</param>
-		/// <returns></returns>
+		/// <param name="capitalLetters">If true, letters will be upper case; otherwise lower case.</param>
+		/// <returns>Two-character hexadecimal representation of <paramref name="v"/>.</returns>
 		public static string ToHex(byte v, bool capitalLetters = true)
 		{
 			if (capitalLetters)
@@ -256,8 +264,8 @@ namespace BPUtil
 		/// Converts a numeric value to a hexidecimal string using either upper or lower case letters and little endian encoding.
 		/// </summary>
 		/// <param name="v">The value to convert.</param>
-		/// <param name="capitalLetters">If true, letters will be upper case.</param>
-		/// <returns></returns>
+		/// <param name="capitalLetters">If true, letters will be upper case; otherwise lower case.</param>
+		/// <returns>Hex string representing the 4-byte little-endian encoding of <paramref name="v"/>.</returns>
 		public static string ToHexLE(uint v, bool capitalLetters = true)
 		{
 			byte[] buffer = new byte[4];
@@ -268,8 +276,8 @@ namespace BPUtil
 		/// Converts a numeric value to a hexidecimal string using either upper or lower case letters and big endian encoding.
 		/// </summary>
 		/// <param name="v">The value to convert.</param>
-		/// <param name="capitalLetters">If true, letters will be upper case.</param>
-		/// <returns></returns>
+		/// <param name="capitalLetters">If true, letters will be upper case; otherwise lower case.</param>
+		/// <returns>Hex string representing the 4-byte big-endian encoding of <paramref name="v"/>.</returns>
 		public static string ToHex(uint v, bool capitalLetters = true)
 		{
 			byte[] buffer = new byte[4];
@@ -280,8 +288,8 @@ namespace BPUtil
 		/// Converts a numeric value to a hexidecimal string using either upper or lower case letters and little endian encoding.
 		/// </summary>
 		/// <param name="v">The value to convert.</param>
-		/// <param name="capitalLetters">If true, letters will be upper case.</param>
-		/// <returns></returns>
+		/// <param name="capitalLetters">If true, letters will be upper case; otherwise lower case.</param>
+		/// <returns>Hex string representing the 8-byte little-endian encoding of <paramref name="v"/>.</returns>
 		public static string ToHexLE(ulong v, bool capitalLetters = true)
 		{
 			byte[] buffer = new byte[8];
@@ -292,8 +300,8 @@ namespace BPUtil
 		/// Converts a numeric value to a hexidecimal string using either upper or lower case letters and big endian encoding.
 		/// </summary>
 		/// <param name="v">The value to convert.</param>
-		/// <param name="capitalLetters">If true, letters will be upper case.</param>
-		/// <returns></returns>
+		/// <param name="capitalLetters">If true, letters will be upper case; otherwise lower case.</param>
+		/// <returns>Hex string representing the 8-byte big-endian encoding of <paramref name="v"/>.</returns>
 		public static string ToHex(ulong v, bool capitalLetters = true)
 		{
 			byte[] buffer = new byte[8];
@@ -303,7 +311,7 @@ namespace BPUtil
 		/// <summary>
 		/// Concatenates a variable number of byte arrays into one byte array.
 		/// </summary>
-		/// <param name="arrays">The byte arrays to concatenate.</param>
+		/// <param name="arrays">The byte arrays to concatenate. Null arguments are not supported.</param>
 		/// <returns>A new byte array that is the concatenation of all the input arrays.</returns>
 		public static byte[] ConcatenateByteArrays(params byte[][] arrays)
 		{
@@ -324,8 +332,8 @@ namespace BPUtil
 		/// <summary>
 		/// Converts a ushort to a float using binary16 (half) encoding.
 		/// </summary>
-		/// <param name="binary16">A ushort containing floating point data.</param>
-		/// <returns></returns>
+		/// <param name="binary16">A ushort containing floating point data in IEEE 754 binary16 format.</param>
+		/// <returns>The corresponding single-precision floating point value (32-bit float).</returns>
 		public static float DecodeHalf(ushort binary16)
 		{
 			// Extract the sign (1 bit), exponent (5 bits), and fraction (10 bits)
@@ -386,6 +394,7 @@ namespace BPUtil
 		/// <summary>
 		/// Recycles a byte[] with length of 81920 back into the object pool.  The buffer will be given to another caller later without being zeroed-out.
 		/// </summary>
+		/// <param name="buffer">The buffer to recycle. Must not be null and must have length equal to <see cref="BufferSize"/>.</param>
 		/// <exception cref="ArgumentNullException">If the buffer is null.</exception>
 		/// <exception cref="ArgumentException">If the buffer is an improper length.</exception>
 		public static void BufferRecycle(byte[] buffer)
@@ -694,7 +703,7 @@ namespace BPUtil
 				{
 					endOfStream = true;
 					break;
-				};
+				}
 				didRead = true;
 				if (next_char == '\n')
 					break;
@@ -715,7 +724,7 @@ namespace BPUtil
 		/// <param name="timeoutMilliseconds">If greater than 0, the operation will time out if no progress is made for this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
 		/// <param name="maxLength">Maximum line length.  If '\n' is not encountered before the text grows to this many characters, an exception is thrown.</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
-		/// <returns></returns>
+		/// <returns>The read line, or null if end of stream reached before any data was read.</returns>
 		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
 		/// <exception cref="OperationCanceledException">If the timeout is exceeded during any ReadAsync operation.</exception>
 		/// <exception cref="TimeoutException">If the read operation times out.</exception>
@@ -764,7 +773,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="reader">StreamReader to read from.</param>
 		/// <param name="maxLength">Maximum line length.</param>
-		/// <returns></returns>
+		/// <returns>Line read from the StreamReader, or null if end of stream reached.</returns>
 		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
 		public static async Task<string> HttpStreamReadLineAsync(StreamReader reader, int maxLength = 16384)
 		{
@@ -782,7 +791,7 @@ namespace BPUtil
 		/// <param name="length">Number of bytes to attempt to read.</param>
 		/// <param name="timeoutMilliseconds">If greater than 0, the operation will be cancelled if it does not complete within this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
 		/// <param name="cancellationToken">Cancellation Token.  A time-based cancellation token will be linked with this one such that the operation is canceled if the given token is canceled or if the time-based token is canceled because time ran out.</param>
-		/// <returns></returns>
+		/// <returns>The number of bytes read from the stream.</returns>
 		/// <exception cref="OperationCanceledException">If the timeout is exceeded during the ReadAsync operation.</exception>
 		/// <exception cref="TimeoutException">If the read operation times out.</exception>
 		public static async Task<int> ReadAsyncWithTimeout(Stream stream, byte[] buffer, int offset, int length, int timeoutMilliseconds, CancellationToken cancellationToken = default)
@@ -813,7 +822,7 @@ namespace BPUtil
 		/// Reads a signed byte from the specified stream.
 		/// </summary>
 		/// <param name="stream">Stream to read from.</param>
-		/// <returns></returns>
+		/// <returns>The read signed byte.</returns>
 		public static sbyte ReadSByte(Stream stream)
 		{
 			return (sbyte)ReadNBytes(stream, 1)[0];
@@ -825,7 +834,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>
 		/// <param name="n">The number of bytes to read.</param>
-		/// <returns></returns>
+		/// <returns>A new byte array of length <paramref name="n"/> containing the read bytes.</returns>
 		public static byte[] ReadNBytes(IDataStream s, int n)
 		{
 			byte[] buffer = new byte[n];
@@ -837,7 +846,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>
 		/// <param name="buffer">The buffer to fill.</param>
-		/// <returns></returns>
+		/// <exception cref="EndOfStreamException">Thrown if the stream ends before the buffer is completely filled.</exception>
 		public static void ReadBytes(IDataStream s, byte[] buffer)
 		{
 			if (buffer.Length == 0)
@@ -869,7 +878,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>
 		/// <param name="n">The number of bytes to read.</param>
-		/// <returns></returns>
+		/// <returns>A new byte array of length <paramref name="n"/> containing the read bytes.</returns>
 		public static byte[] ReadNBytes(Stream s, int n)
 		{
 			byte[] buffer = new byte[n];
@@ -881,7 +890,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>
 		/// <param name="buffer">The buffer to fill.</param>
-		/// <returns></returns>
+		/// <exception cref="EndOfStreamException">Thrown if the stream ends before the buffer is completely filled.</exception>
 		public static void ReadBytes(Stream s, byte[] buffer)
 		{
 			if (buffer.Length == 0)
@@ -913,7 +922,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>
 		/// <param name="n">The number of bytes to read.</param>
-		/// <returns></returns>
+		/// <returns>The read bytes with order reversed on little-endian systems so they represent network (big-endian) order on the host.</returns>
 		public static byte[] ReadNBytesFromNetworkOrder(Stream s, int n)
 		{
 			return NetworkToHostOrder(ReadNBytes(s, n));
@@ -923,7 +932,7 @@ namespace BPUtil
 		/// If the current system is Big Endian, the array is returned unmodified.
 		/// </summary>
 		/// <param name="buf">The byte array.</param>
-		/// <returns></returns>
+		/// <returns>The possibly reversed array. Note: reversal is performed in-place on the input array instance.</returns>
 		public static byte[] NetworkToHostOrder(byte[] buf)
 		{
 			if (BitConverter.IsLittleEndian)
@@ -935,7 +944,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="buf">The source byte array.</param>
 		/// <param name="offset">The offset to begin copying bytes at.</param>
-		/// <returns></returns>
+		/// <returns>A new byte array containing bytes from <paramref name="offset"/> to the end of <paramref name="buf"/>.</returns>
 		public static byte[] SubArray(byte[] buf, int offset)
 		{
 			return SubArray(buf, offset, buf.Length - offset);
@@ -946,7 +955,7 @@ namespace BPUtil
 		/// <param name="buf">The source byte array.</param>
 		/// <param name="offset">The offset to begin copying bytes at.</param>
 		/// <param name="length">The number of bytes to copy.</param>
-		/// <returns></returns>
+		/// <returns>A new byte array containing the requested range of bytes.</returns>
 		public static byte[] SubArray(byte[] buf, int offset, int length)
 		{
 			byte[] dst = new byte[length];
@@ -959,7 +968,7 @@ namespace BPUtil
 		/// <param name="buf">The source byte array.</param>
 		/// <param name="offset">The offset to begin copying bytes at.</param>
 		/// <param name="length">The number of bytes to copy.</param>
-		/// <returns></returns>
+		/// <returns>A new byte array containing the copied bytes, reversed if running on a little-endian host.</returns>
 		public static byte[] NetworkToHostOrder(byte[] buf, int offset, int length)
 		{
 			return NetworkToHostOrder(SubArray(buf, offset, length));
@@ -1004,6 +1013,7 @@ namespace BPUtil
 		/// <param name="str">String to write.</param>
 		/// <param name="buffer">The buffer to write to.</param>
 		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		/// <returns>The number of bytes written to the buffer (UTF8 encoded length).</returns>
 		public static int WriteUtf8(string str, byte[] buffer, int offset)
 		{
 			int maxLength = buffer.Length - offset;
@@ -1024,6 +1034,7 @@ namespace BPUtil
 		/// <param name="str">String to write.</param>
 		/// <param name="buffer">The buffer to write to.</param>
 		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		/// <returns>The UTF8 encoded byte length of the written string.</returns>
 		public static ushort WriteUtf8_16(string str, byte[] buffer, int offset)
 		{
 			if (str.Length > ushort.MaxValue)
@@ -1048,6 +1059,7 @@ namespace BPUtil
 		/// <param name="str">String to write.</param>
 		/// <param name="buffer">The buffer to write to.</param>
 		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		/// <returns>The UTF8 encoded byte length of the written string.</returns>
 		public static uint WriteUtf8_32(string str, byte[] buffer, int offset)
 		{
 			int maxLength = buffer.Length - (offset + 4);
@@ -1103,6 +1115,7 @@ namespace BPUtil
 		/// <param name="str">String to write.</param>
 		/// <param name="buffer">The buffer to write to.</param>
 		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		/// <returns>The UTF8 encoded byte length of the written string.</returns>
 		public static ushort WriteUtf8_16LE(string str, byte[] buffer, int offset)
 		{
 			if (str.Length > ushort.MaxValue)
@@ -1127,6 +1140,7 @@ namespace BPUtil
 		/// <param name="str">String to write.</param>
 		/// <param name="buffer">The buffer to write to.</param>
 		/// <param name="offset">The offset in the buffer to begin writing at.</param>
+		/// <returns>The UTF8 encoded byte length of the written string.</returns>
 		public static uint WriteUtf8_32LE(string str, byte[] buffer, int offset)
 		{
 			int maxLength = buffer.Length - (offset + 4);
@@ -1178,6 +1192,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="str">String to write.</param>
 		/// <param name="s">Stream to write to.</param>
+		/// <returns>The number of bytes written to the stream (UTF8 encoded length).</returns>
 		public static int WriteUtf8(string str, Stream s)
 		{
 			byte[] bytes = Utf8NoBOM.GetBytes(str);
@@ -1192,6 +1207,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="str">String to write.</param>
 		/// <param name="s">Stream to write to.</param>
+		/// <returns>The UTF8 encoded byte length of the written string.</returns>
 		/// <exception cref="ArgumentException">If the string is longer than 65535 characters or bytes.</exception>
 		public static ushort WriteUtf8_16(string str, Stream s)
 		{
@@ -1211,6 +1227,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="str">String to write.</param>
 		/// <param name="s">Stream to write to.</param>
+		/// <returns>The UTF8 encoded byte length of the written string.</returns>
 		public static uint WriteUtf8_32(string str, Stream s)
 		{
 			byte[] bytes = Utf8NoBOM.GetBytes(str);
@@ -1249,7 +1266,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="buffer">Buffer to read the 2-byte floating point number from.</param>
 		/// <param name="offset">Offset to begin reading in the buffer.</param>
-		/// <returns></returns>
+		/// <returns>The converted 32-bit float value.</returns>
 		public static float ReadHalf(byte[] buffer, int offset)
 		{
 			return DecodeHalf(ReadUInt16(buffer, offset));
@@ -1266,7 +1283,7 @@ namespace BPUtil
 		/// Converts all data from the buffer to a string assuming UTF8 encoding with no byte order mark.
 		/// </summary>
 		/// <param name="buffer">The buffer to convert.</param>
-		/// <returns></returns>
+		/// <returns>The UTF8-decoded string.</returns>
 		public static string ReadUtf8(byte[] buffer)
 		{
 			return Utf8NoBOM.GetString(buffer, 0, buffer.Length);
@@ -1277,7 +1294,8 @@ namespace BPUtil
 		/// <param name="buffer">The buffer to read from.</param>
 		/// <param name="offset">The offset to begin reading at.</param>
 		/// <param name="byteLength">The number of bytes to read.</param>
-		/// <returns></returns>
+		/// <returns>The UTF8-decoded string of the specified bytes.</returns>
+		/// <exception cref="ArgumentException">Thrown if offset or byteLength specify an invalid range in the buffer.</exception>
 		public static string ReadUtf8(byte[] buffer, int offset, int byteLength)
 		{
 			if (offset < 0 || offset >= buffer.Length)
@@ -1291,7 +1309,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="buffer">The buffer to read from.</param>
 		/// <param name="offset">The offset to begin reading at.</param>
-		/// <returns></returns>
+		/// <returns>The decoded string.</returns>
 		public static string ReadUtf8_16(byte[] buffer, int offset)
 		{
 			return ReadUtf8_16(buffer, offset, out ushort ignored);
@@ -1302,7 +1320,8 @@ namespace BPUtil
 		/// <param name="buffer">The buffer to read from.</param>
 		/// <param name="offset">The offset to begin reading at.</param>
 		/// <param name="strLen">[out] Length in bytes of the string that was read. (does not include the 2 byte length of the length field)</param>
-		/// <returns></returns>
+		/// <returns>The decoded string.</returns>
+		/// <exception cref="ArgumentException">Thrown if offset is invalid or there are not enough bytes to read the length or string.</exception>
 		public static string ReadUtf8_16(byte[] buffer, int offset, out ushort strLen)
 		{
 			if (offset < 0 || offset >= buffer.Length)
@@ -1317,7 +1336,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="buffer">The buffer to read from.</param>
 		/// <param name="offset">The offset to begin reading at.</param>
-		/// <returns></returns>
+		/// <returns>The decoded string.</returns>
 		public static string ReadUtf8_32(byte[] buffer, int offset)
 		{
 			return ReadUtf8_32(buffer, offset, out uint ignored);
@@ -1328,7 +1347,8 @@ namespace BPUtil
 		/// <param name="buffer">The buffer to read from.</param>
 		/// <param name="offset">The offset to begin reading at.</param>
 		/// <param name="strLen">[out] Length in bytes of the string that was read. (does not include the 4 byte length of the length field)</param>
-		/// <returns></returns>
+		/// <returns>The decoded string.</returns>
+		/// <exception cref="ArgumentException">Thrown if offset is invalid or there are not enough bytes to read the length or string.</exception>
 		public static string ReadUtf8_32(byte[] buffer, int offset, out uint strLen)
 		{
 			if (offset < 0 || offset >= buffer.Length)
@@ -1369,7 +1389,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="buffer">Buffer to read the 2-byte floating point number from.</param>
 		/// <param name="offset">Offset to begin reading in the buffer.</param>
-		/// <returns></returns>
+		/// <returns>The converted 32-bit float value.</returns>
 		public static float ReadHalfLE(byte[] buffer, int offset)
 		{
 			return DecodeHalf(ReadUInt16LE(buffer, offset));
@@ -1412,7 +1432,7 @@ namespace BPUtil
 		/// Reads a 2-byte floating point number (binary16) in big endian format where the most significant bit is the sign, then comes 5 exponent bits, then 10 fraction bits.
 		/// </summary>
 		/// <param name="s">Stream to read the 2-byte floating point number from.</param>
-		/// <returns></returns>
+		/// <returns>The converted 32-bit float value.</returns>
 		public static float ReadHalf(Stream s)
 		{
 			return DecodeHalf(ReadUInt16(s));
@@ -1430,7 +1450,7 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>
 		/// <param name="byteLength">The number of bytes to read.</param>
-		/// <returns></returns>
+		/// <returns>The decoded UTF8 string.</returns>
 		public static string ReadUtf8(Stream s, int byteLength)
 		{
 			return Utf8NoBOM.GetString(ReadNBytes(s, byteLength), 0, byteLength);
@@ -1439,7 +1459,7 @@ namespace BPUtil
 		/// Reads a UTF8 string (no byte order mark) from the stream, assuming the string's length is prepended as a 16 bit unsigned integer.
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>
-		/// <returns></returns>
+		/// <returns>The decoded string.</returns>
 		public static string ReadUtf8_16(Stream s)
 		{
 			int byteLength = ReadUInt16(s);
@@ -1449,7 +1469,7 @@ namespace BPUtil
 		/// Reads a UTF8 string (no byte order mark) from the stream, assuming the string's length is prepended as a 32 bit unsigned integer.
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>
-		/// <returns></returns>
+		/// <returns>The decoded string.</returns>
 		public static string ReadUtf8_32(Stream s)
 		{
 			int byteLength = (int)ReadUInt32(s);
@@ -1497,7 +1517,7 @@ namespace BPUtil
 		/// Reads a 2-byte floating point number (binary16) in little endian format where the most significant bit is the sign, then comes 5 exponent bits, then 10 fraction bits.
 		/// </summary>
 		/// <param name="s">Stream to read the 2-byte floating point number from.</param>
-		/// <returns></returns>
+		/// <returns>The converted 32-bit float value.</returns>
 		public static float ReadHalfLE(Stream s)
 		{
 			return DecodeHalf(ReadUInt16LE(s));
