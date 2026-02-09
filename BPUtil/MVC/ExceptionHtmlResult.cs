@@ -44,6 +44,8 @@ namespace BPUtil.MVC
 			sb.Append("padding: 10px;");
 			sb.Append("background-color: #FFDDDD;");
 			sb.Append("overflow: auto;");
+			sb.Append("white-space: pre-wrap;");
+			sb.Append("word-break: break-word;");
 			sb.AppendLine("\">");
 			sb.AppendLine(StringUtil.HtmlEncode(this.Message));
 			sb.AppendLine("</pre>");
