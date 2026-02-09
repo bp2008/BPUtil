@@ -975,34 +975,82 @@ namespace BPUtil
 		}
 		#endregion
 		#region Write to byte array (Big endian in the buffer)
+		/// <summary>
+		/// Writes a 16-bit signed integer to the buffer in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteInt16(short num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(num)), 0, buffer, offset, 2);
 		}
+		/// <summary>
+		/// Writes a 16-bit unsigned integer to the buffer in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteUInt16(ushort num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes((ushort)IPAddress.HostToNetworkOrder((short)num)), 0, buffer, offset, 2);
 		}
+		/// <summary>
+		/// Writes a 32-bit signed integer to the buffer in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteInt32(int num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(num)), 0, buffer, offset, 4);
 		}
+		/// <summary>
+		/// Writes a 32-bit unsigned integer to the buffer in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteUInt32(uint num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes((uint)IPAddress.HostToNetworkOrder((int)num)), 0, buffer, offset, 4);
 		}
+		/// <summary>
+		/// Writes a 64-bit signed integer to the buffer in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteInt64(long num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(num)), 0, buffer, offset, 8);
 		}
+		/// <summary>
+		/// Writes a 64-bit unsigned integer to the buffer in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteUInt64(ulong num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes((ulong)IPAddress.HostToNetworkOrder((long)num)), 0, buffer, offset, 8);
 		}
+		/// <summary>
+		/// Writes a 32-bit floating point number to the buffer in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteFloat(float num, byte[] buffer, int offset)
 		{
 			Array.Copy(NetworkToHostOrder(BitConverter.GetBytes(num)), 0, buffer, offset, 4);
 		}
+		/// <summary>
+		/// Writes a 64-bit floating point number to the buffer in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteDouble(double num, byte[] buffer, int offset)
 		{
 			Array.Copy(NetworkToHostOrder(BitConverter.GetBytes(num)), 0, buffer, offset, 8);
@@ -1074,34 +1122,82 @@ namespace BPUtil
 		}
 		#endregion
 		#region Write to byte array (Little endian in the buffer)
+		/// <summary>
+		/// Writes a 16-bit signed integer to the buffer in little endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteInt16LE(short num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 2);
 		}
+		/// <summary>
+		/// Writes a 16-bit unsigned integer to the buffer in little endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteUInt16LE(ushort num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 2);
 		}
+		/// <summary>
+		/// Writes a 32-bit signed integer to the buffer in little endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteInt32LE(int num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 4);
 		}
+		/// <summary>
+		/// Writes a 32-bit unsigned integer to the buffer in little endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteUInt32LE(uint num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes((int)num), 0, buffer, offset, 4);
 		}
+		/// <summary>
+		/// Writes a 64-bit signed integer to the buffer in little endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteInt64LE(long num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 8);
 		}
+		/// <summary>
+		/// Writes a 64-bit unsigned integer to the buffer in little endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteUInt64LE(ulong num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 8);
 		}
+		/// <summary>
+		/// Writes a 32-bit floating point number to the buffer in little endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteFloatLE(float num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 4);
 		}
+		/// <summary>
+		/// Writes a 64-bit floating point number to the buffer in little endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="buffer">The buffer to write to.</param>
+		/// <param name="offset">The offset in the buffer to begin writing at.</param>
 		public static void WriteDoubleLE(double num, byte[] buffer, int offset)
 		{
 			Array.Copy(BitConverter.GetBytes(num), 0, buffer, offset, 8);
@@ -1155,34 +1251,74 @@ namespace BPUtil
 		}
 		#endregion
 		#region Write to stream (Big endian in the stream)
+		/// <summary>
+		/// Writes a 16-bit signed integer to the stream in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="s">Stream to write to.</param>
 		public static void WriteInt16(short num, Stream s)
 		{
 			s.Write(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(num)), 0, 2);
 		}
+		/// <summary>
+		/// Writes a 16-bit unsigned integer to the stream in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="s">Stream to write to.</param>
 		public static void WriteUInt16(ushort num, Stream s)
 		{
 			s.Write(BitConverter.GetBytes((ushort)IPAddress.HostToNetworkOrder((short)num)), 0, 2);
 		}
+		/// <summary>
+		/// Writes a 32-bit signed integer to the stream in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="s">Stream to write to.</param>
 		public static void WriteInt32(int num, Stream s)
 		{
 			s.Write(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(num)), 0, 4);
 		}
+		/// <summary>
+		/// Writes a 32-bit unsigned integer to the stream in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="s">Stream to write to.</param>
 		public static void WriteUInt32(uint num, Stream s)
 		{
 			s.Write(BitConverter.GetBytes((uint)IPAddress.HostToNetworkOrder((int)num)), 0, 4);
 		}
+		/// <summary>
+		/// Writes a 64-bit signed integer to the stream in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="s">Stream to write to.</param>
 		public static void WriteInt64(long num, Stream s)
 		{
 			s.Write(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(num)), 0, 8);
 		}
+		/// <summary>
+		/// Writes a 64-bit unsigned integer to the stream in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="s">Stream to write to.</param>
 		public static void WriteUInt64(ulong num, Stream s)
 		{
 			s.Write(BitConverter.GetBytes((ulong)IPAddress.HostToNetworkOrder((long)num)), 0, 8);
 		}
+		/// <summary>
+		/// Writes a 32-bit floating point number to the stream in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="s">Stream to write to.</param>
 		public static void WriteFloat(float num, Stream s)
 		{
 			s.Write(NetworkToHostOrder(BitConverter.GetBytes(num)), 0, 4);
 		}
+		/// <summary>
+		/// Writes a 64-bit floating point number to the stream in big endian format.
+		/// </summary>
+		/// <param name="num">The value to write.</param>
+		/// <param name="s">Stream to write to.</param>
 		public static void WriteDouble(double num, Stream s)
 		{
 			s.Write(NetworkToHostOrder(BitConverter.GetBytes(num)), 0, 8);
@@ -1237,26 +1373,62 @@ namespace BPUtil
 		}
 		#endregion
 		#region Read from byte array (Big endian in the buffer)
+		/// <summary>
+		/// Reads a 16-bit signed integer from the buffer in big endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read signed 16-bit integer value.</returns>
 		public static short ReadInt16(byte[] buffer, int offset)
 		{
 			return IPAddress.NetworkToHostOrder(BitConverter.ToInt16(buffer, offset));
 		}
+		/// <summary>
+		/// Reads a 16-bit unsigned integer from the buffer in big endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read unsigned 16-bit integer value.</returns>
 		public static ushort ReadUInt16(byte[] buffer, int offset)
 		{
 			return (ushort)IPAddress.NetworkToHostOrder((short)BitConverter.ToUInt16(buffer, offset));
 		}
+		/// <summary>
+		/// Reads a 32-bit signed integer from the buffer in big endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read signed 32-bit integer value.</returns>
 		public static int ReadInt32(byte[] buffer, int offset)
 		{
 			return IPAddress.NetworkToHostOrder(BitConverter.ToInt32(buffer, offset));
 		}
+		/// <summary>
+		/// Reads a 32-bit unsigned integer from the buffer in big endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read unsigned 32-bit integer value.</returns>
 		public static uint ReadUInt32(byte[] buffer, int offset)
 		{
 			return (uint)IPAddress.NetworkToHostOrder((int)BitConverter.ToUInt32(buffer, offset));
 		}
+		/// <summary>
+		/// Reads a 64-bit signed integer from the buffer in big endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read signed 64-bit integer value.</returns>
 		public static long ReadInt64(byte[] buffer, int offset)
 		{
 			return IPAddress.NetworkToHostOrder(BitConverter.ToInt64(buffer, offset));
 		}
+		/// <summary>
+		/// Reads a 64-bit unsigned integer from the buffer in big endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read unsigned 64-bit integer value.</returns>
 		public static ulong ReadUInt64(byte[] buffer, int offset)
 		{
 			return (ulong)IPAddress.NetworkToHostOrder((long)BitConverter.ToUInt64(buffer, offset));
@@ -1271,10 +1443,22 @@ namespace BPUtil
 		{
 			return DecodeHalf(ReadUInt16(buffer, offset));
 		}
+		/// <summary>
+		/// Reads a 32-bit floating point number from the buffer in big endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read 32-bit float value.</returns>
 		public static float ReadFloat(byte[] buffer, int offset)
 		{
 			return BitConverter.ToSingle(NetworkToHostOrder(buffer, offset, 4), 0);
 		}
+		/// <summary>
+		/// Reads a 64-bit floating point number from the buffer in big endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read 64-bit double value.</returns>
 		public static double ReadDouble(byte[] buffer, int offset)
 		{
 			return BitConverter.ToDouble(NetworkToHostOrder(buffer, offset, 8), 0);
@@ -1360,26 +1544,62 @@ namespace BPUtil
 		}
 		#endregion
 		#region Read from byte array (Little endian in the buffer)
+		/// <summary>
+		/// Reads a 16-bit signed integer from the buffer in little endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read signed 16-bit integer value.</returns>
 		public static short ReadInt16LE(byte[] buffer, int offset)
 		{
 			return BitConverter.ToInt16(buffer, offset);
 		}
+		/// <summary>
+		/// Reads a 16-bit unsigned integer from the buffer in little endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read unsigned 16-bit integer value.</returns>
 		public static ushort ReadUInt16LE(byte[] buffer, int offset)
 		{
 			return BitConverter.ToUInt16(buffer, offset);
 		}
+		/// <summary>
+		/// Reads a 32-bit signed integer from the buffer in little endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read signed 32-bit integer value.</returns>
 		public static int ReadInt32LE(byte[] buffer, int offset)
 		{
 			return BitConverter.ToInt32(buffer, offset);
 		}
+		/// <summary>
+		/// Reads a 32-bit unsigned integer from the buffer in little endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read unsigned 32-bit integer value.</returns>
 		public static uint ReadUInt32LE(byte[] buffer, int offset)
 		{
 			return BitConverter.ToUInt32(buffer, offset);
 		}
+		/// <summary>
+		/// Reads a 64-bit signed integer from the buffer in little endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read signed 64-bit integer value.</returns>
 		public static long ReadInt64LE(byte[] buffer, int offset)
 		{
 			return BitConverter.ToInt64(buffer, offset);
 		}
+		/// <summary>
+		/// Reads a 64-bit unsigned integer from the buffer in little endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read unsigned 64-bit integer value.</returns>
 		public static ulong ReadUInt64LE(byte[] buffer, int offset)
 		{
 			return BitConverter.ToUInt64(buffer, offset);
@@ -1394,36 +1614,78 @@ namespace BPUtil
 		{
 			return DecodeHalf(ReadUInt16LE(buffer, offset));
 		}
+		/// <summary>
+		/// Reads a 32-bit floating point number from the buffer in little endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read 32-bit float value.</returns>
 		public static float ReadFloatLE(byte[] buffer, int offset)
 		{
 			return BitConverter.ToSingle(buffer, offset);
 		}
+		/// <summary>
+		/// Reads a 64-bit floating point number from the buffer in little endian format.
+		/// </summary>
+		/// <param name="buffer">Buffer to read from.</param>
+		/// <param name="offset">Offset to begin reading in the buffer.</param>
+		/// <returns>The read 64-bit double value.</returns>
 		public static double ReadDoubleLE(byte[] buffer, int offset)
 		{
 			return BitConverter.ToDouble(buffer, offset);
 		}
 		#endregion
 		#region Read from stream (Big endian on the stream)
+		/// <summary>
+		/// Reads a 16-bit signed integer from the stream in big endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read signed 16-bit integer value.</returns>
 		public static short ReadInt16(Stream s)
 		{
 			return IPAddress.NetworkToHostOrder(BitConverter.ToInt16(ReadNBytes(s, 2), 0));
 		}
+		/// <summary>
+		/// Reads a 16-bit unsigned integer from the stream in big endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read unsigned 16-bit integer value.</returns>
 		public static ushort ReadUInt16(Stream s)
 		{
 			return (ushort)IPAddress.NetworkToHostOrder((short)BitConverter.ToUInt16(ReadNBytes(s, 2), 0));
 		}
+		/// <summary>
+		/// Reads a 32-bit signed integer from the stream in big endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read signed 32-bit integer value.</returns>
 		public static int ReadInt32(Stream s)
 		{
 			return IPAddress.NetworkToHostOrder(BitConverter.ToInt32(ReadNBytes(s, 4), 0));
 		}
+		/// <summary>
+		/// Reads a 32-bit unsigned integer from the stream in big endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read unsigned 32-bit integer value.</returns>
 		public static uint ReadUInt32(Stream s)
 		{
 			return (uint)IPAddress.NetworkToHostOrder((int)BitConverter.ToUInt32(ReadNBytes(s, 4), 0));
 		}
+		/// <summary>
+		/// Reads a 64-bit signed integer from the stream in big endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read signed 64-bit integer value.</returns>
 		public static long ReadInt64(Stream s)
 		{
 			return IPAddress.NetworkToHostOrder(BitConverter.ToInt64(ReadNBytes(s, 8), 0));
 		}
+		/// <summary>
+		/// Reads a 64-bit unsigned integer from the stream in big endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read unsigned 64-bit integer value.</returns>
 		public static ulong ReadUInt64(Stream s)
 		{
 			return (ulong)IPAddress.NetworkToHostOrder((long)BitConverter.ToUInt64(ReadNBytes(s, 8), 0));
@@ -1437,10 +1699,20 @@ namespace BPUtil
 		{
 			return DecodeHalf(ReadUInt16(s));
 		}
+		/// <summary>
+		/// Reads a 32-bit floating point number from the stream in big endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read 32-bit float value.</returns>
 		public static float ReadFloat(Stream s)
 		{
 			return BitConverter.ToSingle(ReadNBytesFromNetworkOrder(s, 4), 0);
 		}
+		/// <summary>
+		/// Reads a 64-bit floating point number from the stream in big endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read 64-bit double value.</returns>
 		public static double ReadDouble(Stream s)
 		{
 			return BitConverter.ToDouble(ReadNBytesFromNetworkOrder(s, 8), 0);
@@ -1477,36 +1749,66 @@ namespace BPUtil
 		}
 		#endregion
 		#region Read from stream (Little endian on the stream)
+		/// <summary>
+		/// Reads a 16-bit signed integer from the stream in little endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read signed 16-bit integer value.</returns>
 		public static short ReadInt16LE(Stream s)
 		{
 			if (BitConverter.IsLittleEndian)
 				return BitConverter.ToInt16(ReadNBytes(s, 2), 0);
 			return ReadInt16(s);
 		}
+		/// <summary>
+		/// Reads a 16-bit unsigned integer from the stream in little endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read unsigned 16-bit integer value.</returns>
 		public static ushort ReadUInt16LE(Stream s)
 		{
 			if (BitConverter.IsLittleEndian)
 				return BitConverter.ToUInt16(ReadNBytes(s, 2), 0);
 			return ReadUInt16(s);
 		}
+		/// <summary>
+		/// Reads a 32-bit signed integer from the stream in little endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read signed 32-bit integer value.</returns>
 		public static int ReadInt32LE(Stream s)
 		{
 			if (BitConverter.IsLittleEndian)
 				return BitConverter.ToInt32(ReadNBytes(s, 4), 0);
 			return ReadInt32(s);
 		}
+		/// <summary>
+		/// Reads a 32-bit unsigned integer from the stream in little endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read unsigned 32-bit integer value.</returns>
 		public static uint ReadUInt32LE(Stream s)
 		{
 			if (BitConverter.IsLittleEndian)
 				return BitConverter.ToUInt32(ReadNBytes(s, 4), 0);
 			return ReadUInt32(s);
 		}
+		/// <summary>
+		/// Reads a 64-bit signed integer from the stream in little endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read signed 64-bit integer value.</returns>
 		public static long ReadInt64LE(Stream s)
 		{
 			if (BitConverter.IsLittleEndian)
 				return BitConverter.ToInt64(ReadNBytes(s, 8), 0);
 			return ReadInt64(s);
 		}
+		/// <summary>
+		/// Reads a 64-bit unsigned integer from the stream in little endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read unsigned 64-bit integer value.</returns>
 		public static ulong ReadUInt64LE(Stream s)
 		{
 			if (BitConverter.IsLittleEndian)
@@ -1522,12 +1824,22 @@ namespace BPUtil
 		{
 			return DecodeHalf(ReadUInt16LE(s));
 		}
+		/// <summary>
+		/// Reads a 32-bit floating point number from the stream in little endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read 32-bit float value.</returns>
 		public static float ReadFloatLE(Stream s)
 		{
 			if (BitConverter.IsLittleEndian)
 				return BitConverter.ToSingle(ReadNBytes(s, 4), 0);
 			return ReadFloat(s);
 		}
+		/// <summary>
+		/// Reads a 64-bit floating point number from the stream in little endian format.
+		/// </summary>
+		/// <param name="s">Stream to read from.</param>
+		/// <returns>The read 64-bit double value.</returns>
 		public static double ReadDoubleLE(Stream s)
 		{
 			if (BitConverter.IsLittleEndian)
