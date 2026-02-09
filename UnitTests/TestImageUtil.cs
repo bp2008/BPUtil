@@ -17,31 +17,42 @@ namespace UnitTests
 		[TestMethod]
 		public void TestBmp()
 		{
-			VerifyImageFormatAndDimensions(ImageFormat.Bmp, "image/bmp", ".bmp");
+			byte[] imageData = GenerageTestImage(ImageFormat.Bmp);
+			VerifyImageFormatAndDimensions(imageData, "image/bmp", ".bmp");
 		}
 
 		[TestMethod]
 		public void TestGif()
 		{
-			VerifyImageFormatAndDimensions(ImageFormat.Gif, "image/gif", ".gif");
+			byte[] imageData = GenerageTestImage(ImageFormat.Gif);
+			VerifyImageFormatAndDimensions(imageData, "image/gif", ".gif");
 		}
 
 		[TestMethod]
 		public void TestPng()
 		{
-			VerifyImageFormatAndDimensions(ImageFormat.Png, "image/png", ".png");
+			byte[] imageData = GenerageTestImage(ImageFormat.Png);
+			VerifyImageFormatAndDimensions(imageData, "image/png", ".png");
 		}
 
 		[TestMethod]
 		public void TestJpeg()
 		{
-			VerifyImageFormatAndDimensions(ImageFormat.Jpeg, "image/jpeg", ".jpg");
+			byte[] imageData = GenerageTestImage(ImageFormat.Jpeg);
+			VerifyImageFormatAndDimensions(imageData, "image/jpeg", ".jpg");
 		}
-
-		private static void VerifyImageFormatAndDimensions(ImageFormat saveFormat, string expectedMime, string expectedExt)
+		[TestMethod]
+		public void TestWebPLossy()
 		{
-			// Generate an in-memory image
-			byte[] data;
+			VerifyImageFormatAndDimensions(Properties.Resources.LossyWebP, "image/webp", ".webp");
+		}
+		[TestMethod]
+		public void TestWebPLossless()
+		{
+			VerifyImageFormatAndDimensions(Properties.Resources.LosslessWebP, "image/webp", ".webp");
+		}
+		private static byte[] GenerageTestImage(ImageFormat saveFormat)
+		{
 			using (Bitmap bmp = new Bitmap(W, H))
 			{
 				using (Graphics g = Graphics.FromImage(bmp))
@@ -51,19 +62,21 @@ namespace UnitTests
 				using (MemoryStream ms = new MemoryStream())
 				{
 					bmp.Save(ms, saveFormat);
-					data = ms.ToArray();
+					return ms.ToArray();
 				}
 			}
-
+		}
+		private static void VerifyImageFormatAndDimensions(byte[] imageData, string expectedMime, string expectedExt)
+		{
 			// 1) Test GetFormat(byte[]) and GetFormatOrNull(byte[])
-			ImageFormatMetadata m1 = ImageUtil.GetFormat(data);
+			ImageFormatMetadata m1 = ImageUtil.GetFormat(imageData);
 			Assert.IsNotNull(m1);
 			Assert.AreEqual(expectedMime, m1.MimeType);
 			Assert.AreEqual(expectedExt, m1.FileExtension);
-			Assert.IsNotNull(ImageUtil.GetFormatOrNull(data));
+			Assert.IsNotNull(ImageUtil.GetFormatOrNull(imageData));
 
 			// 2) Test IDataStream overloads
-			using (MemoryStream msStream = new MemoryStream(data))
+			using (MemoryStream msStream = new MemoryStream(imageData))
 			using (BasicDataStream bds = new BasicDataStream(msStream))
 			{
 				ImageFormatMetadata m2 = ImageUtil.GetFormat(bds);
@@ -79,7 +92,7 @@ namespace UnitTests
 			}
 
 			// 3) Test GetDimensions(byte[])
-			Size dimsFromBytes = ImageUtil.GetDimensions(data);
+			Size dimsFromBytes = ImageUtil.GetDimensions(imageData);
 			Assert.AreEqual(W, dimsFromBytes.Width);
 			Assert.AreEqual(H, dimsFromBytes.Height);
 
@@ -91,7 +104,7 @@ namespace UnitTests
 				// Replace the temp file created with the one having proper extension
 				if (File.Exists(tempFile))
 					File.Delete(tempFile);
-				File.WriteAllBytes(path, data);
+				File.WriteAllBytes(path, imageData);
 
 				ImageFormatMetadata m3 = ImageUtil.GetFormat(path);
 				Assert.IsNotNull(m3);
