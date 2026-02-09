@@ -769,18 +769,21 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Asynchronously reads a line of text from the stream, then throws HttpProcessorException if the line turned out to be longer than maxLength.
+		/// <para>Asynchronously reads a line of text from the stream, then throws <see cref="SimpleHttp.HttpProcessor.HttpProcessorException" /> if the line turned out to be longer than <paramref name="maxLength"/>.</para>
+		/// <para>This method reads the entire line into memory before checking the length, so it could be used maliciously to waste large amounts of memory.  For untrusted input, use <see cref="HttpStreamReadLineAsync(UnreadableStream, int, int, CancellationToken)"/> instead.</para>
 		/// </summary>
 		/// <param name="reader">StreamReader to read from.</param>
-		/// <param name="maxLength">Maximum line length.</param>
+		/// <param name="maxLength">Maximum line length in characters.</param>
 		/// <returns>Line read from the StreamReader, or null if end of stream reached.</returns>
 		/// <exception cref="SimpleHttp.HttpProcessor.HttpProcessorException">If the line of text is longer than <paramref name="maxLength"/>.</exception>
-		public static async Task<string> HttpStreamReadLineAsync(StreamReader reader, int maxLength = 16384)
+		public static async Task<string> RiskyHttpStreamReadLineAsync(StreamReader reader, int maxLength = 16384)
 		{
 			string str = await reader.ReadLineAsync().ConfigureAwait(false);
+			if (str == null)
+				return null;
 			if (str.Length >= maxLength)
 				throw new SimpleHttp.HttpProcessor.HttpProcessorException("413 Entity Too Large");
-			return str; // Null if end of stream.
+			return str;
 		}
 		/// <summary>
 		/// Returns a Task that reads data from the given stream into a buffer with a timeout.  You should await the task.
@@ -792,7 +795,7 @@ namespace BPUtil
 		/// <param name="timeoutMilliseconds">If greater than 0, the operation will be cancelled if it does not complete within this many milliseconds.  Upon timeout, <see cref="OperationCanceledException"/> will be thrown.</param>
 		/// <param name="cancellationToken">Cancellation Token.  A time-based cancellation token will be linked with this one such that the operation is canceled if the given token is canceled or if the time-based token is canceled because time ran out.</param>
 		/// <returns>The number of bytes read from the stream.</returns>
-		/// <exception cref="OperationCanceledException">If the timeout is exceeded during the ReadAsync operation.</exception>
+		/// <exception cref="OperationCanceledException">If cancellation was requested.</exception>
 		/// <exception cref="TimeoutException">If the read operation times out.</exception>
 		public static async Task<int> ReadAsyncWithTimeout(Stream stream, byte[] buffer, int offset, int length, int timeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
@@ -813,7 +816,8 @@ namespace BPUtil
 					{
 						if (!cancellationToken.IsCancellationRequested)
 							throw new TimeoutException("The read operation timed out.", ex);
-						throw;
+						ex.Rethrow();
+						throw; // Will not be hit; but is necessary for the compiler to know that we won't fall through without throwing.
 					}
 				}
 			}
