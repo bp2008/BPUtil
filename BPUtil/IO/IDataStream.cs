@@ -55,5 +55,22 @@ namespace BPUtil.IO
 		/// </summary>
 		/// <param name="numBytes">Number of bytes to offset the current seek position.</param>
 		void Skip(int numBytes);
+		/// <summary>
+		/// Gets a value indicating whether the current stream supports seeking.
+		/// </summary>
+		bool CanSeek { get; }
+		/// <summary>
+		/// Gets the length in bytes of the stream.
+		/// </summary>
+		/// <exception cref="T:System.NotSupportedException">The base stream does not support seeking. </exception>
+		/// <exception cref="T:System.ObjectDisposedException">Methods were called after the stream was closed. </exception>
+		long Length { get; }
+		/// <summary>
+		/// Gets or sets the position within the current stream.
+		/// </summary>
+		/// <exception cref="T:System.IO.IOException">An I/O error occurs. </exception>
+		/// <exception cref="T:System.NotSupportedException">The base stream does not support seeking. </exception>
+		/// <exception cref="T:System.ObjectDisposedException">Methods were called after the stream was closed. </exception>
+		long Position { get; set; }
 	}
 }

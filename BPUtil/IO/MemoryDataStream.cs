@@ -58,6 +58,10 @@ namespace BPUtil.IO
 		public MemoryDataStream()
 		{
 		}
+		/// <summary>
+		/// Gets the internal buffer used by the MemoryDataStream.  If the MemoryDataStream was initialized with a byte array, this method returns that byte array.  Otherwise, it returns the internal buffer of the MemoryStream.  Note that if the MemoryDataStream was initialized with a byte array, the Length and Capacity of the MemoryDataStream will be equal to the length of that byte array, and the MemoryDataStream will not be resizable.
+		/// </summary>
+		/// <returns></returns>
 		public override byte[] GetBuffer()
 		{
 			if (_mdsBuffer != null)
