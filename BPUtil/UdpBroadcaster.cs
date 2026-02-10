@@ -27,7 +27,7 @@ namespace BPUtil
 	/// <summary>
 	/// A class which sends and optionally receives UDP broadcast packets on a particular port.
 	/// </summary>
-	public class UdpBroadcaster
+	public class UdpBroadcaster : IDisposable
 	{
 		bool running = true;
 		UdpClient udp;
@@ -94,9 +94,17 @@ namespace BPUtil
 		/// </summary>
 		public void Stop()
 		{
-			running = false;
-			sendWaiter.Set();
-			udp.Close();
+			try
+			{
+				running = false;
+				sendWaiter.Set();
+			}
+			catch { }
+			try
+			{
+				udp.Close();
+			}
+			catch { }
 		}
 		/// <summary>
 		/// Broadcasts the specified packet.
@@ -176,11 +184,42 @@ namespace BPUtil
 					Logger.Debug(ex);
 			}
 		}
+
+		private bool disposedValue;
+		protected virtual void Dispose(bool disposing)
+		{
+			if (!disposedValue)
+			{
+				if (disposing)
+				{
+					// dispose managed state (managed objects)
+				}
+
+				Stop();
+				// free unmanaged resources (unmanaged objects) and override finalizer
+				// set large fields to null
+				disposedValue = true;
+			}
+		}
+
+		// override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+		// ~UdpBroadcaster()
+		// {
+		//     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+		//     Dispose(disposing: false);
+		// }
+
+		public void Dispose()
+		{
+			// Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+			Dispose(disposing: true);
+			GC.SuppressFinalize(this);
+		}
 	}
 	/// <summary>
 	/// A class which sends and optionally receives UDP broadcast packets on all interfaces on a particular port.
 	/// </summary>
-	public class GlobalUdpBroadcaster
+	public class GlobalUdpBroadcaster : IDisposable
 	{
 		List<UdpBroadcaster> broadcasters;
 		/// <summary>
@@ -258,6 +297,37 @@ namespace BPUtil
 					catch { }
 				}
 			}
+		}
+
+		private bool disposedValue;
+		protected virtual void Dispose(bool disposing)
+		{
+			if (!disposedValue)
+			{
+				if (disposing)
+				{
+					// dispose managed state (managed objects)
+				}
+
+				Stop();
+				// free unmanaged resources (unmanaged objects) and override finalizer
+				// set large fields to null
+				disposedValue = true;
+			}
+		}
+
+		// override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+		// ~GlobalUdpBroadcaster()
+		// {
+		//     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+		//     Dispose(disposing: false);
+		// }
+
+		public void Dispose()
+		{
+			// Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+			Dispose(disposing: true);
+			GC.SuppressFinalize(this);
 		}
 	}
 }
