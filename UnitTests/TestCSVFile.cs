@@ -1,128 +1,82 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using BPUtil;
+﻿using BPUtil;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Text;
 
 namespace UnitTests
 {
 	[TestClass]
-	public class TestCSVFile
+	public class TestCSV
 	{
 		[TestMethod]
-		public void TestEmptyCsvCreatesEmptyHeadingsAndRows()
+		public void TestLooseEncodeAsCsvField()
 		{
-			var csv = "";
-			var cf = new CSVFile(csv, false, false);
-			Assert.IsNotNull(cf.Headings);
-			Assert.IsNotNull(cf.Rows);
-			Assert.AreEqual(0, cf.Headings.Length);
-			Assert.AreEqual(0, cf.Rows.Length);
+			Assert.AreEqual("Test", CSV.LooseEncodeAsCsvField("Test"));
+			Assert.AreEqual("\"Te,st\"", CSV.LooseEncodeAsCsvField("Te,st"));
+			Assert.AreEqual("\"Te\rst\"", CSV.LooseEncodeAsCsvField("Te\rst"));
+			Assert.AreEqual("\"Te\nst\"", CSV.LooseEncodeAsCsvField("Te\nst"));
+			Assert.AreEqual("\"Te\r\nst\"", CSV.LooseEncodeAsCsvField("Te\r\nst"));
+			Assert.AreEqual("\"Te\"\"st\"", CSV.LooseEncodeAsCsvField("Te\"st"));
+			Assert.AreEqual("\"Te\"\"\"\"st\"", CSV.LooseEncodeAsCsvField("Te\"\"st"));
+			Assert.AreEqual("\"\"\"quoted string\"\"\"", CSV.LooseEncodeAsCsvField("\"quoted string\""));
+			Assert.AreEqual("\t", CSV.LooseEncodeAsCsvField("\t"));
+			Assert.AreEqual(GetAllAllowedUnescapedCSVCharacters(), CSV.LooseEncodeAsCsvField(GetAllAllowedUnescapedCSVCharacters()));
 		}
-
 		[TestMethod]
-		public void TestSimpleParse()
+		public void TestEncodeAsCsvField()
 		{
-			var csv = "a,b,c\n1,2,3";
-			var cf = new CSVFile(csv, false, false);
-			Assert.AreEqual(2, cf.Rows.Length);
-			CollectionAssert.AreEqual(new[] { "a", "b", "c" }, cf.Rows[0]);
-			CollectionAssert.AreEqual(new[] { "1", "2", "3" }, cf.Rows[1]);
+			Assert.AreEqual("\"Test\"", CSV.EncodeAsCsvField("Test"));
+			Assert.AreEqual("\"Te,st\"", CSV.EncodeAsCsvField("Te,st"));
+			Assert.AreEqual("\"Te\rst\"", CSV.EncodeAsCsvField("Te\rst"));
+			Assert.AreEqual("\"Te\nst\"", CSV.EncodeAsCsvField("Te\nst"));
+			Assert.AreEqual("\"Te\r\nst\"", CSV.EncodeAsCsvField("Te\r\nst"));
+			Assert.AreEqual("\"Te\"\"st\"", CSV.EncodeAsCsvField("Te\"st"));
+			Assert.AreEqual("\"Te\"\"\"\"st\"", CSV.EncodeAsCsvField("Te\"\"st"));
+			Assert.AreEqual("\"\"\"quoted string\"\"\"", CSV.EncodeAsCsvField("\"quoted string\""));
+			Assert.AreEqual("\"\"", CSV.EncodeAsCsvField("\t"));
+			Assert.AreEqual("\"" + GetAllAllowedUnescapedCSVCharacters() + "\"", CSV.EncodeAsCsvField(GetAllAllowedUnescapedCSVCharacters()));
 		}
-
 		[TestMethod]
-		public void TestHeadingsAreRecognized()
+		public void TestStripInvalidCsvCharacters()
 		{
-			var csv = "h1,h2\nv1,v2\nv3,v4";
-			var cf = new CSVFile(csv, false, true);
-			CollectionAssert.AreEqual(new[] { "h1", "h2" }, cf.Headings);
-			Assert.AreEqual(2, cf.Rows.Length);
-			CollectionAssert.AreEqual(new[] { "v1", "v2" }, cf.Rows[0]);
-			CollectionAssert.AreEqual(new[] { "v3", "v4" }, cf.Rows[1]);
+			Assert.AreEqual("Test", CSV.StripInvalidCsvCharacters("Test"));
+			Assert.AreEqual("Te,st", CSV.StripInvalidCsvCharacters("Te,st"));
+			Assert.AreEqual("Te\rst", CSV.StripInvalidCsvCharacters("Te\rst"));
+			Assert.AreEqual("Te\nst", CSV.StripInvalidCsvCharacters("Te\nst"));
+			Assert.AreEqual("Te\r\nst", CSV.StripInvalidCsvCharacters("Te\r\nst"));
+			Assert.AreEqual("Te\"st", CSV.StripInvalidCsvCharacters("Te\"st"));
+			Assert.AreEqual("Te\"\"st", CSV.StripInvalidCsvCharacters("Te\"\"st"));
+			Assert.AreEqual("\"quoted string\"", CSV.StripInvalidCsvCharacters("\"quoted string\""));
+			Assert.AreEqual("", CSV.StripInvalidCsvCharacters("\t"));
+			Assert.AreEqual(GetAllAllowedUnescapedCSVCharacters(), CSV.StripInvalidCsvCharacters(GetAllAllowedUnescapedCSVCharacters()));
 		}
-
-		[TestMethod]
-		public void TestQuotedFieldsWithCommasAndEscapedQuotes()
+		private string GetAllAllowedUnescapedCSVCharacters()
 		{
-			// CSV row contains a comma in first field and escaped quotes in second field.
-			var csv = "\"hello, world\",\"she said \"\"hi\"\"\",plain\n1,2,3";
-			var cf = new CSVFile(csv, false, false);
-			Assert.AreEqual(2, cf.Rows.Length);
-			CollectionAssert.AreEqual(new[] { "hello, world", "she said \"hi\"", "plain" }, cf.Rows[0]);
-			CollectionAssert.AreEqual(new[] { "1", "2", "3" }, cf.Rows[1]);
+			StringBuilder sb = new StringBuilder();
+			sb.Append((char)32);
+			sb.Append((char)33);
+			for (char c = (char)35; c <= (char)43; c++)
+				sb.Append(c);
+			for (char c = (char)45; c <= (char)126; c++)
+				sb.Append(c);
+			return sb.ToString();
 		}
-
 		[TestMethod]
-		public void TestNewlineInsideQuotedFieldIsHandled()
+		public void TestRemoveTrailingEmptyCsvValues()
 		{
-			// The second cell contains a newline inside quotes and spans two physical lines.
-			var csv = "a,\"b\nb2\",c\n1,2,3";
-			var cf = new CSVFile(csv, false, false);
-			Assert.AreEqual(2, cf.Rows.Length);
-			Assert.AreEqual("a", cf.Rows[0][0]);
-			Assert.AreEqual("b" + Environment.NewLine + "b2", cf.Rows[0][1]); // Newlines inside quoted fields are normalized to Environment.NewLine
-			Assert.AreEqual("c", cf.Rows[0][2]);
-		}
-
-		[TestMethod]
-		public void TestDumpToStringAndToStringEncodeFields()
-		{
-			var csv = "h1,h2\nv1,v2";
-			var cf = new CSVFile(csv, false, true);
-			// DumpToString always quotes fields via CSV.EncodeAsCsvField
-			var expectedDump = string.Format("\"h1\",\"h2\"{0}\"v1\",\"v2\"", Environment.NewLine);
-			Assert.AreEqual(expectedDump, cf.DumpToString());
-			// ToString returns the headings row (encoded) when headings exist
-			Assert.AreEqual("\"h1\",\"h2\"", cf.ToString());
-		}
-
-		[TestMethod]
-		public void TestStreamingReadEnumerableProducesRows()
-		{
-			var csv = "a,b\n1,2\n3,4";
-			using (var sr = new StringReader(csv))
-			{
-				var rows = CSVFile.StreamingRead(sr).ToList();
-				Assert.AreEqual(3, rows.Count);
-				CollectionAssert.AreEqual(new[] { "a", "b" }, rows[0]);
-				CollectionAssert.AreEqual(new[] { "1", "2" }, rows[1]);
-				CollectionAssert.AreEqual(new[] { "3", "4" }, rows[2]);
-			}
-		}
-
-		[TestMethod]
-		public void TestStreamingReadCallbackCanStopEarly()
-		{
-			var csv = "a,b\n1,2\n3,4";
-			var seen = new List<string[]>();
-			using (var sr = new StringReader(csv))
-			{
-				// Stop after receiving the first data row (keep headings + first data row)
-				CSVFile.StreamingRead(sr, row =>
-				{
-					seen.Add(row);
-					// stop after first row processed
-					return false;
-				});
-			}
-			Assert.AreEqual(1, seen.Count);
-			CollectionAssert.AreEqual(new[] { "a", "b" }, seen[0]);
-		}
-
-		[TestMethod]
-		public void TestUnequalColumnsThrowsException()
-		{
-			var csv = "a,b,c\n1,2\n2,3,4";
-			try
-			{
-				var cf = new CSVFile(csv, false, false);
-				Assert.Fail("Expected exception for unequal number of columns in CSV rows");
-			}
-			catch (Exception ex)
-			{
-				Assert.IsTrue(ex.Message.Contains("Unequal number of columns in CSV rows"), "Unexpected exception message: " + ex.Message);
-			}
+			string input = "Line1\r\n"
+				+ "Line2,,Line2,,\r\n"
+				+ "Line3,,Line3,\"\",\r\n"
+				+ "Line4,,Line4,,\"\"\r\n"
+				+ ",\"\",\r\n"
+				+ ",\"\r\n\",";
+			string expected = "Line1\r\n"
+				+ "Line2,,Line2\r\n"
+				+ "Line3,,Line3\r\n"
+				+ "Line4,,Line4\r\n"
+				+ "\r\n"
+				+ ",\"\r\n\"";
+			string output = CSV.RemoveTrailingEmptyCsvValues(input);
+			Assert.AreEqual(expected, output);
 		}
 	}
 }

@@ -127,6 +127,78 @@ namespace BPUtil
 			return true;
 		}
 		/// <summary>
+		/// <para>Returns true if the given string contains only (US-ASCII) alphanumeric characters or underscore, and also begins with underscore or a letter.</para>
+		/// <para>To be valid, this regular expression would match the string:</para>
+		/// <code>^[A-Za-z_][A-Za-z_0-9]*$</code>
+		/// </summary>
+		/// <param name="str">String to test.</param>
+		/// <returns>True if the string passed validation.</returns>
+		public static bool IsValidVariableIdentifier(string str)
+		{
+			if (string.IsNullOrEmpty(str))
+				return false;
+			char c = str[0];
+			if (!((c >= 'A' && c <= 'Z') ||
+				  (c >= 'a' && c <= 'z') ||
+				  c == '_'))
+				return false;
+			for (int i = 1; i < str.Length; i++)
+			{
+				c = str[i];
+				if (!((c >= 'A' && c <= 'Z') ||
+					  (c >= 'a' && c <= 'z') ||
+					  (c >= '0' && c <= '9') ||
+					  c == '_'))
+					return false;
+			}
+			return true;
+		}
+		/// <summary>
+		/// Given a string, returns a string with minimal changes that is guaranteed to be a valid variable identifier according to <see cref="IsValidVariableIdentifier"/>. Invalid characters are replaced with underscore, and if the string does not begin with one of the necessary characters, an underscore is prepended.
+		/// </summary>
+		/// <param name="str">String which may or may not be a valid variable identifier already.</param>
+		/// <returns>A valid variable identifier based on the input string.</returns>
+		public static string MakeValidVariableIdentifier(string str)
+		{
+			if (string.IsNullOrEmpty(str))
+				return "_";
+
+			int len = str.Length;
+			var sb = new StringBuilder(len + 1);
+
+			// --- First character ---
+			char c = str[0];
+			if ((c >= 'A' && c <= 'Z') ||
+				(c >= 'a' && c <= 'z') ||
+				c == '_')
+			{
+				sb.Append(c);
+			}
+			else
+			{
+				sb.Append('_');
+			}
+
+			// --- Remaining characters ---
+			for (int i = 1; i < len; i++)
+			{
+				c = str[i];
+				if ((c >= 'A' && c <= 'Z') ||
+					(c >= 'a' && c <= 'z') ||
+					(c >= '0' && c <= '9') ||
+					c == '_')
+				{
+					sb.Append(c);
+				}
+				else
+				{
+					sb.Append('_');
+				}
+			}
+
+			return sb.ToString();
+		}
+		/// <summary>
 		/// This string contains one of every alphanumeric character except:
 		/// B 8 G 6 I 1 l O 0 Q D S 5 Z 2
 		/// </summary>
