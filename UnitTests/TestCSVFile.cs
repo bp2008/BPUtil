@@ -77,6 +77,7 @@ namespace UnitTests
 				+ ",\"\r\n\"";
 			string output = CSV.RemoveTrailingEmptyCsvValues(input);
 			Assert.AreEqual(expected, output);
+			Assert.AreEqual("", CSV.RemoveTrailingEmptyCsvValues("\"\""));
 		}
 	}
 }

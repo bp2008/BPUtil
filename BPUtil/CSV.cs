@@ -230,7 +230,7 @@ namespace BPUtil
 		}
 
 		/// <summary>
-		/// Deletes trailing empty CSV values from each line of the input string.  E.g. the line <c>value1,"",</c> becomes <c>value1</c>.  This is useful for cleaning up CSV data where some lines have extra empty values at the end, which can cause problems for some CSV parsers.
+		/// Deletes trailing empty CSV values from each line of the input string.  E.g. the line <c>value1,"",</c> becomes <c>value1</c>.
 		/// </summary>
 		/// <param name="input"></param>
 		/// <returns></returns>
@@ -253,6 +253,8 @@ namespace BPUtil
 							line = line.Substring(0, line.Length - 1);
 						if (line.EndsWith(",\"\""))
 							line = line.Substring(0, line.Length - 3);
+						if (line == "\"\"")
+							line = "";
 					}
 					lines.Add(line);
 				}
