@@ -73,6 +73,7 @@
     <Compile Include="TestHttpHeaderCollection.cs" />
     <Compile Include="TestIPAddressRange.cs" />
     <Compile Include="TestIpRangeLite.cs" />
+    <Compile Include="TestListSorted.cs" />
     <Compile Include="TestObjectChangeReplay.cs" />
     <Compile Include="TestObjectCopy.cs" />
     <Compile Include="TestObjectMerge.cs" />
