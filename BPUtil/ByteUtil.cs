@@ -374,6 +374,25 @@ namespace BPUtil
 			// Normalized number
 			return (float)((sign == 1 ? -1 : 1) * Math.Pow(2, exponent - 15) * (1 + fraction / 1024.0));
 		}
+		/// <summary>
+		/// Decodes a byte array containing UTF-8 encoded text, and returns the decoded string with the byte order mark removed if it exists.
+		/// </summary>
+		/// <param name="buffer">The byte array containing UTF-8 encoded text.</param>
+		/// <returns>The decoded string with the byte order mark removed if it exists.</returns>
+		public static string ReadUtf8NoBOM(byte[] buffer)
+		{
+			if (buffer == null)
+				return null;
+			byte[] preamble = Encoding.UTF8.GetPreamble();
+			if (buffer.Length >= preamble.Length && buffer.Take(preamble.Length).SequenceEqual(preamble))
+			{
+				return Encoding.UTF8.GetString(buffer, preamble.Length, buffer.Length - preamble.Length);
+			}
+			else
+			{
+				return Encoding.UTF8.GetString(buffer);
+			}
+		}
 		#region byte[] Buffer Pooling
 		/// <summary>
 		/// The size of the buffers, in bytes, that are returned from <see cref="BufferGet"/> and accepted by <see cref="BufferRecycle(byte[])"/>.
