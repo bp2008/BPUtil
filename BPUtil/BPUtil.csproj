@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFrameworks>net45;net6.0-windows;net6.0;net8.0-windows;net8.0</TargetFrameworks>
+		<TargetFrameworks>net45;net6.0-windows;net6.0;net8.0-windows;net8.0;net10.0-windows;net10.0</TargetFrameworks>
 		<Nullable>disable</Nullable>
 		<BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
 		<Configurations>Debug;Release</Configurations>
@@ -41,21 +41,33 @@
 		<DefineConstants>$(DefineConstants);NET6_PLUS_LINUX;NET8_PLUS_LINUX;LINUX</DefineConstants>
 	</PropertyGroup>
 
+	<!-- .NET 10 Windows-specific -->
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+		<UseWindowsForms>true</UseWindowsForms>
+		<DefineConstants>$(DefineConstants);NET6_PLUS_WIN;NET8_PLUS_WIN;NET10_PLUS_WIN</DefineConstants>
+	</PropertyGroup>
+
+	<!-- .NET 10 Linux/non-Windows -->
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+		<UseWindowsForms>false</UseWindowsForms>
+		<DefineConstants>$(DefineConstants);NET6_PLUS_LINUX;NET8_PLUS_LINUX;NET10_PLUS_LINUX;LINUX</DefineConstants>
+	</PropertyGroup>
+
 
 	<!-- Debug/Release -->
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
 		<DebugType>embedded</DebugType>
-		<NoWarn>1701;1702;CS1591</NoWarn>
+		<NoWarn>1701;1702;CS1591;WFO1000</NoWarn>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
 		<DebugType>embedded</DebugType>
-		<NoWarn>1701;1702;CS1591</NoWarn>
+		<NoWarn>1701;1702;CS1591;WFO1000</NoWarn>
 	</PropertyGroup>
 
 
 	<!-- File exclusions -->
-	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0' or '$(TargetFramework)' == 'net8.0'">
+	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0' or '$(TargetFramework)' == 'net8.0' or '$(TargetFramework)' == 'net10.0'">
 		<Compile Remove="Forms\**" />
 		<Compile Remove="NativeWin\**" />
 		<Compile Remove="PasswordReset\**" />
@@ -86,7 +98,7 @@
 		<PackageReference Include="System.ServiceProcess.ServiceController" Version="7.0.1" />
 	</ItemGroup>
 
-	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0' or '$(TargetFramework)' == 'net8.0'">
+	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0' or '$(TargetFramework)' == 'net8.0' or '$(TargetFramework)' == 'net10.0'">
 		<PackageReference Include="System.Drawing.Common" Version="7.0.0" />
 		<PackageReference Include="System.Text.Encoding.CodePages" Version="7.0.0" />
 	</ItemGroup>
