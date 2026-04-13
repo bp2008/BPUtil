@@ -46,6 +46,10 @@ namespace BPUtil
 		{
 			dsa = new ECDsaCng(CngKey.Import(Convert.FromBase64String(key), isPrivateKey ? CngKeyBlobFormat.EccPrivateBlob : CngKeyBlobFormat.EccPublicBlob));
 			KeySize = dsa.KeySize;
+			if (isPrivateKey)
+				privateKeyLastExported = key;
+			else
+				publicKeyLastExported = key;
 		}
 		/// <summary>
 		/// Disposes the underlying ECDsaCng instance. After calling this method, the SignatureFactory should not be used for signing or verifying. This method is thread-safe.
