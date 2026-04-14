@@ -94,7 +94,7 @@ namespace BPUtil.MVC
 				Query = requestPath.Substring(idxQmark + 1);
 			}
 			string[] pathParts = Path.Split('/');
-			ControllerName = pathParts[0];
+			ControllerName = Uri.EscapeDataString(pathParts[0]);
 
 			if (pathParts.Length <= 1)
 			{
@@ -103,8 +103,8 @@ namespace BPUtil.MVC
 			}
 			else
 			{
-				ActionName = pathParts[1];
-				ActionArgs = pathParts.Skip(2).ToArray();
+				ActionName = Uri.EscapeDataString(pathParts[1]);
+				ActionArgs = pathParts.Skip(2).Select(s => Uri.UnescapeDataString(s)).ToArray();
 			}
 			if (string.IsNullOrWhiteSpace(ActionName))
 				ActionName = "Index";
