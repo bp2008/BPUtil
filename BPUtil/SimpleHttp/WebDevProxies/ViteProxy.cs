@@ -100,7 +100,7 @@ namespace BPUtil.SimpleHttp
 			{
 				UriBuilder builder = new UriBuilder(p.Request.Url);
 				builder.Scheme = "http";
-				builder.Host = IPAddress.IPv6Loopback.ToString();
+				builder.Host = "localhost";
 				builder.Port = vitePort;
 				await p.ProxyToAsync(builder.Uri.ToString(), new ProxyOptions()
 				{
