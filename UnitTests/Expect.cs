@@ -7,26 +7,49 @@ using System.Threading.Tasks;
 
 namespace UnitTests
 {
+	/// <summary>
+	/// Provides additional assertion methods for unit tests.
+	/// </summary>
 	public static class Expect
 	{
 		/// <summary>
-		/// Runs the specified action within a try{} block, and then runs <see cref="Assert.Fail(string)"/> if the action does not throw an exception.
+		/// Runs the specified action within a try{} block, and then runs <see cref="Assert.Fail(string)"/> if the action does not throw an exception.  Returns the thrown exception only if the action throws an exception as expected.
 		/// </summary>
 		/// <param name="action">Action which is expected to throw an exception.</param>
 		/// <param name="failMessage">Exception message</param>
-		public static void Exception(Action action, string failMessage = "Expected Exception")
+		/// <returns>The thrown exception if the action throws an exception as expected.</returns>
+		public static Exception Exception(Action action, string failMessage = "Expected Exception")
 		{
-			bool threw = false;
 			try
 			{
 				action();
 			}
-			catch (Exception)
+			catch (Exception ex)
 			{
-				threw = true;
+				return ex;
 			}
-			if (!threw)
-				Assert.Fail(failMessage);
+			Assert.Fail(failMessage);
+			throw new Exception("This should never be reached.");
+		}
+		/// <summary>
+		/// Runs the specified action within a try{} block, and then runs <see cref="Assert.Fail(string)"/> if the action does not throw the expected exception.  Returns the thrown exception only if the action throws an exception of the expected type.
+		/// </summary>
+		/// <param name="action">Action which is expected to throw an exception.</param>
+		/// <param name="failMessage">Exception message</param>
+		/// <returns>The thrown exception if the action throws an exception as expected.</returns>
+		public static T Exception<T>(Action action, string failMessage = "Expected Exception")
+		{
+			try
+			{
+				action();
+			}
+			catch (Exception ex)
+			{
+				if (ex is T tex)
+					return tex;
+			}
+			Assert.Fail(failMessage);
+			throw new Exception("This should never be reached.");
 		}
 		/// <summary>
 		/// Throws AssertFailedException if the given collections are not equal.
