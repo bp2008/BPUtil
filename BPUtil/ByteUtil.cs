@@ -941,6 +941,46 @@ namespace BPUtil
 			return;
 		}
 		/// <summary>
+		/// Reads the specified number of bytes from the stream, inserting them into the buffer starting at the specified index.  If the stream ends before that many bytes can be read, an Exception is thrown.  Ordinary stream.Read operations are not guaranteed to read all the requested bytes.
+		/// </summary>
+		/// <param name="s">The stream to read from.</param>
+		/// <param name="buffer">The buffer to read into.</param>
+		/// <param name="startIndex">The start index in the buffer.</param>
+		/// <param name="length">The number of bytes to read.</param>
+		/// <exception cref="EndOfStreamException">Thrown if the stream ends before the buffer is completely filled.</exception>
+		public static void ReadBytes(Stream s, byte[] buffer, int startIndex, int length)
+		{
+			if (length == 0)
+				return; // Just to be explicit and sure about this behavior.
+			if (startIndex < 0)
+				throw new ArgumentOutOfRangeException(nameof(startIndex));
+			if (length < 0)
+				throw new ArgumentOutOfRangeException(nameof(length));
+			if (buffer.Length - startIndex < length)
+				throw new ArgumentOutOfRangeException(nameof(length), "The range defined by startIndex and length exceeds the bounds of the buffer.");
+			int totalRead = 0;
+			int justRead;
+			try
+			{
+				do
+					totalRead += (justRead = s.Read(buffer, startIndex + totalRead, length - totalRead));
+				while (justRead > 0 && totalRead < length);
+			}
+			catch (IOException ex)
+			{
+				if (ex.InnerException is SocketException)
+					throw new EndOfStreamException("Stream was closed", ex);
+				else
+					throw;
+			}
+			catch (SocketException ex) { throw new EndOfStreamException("Stream was closed", ex); }
+			if (totalRead < length)
+				throw new EndOfStreamException("Stream was closed");
+			else if (totalRead > length)
+				throw new Exception("Somehow read too much from stream");
+			return;
+		}
+		/// <summary>
 		/// Reads a specific number of bytes from the stream and performs NetworkToHostOrder on the resulting byte array before returning it.
 		/// </summary>
 		/// <param name="s">The stream to read from.</param>

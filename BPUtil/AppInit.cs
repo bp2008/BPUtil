@@ -282,7 +282,7 @@ namespace BPUtil
 Description=" + serviceName + @" Service
 
 [Service]
-ExecStart=/usr/bin/dotnet """ + Assembly.GetEntryAssembly().Location + @""" svc
+ExecStart=/usr/bin/dotnet """ + Globals.EntryAssemblyLocation + @""" svc
 Restart=always
 RestartSec=10
 SyslogIdentifier=" + serviceName + @"

@@ -182,7 +182,7 @@ namespace BPUtil
 				{
 					long toRead = Math.Min(buffer.Length, fs.Position);
 					fs.Seek(-toRead, SeekOrigin.Current);
-					fs.Read(buffer, 0, (int)toRead);
+					ByteUtil.ReadBytes(fs, buffer, 0, (int)toRead);
 
 					for (int i = (int)toRead - 1; i >= 0; i--)
 					{

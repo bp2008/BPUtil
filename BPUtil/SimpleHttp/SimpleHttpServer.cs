@@ -1679,7 +1679,7 @@ namespace BPUtil.SimpleHttp
 				FileInfo fiExe;
 				try
 				{
-					fiExe = new FileInfo(System.Reflection.Assembly.GetEntryAssembly().Location);
+					fiExe = new FileInfo(Globals.EntryAssemblyLocation);
 				}
 				catch
 				{
@@ -1702,13 +1702,21 @@ namespace BPUtil.SimpleHttp
 				{
 					try
 					{
+#if NET10_0_OR_GREATER
+						ssl_certificate = X509CertificateLoader.LoadPkcs12FromFile(fiCert.FullName, autoCertPassword);
+#else
 						ssl_certificate = new X509Certificate2(fiCert.FullName, autoCertPassword);
+#endif
 					}
 					catch (Exception ex1)
 					{
 						try
 						{
+#if NET10_0_OR_GREATER
+							ssl_certificate = X509CertificateLoader.LoadPkcs12FromFile(fiCert.FullName, null);
+#else
 							ssl_certificate = new X509Certificate2(fiCert.FullName);
+#endif
 						}
 						catch
 						{

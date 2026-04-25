@@ -40,7 +40,7 @@ namespace BPUtil
 		{
 			get
 			{
-				return Thread.VolatileRead(ref _currentLiveThreads);
+				return Volatile.Read(ref _currentLiveThreads);
 			}
 		}
 		/// <summary>
@@ -60,7 +60,7 @@ namespace BPUtil
 		{
 			get
 			{
-				return Thread.VolatileRead(ref _currentIdleThreads);
+				return Volatile.Read(ref _currentIdleThreads);
 			}
 		}
 		/// <summary>
@@ -70,7 +70,7 @@ namespace BPUtil
 		{
 			get
 			{
-				return Thread.VolatileRead(ref _currentMaxThreads);
+				return Volatile.Read(ref _currentMaxThreads);
 			}
 			set
 			{
@@ -86,7 +86,7 @@ namespace BPUtil
 		{
 			get
 			{
-				return Thread.VolatileRead(ref _currentMinThreads);
+				return Volatile.Read(ref _currentMinThreads);
 			}
 			set
 			{

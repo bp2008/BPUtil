@@ -23,8 +23,13 @@ namespace BPUtil.SimpleHttp.TLS
 		public static void EnsureIntermediateCertificatesAreInStore(string pfxFilePath, string pfxPassword = null)
 		{
 			// Load the .pfx file into an X509Certificate2Collection
-			X509Certificate2Collection certificateCollection = new X509Certificate2Collection();
+			X509Certificate2Collection certificateCollection;
+#if NET10_0_OR_GREATER
+			certificateCollection = X509CertificateLoader.LoadPkcs12CollectionFromFile(pfxFilePath, pfxPassword, X509KeyStorageFlags.DefaultKeySet);
+#else
+			certificateCollection = new X509Certificate2Collection();
 			certificateCollection.Import(pfxFilePath, pfxPassword, X509KeyStorageFlags.DefaultKeySet);
+#endif
 			EnsureIntermediateCertificatesAreInStore(certificateCollection);
 		}
 		/// <summary>
@@ -35,8 +40,13 @@ namespace BPUtil.SimpleHttp.TLS
 		public static void EnsureIntermediateCertificatesAreInStore(byte[] pfxFileData, string pfxPassword = null)
 		{
 			// Load the .pfx file into an X509Certificate2Collection
-			X509Certificate2Collection certificateCollection = new X509Certificate2Collection();
+			X509Certificate2Collection certificateCollection;
+#if NET10_0_OR_GREATER
+			certificateCollection = X509CertificateLoader.LoadPkcs12Collection(pfxFileData, pfxPassword, X509KeyStorageFlags.DefaultKeySet);
+#else
+			certificateCollection = new X509Certificate2Collection();
 			certificateCollection.Import(pfxFileData, pfxPassword, X509KeyStorageFlags.DefaultKeySet);
+#endif
 			EnsureIntermediateCertificatesAreInStore(certificateCollection);
 		}
 		/// <summary>

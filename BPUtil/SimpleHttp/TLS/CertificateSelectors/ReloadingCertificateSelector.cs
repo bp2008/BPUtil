@@ -190,7 +190,11 @@ namespace BPUtil.SimpleHttp
 		/// <param name="password">Pfx file password or null.</param>
 		public CachedCertificate(FileInfo fi, string password)
 		{
+#if NET10_0_OR_GREATER
+			Certificate = X509CertificateLoader.LoadPkcs12FromFile(fi.FullName, password);
+#else
 			Certificate = new X509Certificate2(fi.FullName, password);
+#endif
 			FileLastModifiedUTC = fi.LastWriteTimeUtc;
 		}
 	}

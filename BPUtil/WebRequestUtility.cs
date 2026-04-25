@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Security.Authentication;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -197,6 +198,32 @@ namespace BPUtil
 			}
 		}
 		private bool _acceptAnyCert = false;
+
+#pragma warning disable SYSLIB0039
+		/// <summary>
+		/// Gets or sets whether TLS 1.0 and 1.1 protocols are accepted.
+		/// </summary>
+		public bool AcceptLegacyTls
+		{
+			get
+			{
+				return httpClientHandler.SslProtocols.HasFlag(SslProtocols.Tls11) || httpClientHandler.SslProtocols.HasFlag(SslProtocols.Tls);
+			}
+			set
+			{
+				if (value)
+				{
+					httpClientHandler.SslProtocols |= SslProtocols.Tls;
+					httpClientHandler.SslProtocols |= SslProtocols.Tls11;
+				}
+				else
+				{
+					httpClientHandler.SslProtocols &= ~SslProtocols.Tls;
+					httpClientHandler.SslProtocols &= ~SslProtocols.Tls11;
+				}
+			}
+		}
+#pragma warning restore SYSLIB0039
 #endif
 		/// <summary>
 		/// <para>If true, outgoing requests will be resolved using a custom DNS resolver written into WebRequestUtility.  This can be useful for avoiding possible DNS resolution issues with HttpClient's built-in DNS resolver.</para>
@@ -219,12 +246,20 @@ namespace BPUtil
 		/// <param name="requestTimeout">Initial request timeout in milliseconds. If 0 or less, this value is ignored. To modify after construction, see <see cref="RequestTimeout"/>.</param>
 		public WebRequestUtility(string userAgent, int requestTimeout = 600000)
 		{
+#if !NET10_0_OR_GREATER
 			if (!ServicePointManager.SecurityProtocol.HasFlag(SecurityProtocolType.Tls12))
 				ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 			if (ServicePointManager.DefaultConnectionLimit < 16)
 				ServicePointManager.DefaultConnectionLimit = 16;
+#endif
 
 			httpClientHandler = new HttpClientHandler();
+#if NET6_0_OR_GREATER
+			// MaxConnectionsPerServer default value is int.MaxValue, but in case the framework changes that in a new version, here's the traditional sanity check:
+			if (httpClientHandler.MaxConnectionsPerServer < 16)
+				httpClientHandler.MaxConnectionsPerServer = 16;
+			httpClientHandler.SslProtocols |= System.Security.Authentication.SslProtocols.Tls13 | System.Security.Authentication.SslProtocols.Tls12;
+#endif
 			client = new HttpClient(httpClientHandler);
 			client.DefaultRequestHeaders.ExpectContinue = false;
 

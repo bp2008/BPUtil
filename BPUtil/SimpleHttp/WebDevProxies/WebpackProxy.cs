@@ -31,7 +31,6 @@ namespace BPUtil.SimpleHttp
 		public bool ProxyViaAsyncMethod = false;
 		static WebpackProxy()
 		{
-			CertificateValidation.RegisterCallback(CertificateValidation.Allow_127_0_0_1_ValidationCallback);
 		}
 
 		public WebpackProxy(int webpackPort, string workingDirectory = null)
@@ -87,7 +86,7 @@ namespace BPUtil.SimpleHttp
 			{
 				try
 				{
-					p.ProxyTo("http" + (ConnectWithHttps ? "s" : "") + "://" + IPAddress.Loopback.ToString() + ":" + webpackPort + (overrideAbsolutePath != null ? overrideAbsolutePath : p.Request.Url.AbsolutePath));
+					p.ProxyTo("http" + (ConnectWithHttps ? "s" : "") + "://" + IPAddress.Loopback.ToString() + ":" + webpackPort + (overrideAbsolutePath != null ? overrideAbsolutePath : p.Request.Url.AbsolutePath), acceptAnyCert: true);
 					return null;
 				}
 				catch (Exception ex) { return ex; }

@@ -180,7 +180,7 @@ namespace BPUtil
 				do
 				{
 					var loopIndex = 0;
-					stream.Read(buffer, 0, buffer.Length);
+					ByteUtil.ReadBytes(stream, buffer);
 
 					v1 = CalcSubHash(v1, buffer, loopIndex);
 					loopIndex += 4;
@@ -206,7 +206,7 @@ namespace BPUtil
 			buffer = new byte[4];
 			while (index <= len - 4)
 			{
-				stream.Read(buffer, 0, buffer.Length);
+				ByteUtil.ReadBytes(stream, buffer);
 				h32 += BitConverter.ToUInt32(buffer, 0) * PRIME32_3;
 				h32 = RotateLeft(h32, 17) * PRIME32_4;
 				index += 4;
@@ -215,7 +215,7 @@ namespace BPUtil
 			buffer = new byte[1];
 			while (index < len)
 			{
-				stream.Read(buffer, 0, buffer.Length);
+				ByteUtil.ReadBytes(stream, buffer);
 				h32 += buffer[0] * PRIME32_5;
 				h32 = RotateLeft(h32, 11) * PRIME32_1;
 				index++;

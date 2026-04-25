@@ -9,26 +9,70 @@ using System.Runtime.InteropServices;
 
 namespace BPUtil
 {
+	/// <summary>
+	/// Offers app-global strings.
+	/// </summary>
 	public static class Globals
 	{
+		[Obsolete("These static strings do not belong in BPUtil and should be copied into whatever app uses them.", true)]
 		public static string jQueryPath = "//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js";
+		[Obsolete("These static strings do not belong in BPUtil and should be copied into whatever app uses them.", true)]
 		public static string jQueryUIJsPath = "//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/jquery-ui.min.js";
+		[Obsolete("These static strings do not belong in BPUtil and should be copied into whatever app uses them.", true)]
 		public static string jQueryUICssPath = "//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/themes/smoothness/jquery-ui.css";
 		static Globals()
 		{
+#if !NET10_0_OR_GREATER
 			ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 			ServicePointManager.Expect100Continue = false;
 			ServicePointManager.DefaultConnectionLimit = int.MaxValue;
+#endif
 			try
 			{
-				Assembly assembly = Assembly.GetEntryAssembly();
-				InitializeProgram(assembly.Location, assembly.GetName().Name);
+				InitializeCommonApplicationData();
 			}
 			catch { }
 		}
 		/// <summary>
+		/// <para>Initializes Globals with WritableDirectoryBase assigned to a folder in <see cref="Environment.SpecialFolder.CommonApplicationData"/> (e.g. <c>C:/ProgramData/</c>.</para>
+		/// <para>This is the default globals initialization method which is run by the static constructor.  Call it again yourself if you want to use non-default arguments.</para>
+		/// </summary>
+		/// <param name="programName">(Optional) The name of the folder to create inside <c>CommonApplicationData</c>. If null, the executable name without its extension is used.</param>
+		/// <param name="CreateWritableDir">True to automatically create the folder at <see cref="WritableDirectoryBase"/> if it does not already exist during this initialization.</param>
+		public static void InitializeCommonApplicationData(string programName = null, bool CreateWritableDir = false)
+		{
+			InitializeShared(programName, Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), CreateWritableDir);
+		}
+		/// <summary>
+		/// <para>Initializes Globals with WritableDirectoryBase assigned to a folder in <see cref="Environment.SpecialFolder.ApplicationData"/> (e.g. <c>C:/Users/Username/AppData/Roaming/</c>.</para>
+		/// </summary>
+		/// <param name="programName">(Optional) The name of the folder to create inside <c>CommonApplicationData</c>. If null, the executable name without its extension is used.</param>
+		/// <param name="CreateWritableDir">True to automatically create the folder at <see cref="WritableDirectoryBase"/> if it does not already exist during this initialization.</param>
+		public static void InitializeApplicationData(string programName = null, bool CreateWritableDir = false)
+		{
+			InitializeShared(programName, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), CreateWritableDir);
+		}
+		private static void InitializeShared(string programName, string writeableDirPath, bool CreateWritableDir)
+		{
+			FileInfo fiExe = new FileInfo(EntryAssemblyLocation);
+			ExecutableNameWithExtension = fiExe.Name.Replace('\\', '/');
+			ExecutableNameWithoutExtension = ExecutableNameWithExtension.Substring(0, ExecutableNameWithExtension.Length - fiExe.Extension.Length);
+			ApplicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
+			ApplicationDirectoryBase = ApplicationRoot + "/";
+
+			if (!string.IsNullOrWhiteSpace(programName))
+				programName = StringUtil.MakeSafeForFileName(programName);
+			if (string.IsNullOrWhiteSpace(programName))
+				programName = fiExe.NameWithoutExtension();
+			WritableDirectoryBase = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+			WritableDirectoryBase = WritableDirectoryBase.TrimEnd('\\', '/').Replace('\\', '/') + '/' + programName + '/';
+			if (CreateWritableDir)
+				Directory.CreateDirectory(WritableDirectoryBase);
+		}
+		/// <summary>
 		/// This method does nothing, but allows initialization to occur via the static constructor, where [exePath] is determined by <see cref="Assembly.GetEntryAssembly"/>, and WritableDirectoryBase is a subdirectory of <see cref="Environment.SpecialFolder.CommonApplicationData"/>.  The directory pointed at by WritableDirectoryBase will not be created automatically, and the current working directory will not be changed.
 		/// </summary>
+		[Obsolete("Globals.Initialize is obsolete. Use Globals.InitializeCommonApplicationData or Globals.InitializeApplicationData instead.", true)]
 		public static void Initialize()
 		{
 		}
@@ -36,11 +80,12 @@ namespace BPUtil
 		/// Call this to initialize global static variables where the "WritableDirectoryBase" property is the parent folder of the exe.
 		/// </summary>
 		/// <param name="exePath">
-		/// <para>Pass in the path to the exe in the root directory of the application. (if null/whitespace, then System.Windows.Forms.Application.ExecutablePath is used).</para>
+		/// <para>Pass in the path to the exe in the root directory of the application. (if null/whitespace, then <see cref="EntryAssemblyLocation"/> is used).</para>
 		/// <para>The directory must exist, but the exe name can just be a descriptive exe file name like "My Application.exe" and does not need to exist.</para>
 		/// <para>The exe name is used to create the CommonApplicationDataBase string.</para>
 		/// </param>
 		/// <param name="writablePath">A string to be appended to ApplicationDirectoryBase to form WritableDirectoryBase.  Example: "" or "writable/" or "somedir/writable/"</param>
+		[Obsolete("Globals.Initialize is obsolete. Use Globals.InitializeCommonApplicationData or Globals.InitializeApplicationData instead.", true)]
 		public static void Initialize(string exePath, string writablePath = "")
 		{
 			FileInfo fiExe = null;
@@ -53,12 +98,12 @@ namespace BPUtil
 				catch { }
 			}
 			if (fiExe == null)
-				fiExe = new FileInfo(Assembly.GetEntryAssembly().Location);
-			executableNameWithExtension = fiExe.Name.Replace('\\', '/');
-			executableNameWithoutExtension = executableNameWithExtension.Substring(0, executableNameWithExtension.Length - fiExe.Extension.Length);
-			applicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
-			applicationDirectoryBase = applicationRoot + "/";
-			writableDirectoryBase = applicationDirectoryBase + writablePath.Trim('\\', '/').Replace('\\', '/') + '/';
+				fiExe = new FileInfo(EntryAssemblyLocation);
+			ExecutableNameWithExtension = fiExe.Name.Replace('\\', '/');
+			ExecutableNameWithoutExtension = ExecutableNameWithExtension.Substring(0, ExecutableNameWithExtension.Length - fiExe.Extension.Length);
+			ApplicationRoot = fiExe.Directory.FullName.TrimEnd('\\', '/').Replace('\\', '/');
+			ApplicationDirectoryBase = ApplicationRoot + "/";
+			WritableDirectoryBase = ApplicationDirectoryBase + writablePath.Trim('\\', '/').Replace('\\', '/') + '/';
 		}
 		/// <summary>
 		/// Call this to initialize global static variables where the "WritableDirectoryBase" path is a subfolder of <see cref="Environment.SpecialFolder.CommonApplicationData"/>.
@@ -74,14 +119,15 @@ namespace BPUtil
 		/// <para>So you could pass in "MyApp" or to be even safer, "MyCompany/MyApp".</para>
 		/// </param>
 		/// <param name="CreateWritableDir">If true, the directory defined by WritableDirectoryBase will be created if needed.</param>
+		[Obsolete("Globals.InitializeProgram is obsolete. Use Globals.InitializeCommonApplicationData or Globals.InitializeApplicationData instead.", true)]
 		public static void InitializeProgram(string exePath, string programName, bool CreateWritableDir = false)
 		{
 			Initialize(exePath);
 
-			writableDirectoryBase = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-			writableDirectoryBase = writableDirectoryBase.TrimEnd('\\', '/').Replace('\\', '/') + '/' + programName + '/';
+			WritableDirectoryBase = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+			WritableDirectoryBase = WritableDirectoryBase.TrimEnd('\\', '/').Replace('\\', '/') + '/' + programName + '/';
 			if (CreateWritableDir)
-				Directory.CreateDirectory(writableDirectoryBase);
+				Directory.CreateDirectory(WritableDirectoryBase);
 		}
 
 		/// <summary>
@@ -93,50 +139,29 @@ namespace BPUtil
 			DirectoryInfo diWritable = new DirectoryInfo(writableDirectoryAbsolutePath);
 			if (!diWritable.Exists)
 				diWritable = Directory.CreateDirectory(diWritable.FullName);
-			writableDirectoryBase = diWritable.FullName.TrimEnd('\\', '/').Replace('\\', '/') + '/';
+			WritableDirectoryBase = diWritable.FullName.TrimEnd('\\', '/').Replace('\\', '/') + '/';
 		}
 
-		private static string executableNameWithExtension;
 		/// <summary>
 		/// Gets the name of the executable file, including the extension.  e.g. "MyProgram.exe"
 		/// </summary>
-		public static string ExecutableNameWithExtension
-		{
-			get { return executableNameWithExtension; }
-		}
-		private static string executableNameWithoutExtension;
+		public static string ExecutableNameWithExtension { get; private set; }
 		/// <summary>
 		/// Gets the name of the executable file, NOT including the extension.  e.g. "MyProgram.exe" => "MyProgram"
 		/// </summary>
-		public static string ExecutableNameWithoutExtension
-		{
-			get { return executableNameWithoutExtension; }
-		}
-		private static string applicationRoot;
+		public static string ExecutableNameWithoutExtension { get; private set; }
 		/// <summary>
 		/// Gets the full path to the root directory where the current executable is located.  Does not have trailing '/'.
 		/// </summary>
-		public static string ApplicationRoot
-		{
-			get { return applicationRoot; }
-		}
-		private static string applicationDirectoryBase;
+		public static string ApplicationRoot { get; private set; }
 		/// <summary>
 		/// Gets the full path to the root directory where the current executable is located.  Includes trailing '/'.
 		/// </summary>
-		public static string ApplicationDirectoryBase
-		{
-			get { return applicationDirectoryBase; }
-		}
-		private static string writableDirectoryBase;
-
+		public static string ApplicationDirectoryBase { get; private set; }
 		/// <summary>
 		/// Gets the full path to a persistent directory where the application can write to.  Includes trailing '/'.
 		/// </summary>
-		public static string WritableDirectoryBase
-		{
-			get { return writableDirectoryBase; }
-		}
+		public static string WritableDirectoryBase { get; private set; }
 		/// <summary>
 		/// Gets the full path to the error log file.
 		/// </summary>
@@ -146,7 +171,7 @@ namespace BPUtil
 			{
 				if (GetErrorFilePath != null)
 					return GetErrorFilePath();
-				return writableDirectoryBase + executableNameWithoutExtension + "Errors.txt";
+				return WritableDirectoryBase + ExecutableNameWithoutExtension + "Errors.txt";
 			}
 		}
 		/// <summary>
@@ -164,7 +189,7 @@ namespace BPUtil
 		/// <summary>
 		/// The BPUtil version number, not to be confused with the version number of the application this is included in.  This version number is often neglected.
 		/// </summary>
-		public static string Version = "0.8";
+		public static string Version = "0.9";
 
 		/// <summary>
 		/// Gets the GUID of the entry assembly.
@@ -190,7 +215,7 @@ namespace BPUtil
 				AssemblyTitleAttribute attr = Assembly.GetEntryAssembly().GetCustomAttributes<AssemblyTitleAttribute>().FirstOrDefault();
 				if (attr != null && !string.IsNullOrWhiteSpace(attr.Title))
 					return attr.Title;
-				return Path.GetFileNameWithoutExtension(Assembly.GetEntryAssembly().Location);
+				return Path.GetFileNameWithoutExtension(Globals.EntryAssemblyLocation);
 			}
 		}
 
@@ -223,7 +248,24 @@ namespace BPUtil
 		{
 			get
 			{
-				return File.GetLastWriteTimeUtc(Assembly.GetEntryAssembly().Location);
+				return File.GetLastWriteTimeUtc(EntryAssemblyLocation);
+			}
+		}
+		/// <summary>
+		/// Gets the absolute path to the executable that is running, sourced from the framework instead of from Globals, which could have been initialized with a different path.
+		/// </summary>
+		public static string EntryAssemblyLocation
+		{
+			get
+			{
+#if NET6_0_OR_GREATER
+				string eal = Environment.ProcessPath;
+				if (eal == null) // Real process name not available.  Make a guess.
+					eal = Path.Combine(AppContext.BaseDirectory, System.Diagnostics.Process.GetCurrentProcess().ProcessName + (Platform.IsUnix() ? ".dll" : ".exe"));
+				return eal;
+#else
+				return Assembly.GetEntryAssembly().Location;
+#endif
 			}
 		}
 	}
