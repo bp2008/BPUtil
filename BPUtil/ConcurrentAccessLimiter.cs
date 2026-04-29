@@ -26,7 +26,7 @@ namespace BPUtil
 		}
 
 		/// <summary>
-		/// Attempts to acquire access and returns a disposable handle that releases access when disposed.
+		/// Attempts to acquire access and returns a disposable handle that releases access when disposed.  If access cannot be acquired, a TimeoutException is thrown.
 		/// </summary>
 		/// <param name="timeout">
 		/// Optional amount of time to wait for access. When <see langword="null"/>, acquisition is attempted immediately.
@@ -36,7 +36,7 @@ namespace BPUtil
 		/// </returns>
 		/// <exception cref="TimeoutException">Thrown when access cannot be acquired before the timeout expires.</exception>
 		/// <exception cref="ObjectDisposedException">Thrown when the limiter has been disposed.</exception>
-		public IDisposable GetAccess(TimeSpan? timeout = null)
+		public IDisposable GetDisposableAccess(TimeSpan? timeout = null)
 		{
 			ThrowIfDisposed();
 
@@ -69,7 +69,7 @@ namespace BPUtil
 				throw new ArgumentNullException(nameof(action));
 			}
 
-			using (GetAccess(timeout))
+			using (GetDisposableAccess(timeout))
 			{
 				action();
 			}

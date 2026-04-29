@@ -34,11 +34,11 @@ namespace UnitTests
 		public void GetAccess_NoAvailability_ThrowsTimeoutException()
 		{
 			ConcurrentAccessLimiter limiter = new ConcurrentAccessLimiter(1);
-			using (limiter.GetAccess())
+			using (limiter.GetDisposableAccess())
 			{
 				try
 				{
-					IDisposable secondAccess = limiter.GetAccess();
+					IDisposable secondAccess = limiter.GetDisposableAccess();
 					Assert.Fail("Expected TimeoutException when access is unavailable.");
 				}
 				catch (TimeoutException)
@@ -51,7 +51,7 @@ namespace UnitTests
 		public void GetAccess_WithTimeout_WaitsForReleaseThenSucceeds()
 		{
 			ConcurrentAccessLimiter limiter = new ConcurrentAccessLimiter(1);
-			IDisposable firstAccess = limiter.GetAccess();
+			IDisposable firstAccess = limiter.GetDisposableAccess();
 
 			Thread releaseThread = new Thread(() =>
 			{
@@ -60,7 +60,7 @@ namespace UnitTests
 			});
 			releaseThread.Start();
 
-			using (limiter.GetAccess(TimeSpan.FromSeconds(1)))
+			using (limiter.GetDisposableAccess(TimeSpan.FromSeconds(1)))
 			{
 			}
 
@@ -75,7 +75,7 @@ namespace UnitTests
 
 			try
 			{
-				IDisposable access = limiter.GetAccess();
+				IDisposable access = limiter.GetDisposableAccess();
 				Assert.Fail("Expected ObjectDisposedException after disposal.");
 			}
 			catch (ObjectDisposedException)
@@ -108,7 +108,7 @@ namespace UnitTests
 				Interlocked.Increment(ref count);
 			});
 
-			using (limiter.GetAccess())
+			using (limiter.GetDisposableAccess())
 			{
 			}
 
