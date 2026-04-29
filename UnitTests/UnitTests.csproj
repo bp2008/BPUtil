@@ -68,6 +68,7 @@
     <Compile Include="TestCompression.cs" />
     <Compile Include="TestConcatenatedStream.cs" />
     <Compile Include="TestEnumExtensions.cs" />
+    <Compile Include="TestEventExtensions.cs" />
     <Compile Include="TestIdObfuscator.cs" />
     <Compile Include="TestImageUtil.cs" />
     <Compile Include="TestFileUtil.cs" />
