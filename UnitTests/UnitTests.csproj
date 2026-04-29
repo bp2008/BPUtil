@@ -51,6 +51,7 @@
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="TestConcurrentAccessLimiter.cs" />
     <Compile Include="Expect.cs" />
     <Compile Include="Helpers\IterateOverKeyContainers.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
