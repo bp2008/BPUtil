@@ -526,69 +526,93 @@ namespace BPUtil
 				//uploadBodyContent.Headers.Add("Content-Length", uploadBody.Length.ToString());
 				requestMessage.Content = uploadBodyContent;
 			}
-			try
+			HttpResponseMessage httpResponse = null;
+			// We enforce the request timeout via this CancellationTokenSource so that it covers the
+			// entire request including body reads. HttpCompletionOption.ResponseHeadersRead causes
+			// HttpClient.Timeout to effectively stop applying once the response headers arrive, which
+			// means a server that sends headers but then stalls on the body would otherwise hang the
+			// caller indefinitely.
+			using (CancellationTokenSource cts = new CancellationTokenSource(timeout))
+			using (cts.Token.Register(() =>
 			{
-				HttpResponseMessage httpResponse = await client.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-
-				response.StatusCode = (int)httpResponse.StatusCode;
-
-				foreach (var kvp in httpResponse.Headers)
-					response.headers[kvp.Key] = string.Join(",", kvp.Value);
-				foreach (var kvp in httpResponse.Content.Headers)
-					response.headers[kvp.Key] = string.Join(",", kvp.Value);
-
-				if (httpResponse.Content.Headers.ContentType != null)
-					response.ContentType = httpResponse.Content.Headers.ContentType.ToString();
-				else if (response.headers.ContainsKey("Content-Type"))
-					response.ContentType = response.headers["Content-Type"];
-				else
-					response.ContentType = "";
-
-				if (earlyTerminationBytes == int.MaxValue || earlyTerminationBytes < 0)
+				// On .NET Framework, cancellation does not always propagate through the underlying
+				// socket on Stream.ReadAsync, so disposing the response is what reliably unblocks a
+				// stuck read by closing the connection.
+				try { httpResponse?.Dispose(); } catch { }
+			}))
+			{
+				try
 				{
-					if (string.IsNullOrEmpty(fileDownloadPath))
-						response.data = await httpResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+					httpResponse = await client.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+
+					response.StatusCode = (int)httpResponse.StatusCode;
+
+					foreach (var kvp in httpResponse.Headers)
+						response.headers[kvp.Key] = string.Join(",", kvp.Value);
+					foreach (var kvp in httpResponse.Content.Headers)
+						response.headers[kvp.Key] = string.Join(",", kvp.Value);
+
+					if (httpResponse.Content.Headers.ContentType != null)
+						response.ContentType = httpResponse.Content.Headers.ContentType.ToString();
+					else if (response.headers.ContainsKey("Content-Type"))
+						response.ContentType = response.headers["Content-Type"];
 					else
-						using (Stream stream = CreateStreamToSaveTo(fileDownloadPath))
-							await httpResponse.Content.CopyToAsync(stream).ConfigureAwait(false);
-				}
-				else
-				{
-					using (Stream ms = CreateStreamToSaveTo(fileDownloadPath))
-					{
-						using (Stream responseStream = await httpResponse.Content.ReadAsStreamAsync().ConfigureAwait(false))
-						{
-							// Dump the response stream into the MemoryStream ms
-							int bytesRead = 1;
-							byte[] buffer = new byte[32768];
-							while (bytesRead > 0)
-							{
-								if (earlyTerminationBytes - ms.Length < buffer.Length)
-									buffer = new byte[earlyTerminationBytes - ms.Length];
+						response.ContentType = "";
 
-								bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
-								if (bytesRead > 0)
-									ms.Write(buffer, 0, bytesRead);
-								if (ms.Length >= earlyTerminationBytes)
-									break;
-							}
-							// Dump the data into the byte array
-							if (ms is MemoryStream)
-								response.data = (ms as MemoryStream).ToArray();
+					// Read the response body through a manual loop so that we can pass cts.Token to
+					// each Read. ReadAsByteArrayAsync / CopyToAsync / ReadAsStreamAsync do not accept
+					// a CancellationToken in .NET Framework 4.x, so calling them directly would leave
+					// body reads unbounded.
+					long maxBytes = (earlyTerminationBytes == int.MaxValue || earlyTerminationBytes < 0)
+						? long.MaxValue
+						: earlyTerminationBytes;
+					using (Stream destStream = CreateStreamToSaveTo(fileDownloadPath))
+					using (Stream responseStream = await httpResponse.Content.ReadAsStreamAsync().ConfigureAwait(false))
+					{
+						byte[] buffer = new byte[32768];
+						long totalRead = 0;
+						while (totalRead < maxBytes)
+						{
+							int bytesToRead = buffer.Length;
+							long remaining = maxBytes - totalRead;
+							if (remaining < bytesToRead)
+								bytesToRead = (int)remaining;
+							int bytesRead = await responseStream.ReadAsync(buffer, 0, bytesToRead, cts.Token).ConfigureAwait(false);
+							if (bytesRead <= 0)
+								break;
+							destStream.Write(buffer, 0, bytesRead);
+							totalRead += bytesRead;
 						}
+						if (string.IsNullOrEmpty(fileDownloadPath) && destStream is MemoryStream)
+							response.data = (destStream as MemoryStream).ToArray();
 					}
 				}
-			}
-			catch (Exception ex)
-			{
-				response.StatusCode = 0;
-				response.ex = ex;
-				Exception cancelEx = ex.GetExceptionWhere(e2 => e2 is ThreadAbortException || e2 is TaskCanceledException || e2.Message.Contains("The request was aborted: The request was canceled"));
-				if (cancelEx != null)
+				catch (Exception ex)
 				{
-					if (cancelEx is TaskCanceledException) // This utility doesn't support cancellation, and request timeouts look like cancellation..
-						response.ex = new Exception("The web request failed, likely having timed out (Execution Time: " + sw.Elapsed + ", Timeout: " + timeout + ")", cancelEx);
-					response.canceled = true;
+					response.StatusCode = 0;
+					response.ex = ex;
+					if (cts.IsCancellationRequested)
+					{
+						// Our timeout fired. The exception may be OperationCanceledException (if
+						// cancellation propagated cleanly) or, on .NET Framework, an IOException /
+						// ObjectDisposedException raised because our cts.Token.Register callback
+						// forcibly disposed httpResponse to unblock a stuck body read.
+						response.ex = new TimeoutException("The web request failed, likely having timed out (Execution Time: " + sw.Elapsed + ", Timeout: " + timeout + ")", ex);
+						response.canceled = true;
+					}
+					else
+					{
+						Exception cancelEx = ex.GetExceptionWhere(e2 => e2 is ThreadAbortException || e2 is TaskCanceledException || e2 is OperationCanceledException || e2.Message.Contains("The request was aborted: The request was canceled"));
+						if (cancelEx != null)
+							response.canceled = true;
+					}
+				}
+				finally
+				{
+					if (httpResponse != null)
+					{
+						try { httpResponse.Dispose(); } catch { }
+					}
 				}
 			}
 			return response;
