@@ -85,7 +85,7 @@ namespace BPUtil
 		/// <para>The exe name is used to create the CommonApplicationDataBase string.</para>
 		/// </param>
 		/// <param name="writablePath">A string to be appended to ApplicationDirectoryBase to form WritableDirectoryBase.  Example: "" or "writable/" or "somedir/writable/"</param>
-		[Obsolete("Globals.Initialize is obsolete. Use Globals.InitializeCommonApplicationData or Globals.InitializeApplicationData instead.", true)]
+		[Obsolete("Globals.Initialize is obsolete. Use Globals.InitializeCommonApplicationData or Globals.InitializeApplicationData instead. It is no longer allowed or necessary to pass the absolute executable path into Globals. If you want to override the WritableDirectoryPath, call SetWritableDirectory after one of the initialize functions.", true)]
 		public static void Initialize(string exePath, string writablePath = "")
 		{
 			FileInfo fiExe = null;
