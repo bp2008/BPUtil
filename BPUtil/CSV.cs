@@ -26,6 +26,15 @@ namespace BPUtil
 			return QuoteCsvField(StripInvalidCsvCharacters(str));
 		}
 		/// <summary>
+		/// Encodes a string such that it can be written directly to a UTF-8 CSV file as a field.  Any invalid characters will be replaced with spaces in the output string.  Valid character values are 10 (\n), 13 (\r), and 32-126, and 128+ (requiring UTF-8 encoding). Notably, TAB is not considered a valid character.
+		/// </summary>
+		/// <param name="str">The string to encode as a CSV field</param>
+		/// <returns>Quoted output string safe to insert into a CSV file as a cell value.</returns>
+		public static string EncodeAsUtf8CsvField(string str)
+		{
+			return QuoteCsvField(ReplaceInvalidUnicodeCharactersWithSpaces(str));
+		}
+		/// <summary>
 		/// Encodes a string such that it can be written to a CSV file as a field. This method does not remove out-of-range characters.
 		/// </summary>
 		/// <param name="str">The string to encode as a CSV field</param>
