@@ -1,10 +1,8 @@
 ﻿using BPUtil.IO;
 using BPUtil.SimpleHttp.Client;
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -12,9 +10,7 @@ using System.Net.Http.Headers;
 using System.Net.NetworkInformation;
 using System.Net.Security;
 using System.Net.Sockets;
-using System.Runtime.Serialization;
 using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -1668,101 +1664,6 @@ namespace BPUtil.SimpleHttp
 		private void UpdateNetworkAddresses()
 		{
 			addressInfo = new NetworkAddressInfo(NetworkInterface.GetAllNetworkInterfaces());
-		}
-
-		private static object certCreateLock = new object();
-		public static X509Certificate2 GetSelfSignedCertificate()
-		{
-			lock (certCreateLock)
-			{
-				X509Certificate2 ssl_certificate;
-				FileInfo fiExe;
-				try
-				{
-					fiExe = new FileInfo(Globals.EntryAssemblyLocation);
-				}
-				catch
-				{
-#if NETFRAMEWORK || NET6_PLUS_WIN
-					try
-					{
-						fiExe = new FileInfo(System.Windows.Forms.Application.ExecutablePath);
-					}
-					catch
-					{
-						fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
-					}
-#else
-					fiExe = new FileInfo(Globals.ApplicationDirectoryBase + Globals.ExecutableNameWithExtension);
-#endif
-				}
-				string autoCertPassword = "N0t_V3ry-S3cure#lol";
-				FileInfo fiCert = new FileInfo(fiExe.Directory.FullName + "/SimpleHttpServer-SslCert.pfx");
-				if (fiCert.Exists)
-				{
-					try
-					{
-#if NET10_0_OR_GREATER
-						ssl_certificate = X509CertificateLoader.LoadPkcs12FromFile(fiCert.FullName, autoCertPassword);
-#else
-						ssl_certificate = new X509Certificate2(fiCert.FullName, autoCertPassword);
-#endif
-					}
-					catch (Exception ex1)
-					{
-						try
-						{
-#if NET10_0_OR_GREATER
-							ssl_certificate = X509CertificateLoader.LoadPkcs12FromFile(fiCert.FullName, null);
-#else
-							ssl_certificate = new X509Certificate2(fiCert.FullName);
-#endif
-						}
-						catch
-						{
-							throw ex1;
-						}
-					}
-				}
-				else
-				{
-#if NETFRAMEWORK
-					using (BPUtil.SimpleHttp.Crypto.CryptContext ctx = new BPUtil.SimpleHttp.Crypto.CryptContext())
-					{
-						ctx.Open();
-
-						ssl_certificate = ctx.CreateSelfSignedCertificate(
-							new BPUtil.SimpleHttp.Crypto.SelfSignedCertProperties
-							{
-								IsPrivateKeyExportable = true,
-								KeyBitLength = 4096,
-								Name = new X500DistinguishedName("cn=localhost"),
-								ValidFrom = DateTime.Today.AddDays(-1),
-								ValidTo = DateTime.Today.AddYears(100),
-							});
-
-						byte[] certData = ssl_certificate.Export(X509ContentType.Pfx, autoCertPassword);
-						File.WriteAllBytes(fiCert.FullName, certData);
-					}
-#elif NET6_0_OR_GREATER
-					// Native cert generator. .NET 4.7.2 required.
-					using (System.Security.Cryptography.RSA key = System.Security.Cryptography.RSA.Create(2048))
-					{
-						CertificateRequest request = new CertificateRequest("cn=localhost", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
-
-						SubjectAlternativeNameBuilder sanBuilder = new SubjectAlternativeNameBuilder();
-						sanBuilder.AddDnsName("localhost");
-						request.CertificateExtensions.Add(sanBuilder.Build());
-
-						ssl_certificate = request.CreateSelfSigned(DateTime.Today.AddDays(-1), DateTime.Today.AddYears(100));
-
-						byte[] certData = ssl_certificate.Export(X509ContentType.Pfx, autoCertPassword);
-						File.WriteAllBytes(fiCert.FullName, certData);
-					}
-#endif
-				}
-				return ssl_certificate;
-			}
 		}
 		/// <summary>
 		/// <para>Shorthand method to configure this server to listen on all interfaces on one http and/or one https port.</para>
