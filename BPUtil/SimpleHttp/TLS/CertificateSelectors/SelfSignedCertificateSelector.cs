@@ -101,12 +101,12 @@ namespace BPUtil.SimpleHttp
 			return fiExe.Directory.FullName;
 		}
 		private static object certCreateLock = new object();
+		private const string autoCertPassword = "N0t_V3ry-S3cure#lol";
 		private static X509Certificate2 GetSelfSignedCertificate(string certificateDirectoryPath, string certificateFileName)
 		{
 			lock (certCreateLock)
 			{
 				X509Certificate2 ssl_certificate;
-				string autoCertPassword = "N0t_V3ry-S3cure#lol";
 				FileInfo fiCert = new FileInfo(Path.Combine(certificateDirectoryPath, certificateFileName));
 				if (fiCert.Exists)
 				{
@@ -175,6 +175,17 @@ namespace BPUtil.SimpleHttp
 				}
 				return ssl_certificate;
 			}
+		}
+		/// <summary>
+		/// Gets a CertificatePfxInfo instance which a ReloadingCertificateSelector can use as a fallback when its normally configured certificate is unavailable.
+		/// </summary>
+		/// <param name="certFilePath">Path to the certificate file.</param>
+		/// <returns></returns>
+		public static CertificatePfxInfo GetCertificatePfxInfoForReloadingCertificateSelector(string certFilePath)
+		{
+			FileInfo fiCert = new FileInfo(certFilePath);
+			GetSelfSignedCertificate(fiCert.Directory.FullName, fiCert.Name);
+			return new CertificatePfxInfo(certFilePath, autoCertPassword);
 		}
 	}
 }
