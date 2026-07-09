@@ -75,12 +75,24 @@ namespace BPUtil
 				{
 					p.WaitForExit(500);
 				}
-				if (bThreadAbort && !p.HasExited)
-					p.Kill();
 
-				if (!bThreadAbort)
+				if (bThreadAbort && !p.HasExited)
 				{
-					// Must call WaitForExit without a timeout in order to force output buffers to be flushed.
+					try
+					{
+						p.Kill();
+					}
+					catch (InvalidOperationException)
+					{
+						// Process exited on its own between the check and Kill().
+					}
+					// Kill is asynchronous; wait (bounded) so that p.ExitCode can be read safely below.  If the wait times out, getting ExitCode is expected to throw InvalidOperationException.
+					// A bounded wait is used because the run is abandoned, so complete output no longer matters, and the parameterless overload could block indefinitely on pipe EOF if the killed process left children (e.g. chromedriver) holding inherited stdout/stderr handles.
+					p.WaitForExit(10000);
+				}
+				else
+				{
+					// Parameterless WaitForExit overload also waits for the async stdout/stderr readers to reach end-of-stream, guaranteeing sbOutput/sbError are complete. WaitForExit(timeout) does not.
 					p.WaitForExit();
 				}
 
