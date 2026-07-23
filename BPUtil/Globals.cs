@@ -252,17 +252,30 @@ namespace BPUtil
 			}
 		}
 		/// <summary>
-		/// Gets the absolute path to the executable that is running, sourced from the framework instead of from Globals, which could have been initialized with a different path.
+		/// <para>Gets the absolute path to the application's own entry assembly file (e.g. the managed ".dll", or the ".exe"/apphost for a single-file publish).</para>
+		/// <para>This is sourced from the framework rather than from Globals, which could have been initialized with a different path.</para>
+		/// <para>Importantly, when the app is launched via the shared runtime host (e.g. <c>dotnet MyApp.dll</c>), this returns the path to <c>MyApp.dll</c>, NOT the path to the <c>dotnet</c> host executable.  This matters because callers use it to identify the application (e.g. to derive the writable data directory name or to build a service <c>ExecStart</c> command line).</para>
 		/// </summary>
 		public static string EntryAssemblyLocation
 		{
 			get
 			{
 #if NET6_0_OR_GREATER
-				string eal = Environment.ProcessPath;
-				if (eal == null) // Real process name not available.  Make a guess.
-					eal = Path.Combine(AppContext.BaseDirectory, System.Diagnostics.Process.GetCurrentProcess().ProcessName + (Platform.IsUnix() ? ".dll" : ".exe"));
-				return eal;
+				// Prefer the managed entry assembly's own path.  For a framework-dependent app
+				// launched as "dotnet MyApp.dll", this is ".../MyApp.dll" — whereas
+				// Environment.ProcessPath would report the shared "dotnet" host executable, which
+				// would corrupt any value derived from the application's name (writable directory,
+				// service ExecStart, error file name, etc.).
+				string loc = Assembly.GetEntryAssembly()?.Location;
+				if (!string.IsNullOrEmpty(loc))
+					return loc;
+				// Single-file publish: the entry assembly has no on-disk location, so the process
+				// path IS the application's own executable (apphost), which is what we want here.
+				string pp = Environment.ProcessPath;
+				if (!string.IsNullOrEmpty(pp))
+					return pp;
+				// Real process name not available.  Make a guess.
+				return Path.Combine(AppContext.BaseDirectory, System.Diagnostics.Process.GetCurrentProcess().ProcessName + (Platform.IsUnix() ? ".dll" : ".exe"));
 #else
 				return Assembly.GetEntryAssembly().Location;
 #endif

@@ -278,11 +278,18 @@ namespace BPUtil
 #if NETFRAMEWORK
 					// TODO: Implement ExecStart command via mono or mono-service. https://gist.github.com/bp2008/44ad5c81dca23010139fbdc2bc18f286#file-systemd-md
 #endif
+					// A framework-dependent build is a managed ".dll" that must be run via the shared
+					// "dotnet" host, while a single-file/apphost build is a native executable that must
+					// be run directly.  Choose the ExecStart form based on the entry assembly file type.
+					string entryPath = Globals.EntryAssemblyLocation;
+					string execStart = entryPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+						? "/usr/bin/dotnet \"" + entryPath + "\" svc"
+						: "\"" + entryPath + "\" svc";
 					string cfgFile = @"[Unit]
 Description=" + serviceName + @" Service
 
 [Service]
-ExecStart=/usr/bin/dotnet """ + Globals.EntryAssemblyLocation + @""" svc
+ExecStart=" + execStart + @"
 Restart=always
 RestartSec=10
 SyslogIdentifier=" + serviceName + @"
