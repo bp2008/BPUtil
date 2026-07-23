@@ -518,6 +518,20 @@ namespace BPUtil.SimpleHttp.Client
 			options.log.AppendLine("Response will be read as: " + proxyResponseStream?.GetType().Name ?? "[no response body]");
 
 			options.RaiseBeforeResponseHeadersSent(this, p);
+			if (options.BeforeResponseHeadersSentAsync != null)
+				await options.BeforeResponseHeadersSentAsync(p).ConfigureAwait(false);
+
+			Stream responseStreamBeforeBodyFilter = null;
+			if (options.ProxyResponseBodyFilter != null && proxyResponseStream != null && p.Response.Headers["Upgrade"] != "websocket")
+			{
+				Stream replacementStream = await options.ProxyResponseBodyFilter(p, proxyResponseStream).ConfigureAwait(false);
+				if (replacementStream != null && replacementStream != proxyResponseStream)
+				{
+					options.log.AppendLine("ProxyResponseBodyFilter replaced the response body stream with: " + replacementStream.GetType().Name);
+					responseStreamBeforeBodyFilter = proxyResponseStream;
+					proxyResponseStream = replacementStream;
+				}
+			}
 
 			/////////////////////////////
 			// PHASE 6: WRITE RESPONSE //
@@ -546,6 +560,18 @@ namespace BPUtil.SimpleHttp.Client
 			{
 				options.log.AppendLine("Proxying response to client.");
 				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, options.longReadTimeoutMinutes * 60000, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
+			}
+
+			if (responseStreamBeforeBodyFilter != null && remoteServerWantsKeepalive)
+			{
+				// A ProxyResponseBodyFilter replaced the response body stream.  If the original response body from the remote server was not fully consumed, the connection to the remote server can not be reused.
+				bool originalBodyFullyConsumed = (responseStreamBeforeBodyFilter is Substream ss && ss.EndOfStream)
+					|| (responseStreamBeforeBodyFilter is ReadableChunkedTransferEncodingStream cs && cs.EndOfStream);
+				if (!originalBodyFullyConsumed)
+				{
+					remoteServerWantsKeepalive = false;
+					options.log.AppendLine("The original response body from the remote server was not fully consumed after ProxyResponseBodyFilter replaced the response body stream. This connection will not be reused.");
+				}
 			}
 
 			options.log.AppendLine("Ensuring HTTP response is finished.");

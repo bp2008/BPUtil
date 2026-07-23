@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -121,6 +122,22 @@ namespace BPUtil.SimpleHttp.Client
 		/// An event that is raised before response headers are sent to from the remote server to our client, allowing for those headers to be viewed or modified.
 		/// </summary>
 		public event EventHandler<HttpProcessor> BeforeResponseHeadersSent = delegate { };
+		/// <summary>
+		/// <para>An optional asynchronous callback that is awaited just before response headers are sent from the remote server to our client, allowing for those headers to be viewed or modified.</para>
+		/// <para>This callback is invoked after the <see cref="BeforeResponseHeadersSent"/> event is raised.</para>
+		/// <para>Unlike the <see cref="BeforeResponseHeadersSent"/> event, exceptions thrown by this callback are NOT caught by the proxy utility; an exception thrown here will abort the proxied request.</para>
+		/// </summary>
+		public Func<HttpProcessor, Task> BeforeResponseHeadersSentAsync = null;
+		/// <summary>
+		/// <para>An optional asynchronous callback that can view or replace the stream which the proxied response body will be read from.</para>
+		/// <para>It is called after <see cref="BeforeResponseHeadersSent"/> and <see cref="BeforeResponseHeadersSentAsync"/>, and importantly, before the response header is written to our client.  Therefore, response headers (such as "Content-Length" and "Content-Type") may still be modified when this callback executes, and even later, until the moment the callback's returned stream is first read from.</para>
+		/// <para>The stream given to this callback yields the response body from the remote server with transfer encoding already decoded, after any transformations caused by <see cref="responseHostnameSubstitutions"/> or <see cref="responseRegexReplacements"/> have been applied.  The body may still be compressed according to the "Content-Encoding" response header.</para>
+		/// <para>The callback may return the original stream (or null) to leave the response body unmodified, or return a different stream whose content will be sent to our client instead of the original response body.</para>
+		/// <para>If the replacement stream will yield a body with a different length, it is the callback's responsibility to correct the "Content-Length" response header (setting <see cref="SimpleHttpResponse.ContentLength"/> to null is safe; the response will simply use chunked transfer encoding or connection-close framing as appropriate).</para>
+		/// <para>This callback is not used for responses to HEAD requests, responses with no body, or WebSocket upgrade responses.</para>
+		/// <para>Exceptions thrown by this callback are NOT caught by the proxy utility; an exception thrown here will abort the proxied request.</para>
+		/// </summary>
+		public Func<HttpProcessor, Stream, Task<Stream>> ProxyResponseBodyFilter = null;
 		/// <summary>
 		/// Defines how to handle the "X-Forwarded-For" header.  Default: Drop.
 		/// </summary>

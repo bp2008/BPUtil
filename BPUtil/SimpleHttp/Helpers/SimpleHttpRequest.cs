@@ -24,7 +24,8 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		protected const int MAX_FORM_SIZE = 2 * 1024 * 1024;
 		/// <summary>
-		/// The Http method used.  i.e. "POST" or "GET"
+		/// <para>The Http method used.  i.e. "POST" or "GET"</para>
+		/// <para>The setter is public to allow advanced request manipulation (such as by WebProxy plugins) before a request is proxied.  If setting this, use a standard uppercase HTTP method token, and be aware that changing the method does not change how the request body (if any) was already framed by the client.</para>
 		/// </summary>
 		public string HttpMethod { get; private set; }
 		/// <summary>
@@ -790,6 +791,10 @@ namespace BPUtil.SimpleHttp
 			}
 			return HttpMethod + " " + Url + " BODY unknown type";
 		}
+		/// <summary>
+		/// Gets an object containing a summary of this request, including the HTTP method, URL, and request body information.  This is useful for logging or debugging purposes.
+		/// </summary>
+		/// <returns>An object containing a summary of this request.</returns>
 		public object GetSummary()
 		{
 			return new
@@ -823,6 +828,17 @@ namespace BPUtil.SimpleHttp
 					return new { Type = "Regular", Read = s.PayloadBytesRead };
 			}
 			return null;
+		}
+		/// <summary>
+		/// Assigns a different HTTP method to this request.  Please note changing the HttpMethod does not change how the request body (if any) was already framed by the client; it only affects how later code processes this request.
+		/// </summary>
+		/// <param name="newMethod">The new HTTP method (e.g. "POST" or "GET").  The string must be a valid HTTP method token (e.g. "GET", "POST", "PUT", etc.) or else an exception is thrown.</param>
+		/// <exception cref="ArgumentException">If the HTTP method is invalid.</exception>
+		public void OverrideHttpMethod(string newMethod)
+		{
+			if (!HttpMethods.IsValid(newMethod))
+				throw new ArgumentException("Invalid HTTP method: " + newMethod);
+			HttpMethod = newMethod.ToUpper();
 		}
 		#endregion
 	}
