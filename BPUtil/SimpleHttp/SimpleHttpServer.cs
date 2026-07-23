@@ -1182,6 +1182,24 @@ namespace BPUtil.SimpleHttp
 			public Binding(AllowedConnectionTypes allowedConnectionTypes, ushort port, IPAddress address = null) : this(allowedConnectionTypes, new IPEndPoint(address ?? IPAddress.Any, port)) { }
 
 			/// <summary>
+			/// <para>Creates one Binding per IP version supported by this machine (<see cref="IPAddress.Any"/> and/or <see cref="IPAddress.IPv6Any"/>), all listening on the given port.</para>
+			/// <para>Separate sockets are used for each IP version rather than one dual-mode socket, so that remote IPv4 addresses are reported as-is instead of as IPv4-mapped IPv6 addresses.</para>
+			/// <para>Do not pass port 0 unless you are prepared for each returned Binding to be assigned a different port number by the operating system.</para>
+			/// </summary>
+			/// <param name="allowedConnectionTypes">Connection types that are allowed for these bindings, where it is possible to allow plain unencrypted connections or TLS.</param>
+			/// <param name="port">TCP port number to listen on.</param>
+			/// <returns>An array of Bindings which may be empty if this machine supports neither IPv4 nor IPv6.</returns>
+			public static Binding[] AllInterfaces(AllowedConnectionTypes allowedConnectionTypes, ushort port)
+			{
+				List<Binding> bindings = new List<Binding>();
+				if (Socket.OSSupportsIPv4)
+					bindings.Add(new Binding(allowedConnectionTypes, new IPEndPoint(IPAddress.Any, port)));
+				if (Socket.OSSupportsIPv6)
+					bindings.Add(new Binding(allowedConnectionTypes, new IPEndPoint(IPAddress.IPv6Any, port)));
+				return bindings.ToArray();
+			}
+
+			/// <summary>
 			/// Returns true if this Binding is equal to a specified object (another Binding instance).
 			/// </summary>
 			/// <param name="obj">Other binding to compare with.</param>
@@ -1263,6 +1281,11 @@ namespace BPUtil.SimpleHttp
 							try
 							{
 								tcpListener = new TcpListener(Binding.Endpoint);
+								if (Binding.Endpoint.AddressFamily == AddressFamily.InterNetworkV6)
+								{
+									// Accept only IPv6 on this socket.  A separate socket handles IPv4, and the two can not share a port if this one is dual-mode.
+									tcpListener.Server.DualMode = false;
+								}
 								tcpListener.Start();
 								addressInUseCooldown = null;
 							}
@@ -1667,24 +1690,25 @@ namespace BPUtil.SimpleHttp
 		}
 		/// <summary>
 		/// <para>Shorthand method to configure this server to listen on all interfaces on one http and/or one https port.</para>
-		/// <para>If the same port is given for both protocols, only one socket will be bound and it will accept both protocols.</para>
+		/// <para>If the same port is given for both protocols, only one socket per IP version will be bound and it will accept both protocols.</para>
+		/// <para>One socket is bound per IP version supported by this machine (IPv4 and IPv6), therefore this method may create twice as many listeners as it does ports.</para>
 		/// <para>This method will start or stop listeners as necessary to transition from the current set of bindings to the new set of bindings.</para>
 		/// </summary>
-		/// <param name="httpPort">Port number for the HTTP listener. If out of range [0-65535] (e.g. -1), the listener is disabled.</param>
-		/// <param name="httpsPort">Port number for the HTTPS listener. If out of range [0-65535] (e.g. -1), the listener is disabled.</param>
+		/// <param name="httpPort">Port number for the HTTP listener. If out of range [0-65535] (e.g. -1), the listener is disabled.  Port 0 is not recommended here because the IPv4 and IPv6 listeners would each be assigned a different port number by the operating system; call <see cref="SetBindings(Binding[])"/> directly if you need port 0.</param>
+		/// <param name="httpsPort">Port number for the HTTPS listener. If out of range [0-65535] (e.g. -1), the listener is disabled.  See the remarks about port 0 on <paramref name="httpPort"/>.</param>
 		public void SetBindings(int httpPort = -1, int httpsPort = -1)
 		{
 			if (httpPort > 65535 || httpPort < -1) httpPort = -1;
 			if (httpsPort > 65535 || httpsPort < -1) httpsPort = -1;
 			List<Binding> bindings = new List<Binding>();
 			if (httpPort != -1 && httpPort == httpsPort)
-				bindings.Add(new HttpServerBase.Binding(AllowedConnectionTypes.httpAndHttps, new IPEndPoint(IPAddress.Any, httpPort)));
+				bindings.AddRange(Binding.AllInterfaces(AllowedConnectionTypes.httpAndHttps, (ushort)httpPort));
 			else
 			{
 				if (httpPort != -1)
-					bindings.Add(new HttpServerBase.Binding(AllowedConnectionTypes.http, new IPEndPoint(IPAddress.Any, httpPort)));
+					bindings.AddRange(Binding.AllInterfaces(AllowedConnectionTypes.http, (ushort)httpPort));
 				if (httpsPort != -1)
-					bindings.Add(new HttpServerBase.Binding(AllowedConnectionTypes.https, new IPEndPoint(IPAddress.Any, httpsPort)));
+					bindings.AddRange(Binding.AllInterfaces(AllowedConnectionTypes.https, (ushort)httpsPort));
 			}
 			SetBindings(bindings.ToArray());
 		}
