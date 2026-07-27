@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security;
@@ -14,7 +15,10 @@ namespace BPUtil.SimpleHttp.TLS
 	/// </summary>
 	public static class CertificateStoreUpdater
 	{
-		private static Dictionary<string, bool> ThumbprintsAlreadyAdded = new Dictionary<string, bool>();
+		/// <summary>
+		/// Thumbprints of certificates which have already been ensured to be in the store.  This is a ConcurrentDictionary because certificate reloading can occur on multiple threads simultaneously.
+		/// </summary>
+		private static ConcurrentDictionary<string, bool> ThumbprintsAlreadyAdded = new ConcurrentDictionary<string, bool>();
 		/// <summary>
 		/// Adds all intermediate certificates from the given pfx file to the local machine's "Intermediate Certificate Authorities" store (skips those that already exist in it).
 		/// </summary>
@@ -92,38 +96,46 @@ namespace BPUtil.SimpleHttp.TLS
 			}
 		}
 
+		/// <summary>
+		/// Lock object which prevents multiple threads from opening and writing to the certificate store simultaneously.
+		/// </summary>
+		private static object storeLock = new object();
+
 		private static void EnsureCertificatesAreInStore(List<X509Certificate2> certificates, StoreLocation storeLocation)
 		{
 			if (certificates.Count == 0)
 				return;
 
+			lock (storeLock)
+			{
 #if NETFRAMEWORK
-			X509Store store = new X509Store(StoreName.CertificateAuthority, storeLocation);
-			try
+				X509Store store = new X509Store(StoreName.CertificateAuthority, storeLocation);
+				try
 #else
-			using (X509Store store = new X509Store(StoreName.CertificateAuthority, storeLocation))
+				using (X509Store store = new X509Store(StoreName.CertificateAuthority, storeLocation))
 #endif
-			{
-				store.Open(OpenFlags.ReadWrite);
-
-				foreach (X509Certificate2 certificate in certificates)
 				{
-					// Check if the certificate is already in the store
-					X509Certificate2Collection existingCertificates = store.Certificates.Find(X509FindType.FindByThumbprint, certificate.Thumbprint, false);
-					if (existingCertificates.Count == 0)
+					store.Open(OpenFlags.ReadWrite);
+
+					foreach (X509Certificate2 certificate in certificates)
 					{
-						// Add the certificate to the store if it's not already there
-						store.Add(certificate);
+						// Check if the certificate is already in the store
+						X509Certificate2Collection existingCertificates = store.Certificates.Find(X509FindType.FindByThumbprint, certificate.Thumbprint, false);
+						if (existingCertificates.Count == 0)
+						{
+							// Add the certificate to the store if it's not already there
+							store.Add(certificate);
+						}
+						ThumbprintsAlreadyAdded[certificate.Thumbprint] = true;
 					}
-					ThumbprintsAlreadyAdded[certificate.Thumbprint] = true;
 				}
-			}
 #if NETFRAMEWORK
-			finally
-			{
-				store.Close();
-			}
+				finally
+				{
+					store.Close();
+				}
 #endif
+			}
 		}
 	}
 }
