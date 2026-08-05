@@ -174,7 +174,8 @@ namespace BPUtil
 					throw new Exception("AddressFamily." + a.AddressFamily + " is not supported.");
 			}
 			else
-				throw new Exception("AddressFamily of both IP addresses must be the same to be compared. A: " + a.AddressFamily + ", B: " + b.AddressFamily + ".");
+				return false; // Address families are different, so they cannot be in the same subnet.
+			//throw new Exception("AddressFamily of both IP addresses must be the same to be compared. A: " + a.AddressFamily + ", B: " + b.AddressFamily + ".");
 		}
 		/// <summary>
 		/// <para>Trims leading and trailing whitespace.</para>
