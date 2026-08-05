@@ -776,7 +776,7 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		protected static SimpleThreadPool proxyResponseThreadPool = new SimpleThreadPool("ProxyResponses", 0, 1024, 10000);
 		/// <summary>
-		/// <para>Primitive, mostly-synchronous proxy method.  Recommended to use instead <see cref="ProxyToAsync(string, ProxyOptions)"/> using <see cref="TaskHelper.RunAsyncCodeSafely(Func{Task})"/> if necessary.</para>
+		/// <para>Primitive, mostly-synchronous proxy method.  Recommended to use instead <see cref="ProxyTo(string, ProxyOptions)"/> (blocking) or <see cref="ProxyToAsync(string, ProxyOptions)"/> (asynchronous), both of which use the more capable <see cref="Client.ProxyClient"/> implementation.</para>
 		/// <para>Acts as a proxy server, sending the request to a different URL.</para>
 		/// <para>This method starts a new (and unpooled) thread to handle the response from the remote server.</para>
 		/// <para>The "Host" header is rewritten (or added) and output as the first header.</para>
@@ -925,6 +925,24 @@ namespace BPUtil.SimpleHttp
 			options?.bet?.Start("Entering ProxyToAsync");
 			await Client.ProxyClient.ProxyRequest(this, new Uri(newUrl), options).ConfigureAwait(false);
 			options?.bet?.Stop();
+		}
+		/// <summary>
+		/// <para>Acts as a proxy server, sending the request to a different URL.  This is a blocking wrapper around <see cref="ProxyToAsync(string, ProxyOptions)"/>, intended for web servers derived from <see cref="HttpServer"/> (which handle requests synchronously) so that they can use the advanced proxy implementation.</para>
+		/// <para>The calling thread is blocked until the proxy operation is complete, at which point it is safe for the request handler to return control to the <see cref="HttpProcessor"/>.</para>
+		/// <para>The "Host" header is rewritten (or added) and output as the first header.</para>
+		/// <para>Do not call this from an <see cref="HttpServerAsync"/> request handler; await <see cref="ProxyToAsync(string, ProxyOptions)"/> there instead.</para>
+		/// </summary>
+		/// <param name="newUrl">The URL to proxy the original request to.</param>
+		/// <param name="options">Options to control the behavior of the proxy request.  May be null to use default options.</param>
+		public void ProxyTo(string newUrl, ProxyOptions options)
+		{
+			// ProxyToAsync and the ProxyClient complete the response via the asynchronous response methods, which would
+			// otherwise be rejected because this HttpProcessor is in blocking/synchronous mode.  Those checks exist to
+			// catch a caller which starts an async operation and returns without waiting for it, which can not happen
+			// here because this method does not return until the Task is complete.
+			Response.SuppressSyncAsyncUsageChecks(true);
+			TaskHelper.RunAsyncCodeSafely(() => ProxyToAsync(newUrl, options));
+			Response.SuppressSyncAsyncUsageChecks(false);
 		}
 		#endregion
 

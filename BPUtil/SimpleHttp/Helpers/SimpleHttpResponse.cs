@@ -772,7 +772,7 @@ namespace BPUtil.SimpleHttp
 		/// <param name="additionalResponseHeaders">Optional collection of HTTP headers to include in the HTTP response.</param>
 		public void WebSocketUpgradeSync(HttpHeaderCollection additionalResponseHeaders = null)
 		{
-			_checkAsyncUsage = false;
+			SuppressSyncAsyncUsageChecks();
 			_Prep_WebSocketUpgrade(additionalResponseHeaders);
 			FinishSync();
 		}
@@ -1164,6 +1164,17 @@ namespace BPUtil.SimpleHttp
 		public void PreventKeepalive()
 		{
 			preventKeepalive = true;
+		}
+		/// <summary>
+		/// <para>WARNING: Use with care.</para>
+		/// <para>Disables the checks which cause the synchronous response methods to throw an exception when this <see cref="HttpProcessor"/> is in async mode, and the asynchronous response methods to throw an exception when this <see cref="HttpProcessor"/> is in blocking/synchronous mode.</para>
+		/// <para>Those checks exist to catch a caller that mixes the two APIs by accident.  The mistake that actually corrupts a connection is a synchronous request handler which calls an asynchronous response method and returns without waiting for the returned Task; the <see cref="HttpProcessor"/> would then clean up the request and reuse or dispose the connection while the async operation is still writing to it.</para>
+		/// <para>Only call this method when the caller is known to complete all of its I/O before returning control to the <see cref="HttpProcessor"/>.  The effect lasts for the remainder of the current response; a new response is created for each request on a kept-alive connection.</para>
+		/// </summary>
+		/// <param name="suppress">True to suppress async usage checks.  False to re-enable the checks.  Checks automatically re-enable anyway when a new request begins processing.</param>
+		public void SuppressSyncAsyncUsageChecks(bool suppress = true)
+		{
+			_checkAsyncUsage = !suppress;
 		}
 		/// <summary>
 		/// Assigns a new <see cref="StatusString"/>, unsets <see cref="bodyContent"/>, unsets the compression method, and clears <see cref="Headers"/>. If the response header was already written, throws ApplicationException. 
