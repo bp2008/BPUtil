@@ -551,12 +551,23 @@ namespace BPUtil.SimpleHttp.Client
 
 			if (p.Response.Headers["Upgrade"] == "websocket")
 			{
-				// Asynchronously proxy additional incoming data to the remote server (do not await)
-				options.log.AppendLine("This is a WebSocket. Asynchronously beginning to proxy additional request stream data.");
-				_ = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.tcpStream, proxyStream, snoopy, options.longReadTimeoutMinutes * 60000, options.networkTimeoutMs, options.cancellationToken);
-				// Later code will handle proxying the response from the remote server to our client.
+				// A WebSocket is bidirectional, so both directions must be proxied concurrently.
+				options.log.AppendLine("This is a WebSocket. Proxying both directions until either one closes.");
+				Task clientToServer = CopyStreamUntilClosedAsync(ProxyDataDirection.RequestToServer, p.tcpStream, proxyStream, snoopy, options.longReadTimeoutMinutes * 60000, options.networkTimeoutMs, options.cancellationToken);
+				Task serverToClient = proxyResponseStream == null
+					? TaskHelper.CompletedTask
+					: CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, options.longReadTimeoutMinutes * 60000, options.networkTimeoutMs, options.cancellationToken);
+
+				// The proxied WebSocket is finished as soon as either direction closes; continuing to wait on the other
+				// direction would keep this connection (and both sockets) alive until the long read timeout expires.
+				// The direction that is still running is most likely parked in a read which can only be broken by
+				// closing the sockets, and that happens during cleanup after this method returns.  We therefore stop
+				// waiting for it, but still observe its exception so it does not become an unobserved task exception.
+				Task firstToFinish = await Task.WhenAny(clientToServer, serverToClient).ConfigureAwait(false);
+				ObserveAndIgnoreExceptions(firstToFinish == clientToServer ? serverToClient : clientToServer);
+				await firstToFinish.ConfigureAwait(false); // Propagate a genuine failure from the direction that finished.
 			}
-			if (proxyResponseStream != null)
+			else if (proxyResponseStream != null)
 			{
 				options.log.AppendLine("Proxying response to client.");
 				await CopyStreamUntilClosedAsync(ProxyDataDirection.ResponseFromServer, proxyResponseStream, outgoingStream, snoopy, options.longReadTimeoutMinutes * 60000, options.networkTimeoutMs, options.cancellationToken).ConfigureAwait(false);
@@ -959,6 +970,15 @@ namespace BPUtil.SimpleHttp.Client
 				await target.WriteAsync(buf, 0, length, cts.Token).ConfigureAwait(false);
 		}
 
+		/// <summary>
+		/// <para>Attaches a continuation which observes the given Task's exception, so that a Task we have stopped waiting for can not raise <see cref="TaskScheduler.UnobservedTaskException"/> when it faults later.</para>
+		/// <para>This does not cancel or otherwise affect the Task; it only prevents its eventual failure from being reported as unobserved.</para>
+		/// </summary>
+		/// <param name="task">The Task which is no longer being waited on.</param>
+		private static void ObserveAndIgnoreExceptions(Task task)
+		{
+			_ = task.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+		}
 		private static async Task CopyStreamUntilClosedAsync(ProxyDataDirection Direction, Stream source, Stream target, ProxyDataBuffer snoopy, int readTimeoutMilliseconds, int writeTimeoutMilliseconds, CancellationToken cancellationToken = default)
 		{
 			byte[] buf = ByteUtil.BufferGet();
