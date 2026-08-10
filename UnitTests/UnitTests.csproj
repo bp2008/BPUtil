@@ -1,141 +1,36 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="..\packages\MSTest.TestAdapter.2.2.8\build\net45\MSTest.TestAdapter.props" Condition="Exists('..\packages\MSTest.TestAdapter.2.2.8\build\net45\MSTest.TestAdapter.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{F5FDE958-4451-44FF-9C9B-E20C0584FC3B}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>UnitTests</RootNamespace>
+    <TargetFramework>net452</TargetFramework>
     <AssemblyName>UnitTests</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <ProjectTypeGuids>{3AC096D0-A1C2-E12C-1390-A8335801FDAB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
-    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">15.0</VisualStudioVersion>
-    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
-    <ReferencePath>$(ProgramFiles)\Common Files\microsoft shared\VSTT\$(VisualStudioVersion)\UITestExtensionPackages</ReferencePath>
-    <IsCodedUITest>False</IsCodedUITest>
-    <TestProjectType>UnitTest</TestProjectType>
-    <NuGetPackageImportStamp>
-    </NuGetPackageImportStamp>
+    <RootNamespace>UnitTests</RootNamespace>
+    <OutputType>Library</OutputType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- This project was converted from legacy csproj to SDK-style. TargetFramework preserved (net452). -->
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest.TestAdapter" Version="2.2.8" />
+    <PackageReference Include="MSTest.TestFramework" Version="2.2.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BPUtil\BPUtil.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
-    <Reference Include="Microsoft.VisualStudio.TestPlatform.TestFramework, Version=14.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\MSTest.TestFramework.2.2.8\lib\net45\Microsoft.VisualStudio.TestPlatform.TestFramework.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.VisualStudio.TestPlatform.TestFramework.Extensions, Version=14.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\MSTest.TestFramework.2.2.8\lib\net45\Microsoft.VisualStudio.TestPlatform.TestFramework.Extensions.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Drawing" />
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
+  <!-- Use SDK implicit items. Remove AssemblyInfo to avoid duplicate assembly attributes. -->
   <ItemGroup>
-    <Compile Include="TestConcurrentAccessLimiter.cs" />
-    <Compile Include="Expect.cs" />
-    <Compile Include="Helpers\IterateOverKeyContainers.cs" />
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Include="TestBackupRotate.cs" />
-    <Compile Include="TestBase64UrlMod.cs" />
-    <Compile Include="TestByteUtil.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="TestChunkedTransferEncodingStreams.cs" />
-    <Compile Include="TestCSV.cs" />
-    <Compile Include="TestCSVFile.cs" />
-    <Compile Include="TestCompression.cs" />
-    <Compile Include="TestConcatenatedStream.cs" />
-    <Compile Include="TestEnumExtensions.cs" />
-    <Compile Include="TestEventExtensions.cs" />
-    <Compile Include="TestIdObfuscator.cs" />
-    <Compile Include="TestImageUtil.cs" />
-    <Compile Include="TestFileUtil.cs" />
-    <Compile Include="TestHttpHeaderCollection.cs" />
-    <Compile Include="TestIPAddressRange.cs" />
-    <Compile Include="TestIpRangeLite.cs" />
-    <Compile Include="TestListSorted.cs" />
-    <Compile Include="TestObjectChangeReplay.cs" />
-    <Compile Include="TestObjectCopy.cs" />
-    <Compile Include="TestObjectMerge.cs" />
-    <Compile Include="TestObjectFieldMap.cs" />
-    <Compile Include="TestObjectChangeHelper.cs" />
-    <Compile Include="TestNamedReaderWriterLockSlim.cs" />
-    <Compile Include="TestSnoopReadableStream.cs" />
-    <Compile Include="TestSubstream.cs" />
-    <Compile Include="TestDummyValues.cs" />
-    <Compile Include="TestThrottle.cs" />
-    <Compile Include="TestFileInfoExtensions.cs" />
-    <Compile Include="TestDebounce.cs" />
-    <Compile Include="TestHttpProcessor.cs" />
-    <Compile Include="TestIPUtil.cs" />
-    <Compile Include="TestSimpleThreadPool.cs" />
-    <Compile Include="TestSignatureFactory.cs" />
-    <Compile Include="TestEncryption.cs" />
-    <Compile Include="TestExceptionExtensions.cs" />
-    <Compile Include="TestMVC.cs" />
-    <Compile Include="TestCachedObject.cs" />
-    <Compile Include="TestObjectCache.cs" />
-    <Compile Include="TestObjectSize.cs" />
-    <Compile Include="TestCompass.cs" />
-    <Compile Include="TestStringCache.cs" />
-    <Compile Include="TestHex.cs" />
-    <Compile Include="TestStringExtensions.cs" />
-    <Compile Include="TestStringUtil.cs" />
-    <Compile Include="TestTokenBucketDictionary.cs" />
-    <Compile Include="TestTokenBucket.cs" />
-    <Compile Include="TestXXHash.cs" />
+    <Compile Remove="Properties\AssemblyInfo.cs" />
   </ItemGroup>
+
   <ItemGroup>
     <None Include="Embed\Lossless.webp" />
     <None Include="Embed\Lossy.webp" />
-    <None Include="packages.config" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="MVC\" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\BPUtil\BPUtil.csproj">
-      <Project>{ba014d8d-e1b3-cf10-5d12-419b6960eb72}</Project>
-      <Name>BPUtil</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-  </ItemGroup>
-  <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
-    <PropertyGroup>
-      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
-    </PropertyGroup>
-    <Error Condition="!Exists('..\packages\MSTest.TestAdapter.2.2.8\build\net45\MSTest.TestAdapter.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\MSTest.TestAdapter.2.2.8\build\net45\MSTest.TestAdapter.props'))" />
-    <Error Condition="!Exists('..\packages\MSTest.TestAdapter.2.2.8\build\net45\MSTest.TestAdapter.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\MSTest.TestAdapter.2.2.8\build\net45\MSTest.TestAdapter.targets'))" />
-  </Target>
-  <Import Project="..\packages\MSTest.TestAdapter.2.2.8\build\net45\MSTest.TestAdapter.targets" Condition="Exists('..\packages\MSTest.TestAdapter.2.2.8\build\net45\MSTest.TestAdapter.targets')" />
+
 </Project>
