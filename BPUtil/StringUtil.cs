@@ -436,8 +436,9 @@ namespace BPUtil
 		/// Note that it is possible for these replacement characters to also exist in the source string and thereby cause some ambiguity.
 		/// </summary>
 		/// <param name="str">A string which may contain special characters.</param>
+		/// <param name="tabVisualization">The visualization option for tab characters.  Default is <see cref="TabVisualization.Arrow"/>.</param>
 		/// <returns>A string with certain special characters replaced.</returns>
-		public static string VisualizeSpecialCharacters(string str)
+		public static string VisualizeSpecialCharacters(string str, TabVisualization tabVisualization = TabVisualization.Arrow)
 		{
 			if (str == null)
 				return null;
@@ -447,7 +448,29 @@ namespace BPUtil
 				if (c == 0) // Null
 					sb.Append('␀');
 				else if (c == '\t') // Horizontal Tab (Dec 9)
-					sb.Append('→');
+				{
+					switch (tabVisualization)
+					{
+						case TabVisualization.Tab:
+							sb.Append(c);
+							break;
+						case TabVisualization.Arrow:
+							sb.Append('→');
+							break;
+						case TabVisualization.FourSpaces:
+							sb.Append("    ");
+							break;
+						case TabVisualization.TwoSpaces:
+							sb.Append("  ");
+							break;
+						case TabVisualization.OneSpace:
+							sb.Append(' ');
+							break;
+						case TabVisualization.EightSpaces:
+							sb.Append("        ");
+							break;
+					}
+				}
 				else if (c == '\r' || c == '\n') // CR, LF
 					sb.Append(c);
 				else if (c == 8) // Backspace
@@ -460,6 +483,37 @@ namespace BPUtil
 					sb.Append(c);
 			}
 			return sb.ToString();
+		}
+
+		/// <summary>
+		/// Enumeration of options for visualizing tab characters in a string.  This is used by <see cref="VisualizeSpecialCharacters(string, TabVisualization)"/>.
+		/// </summary>
+		public enum TabVisualization
+		{
+			/// <summary>
+			/// Tabs remain as tabs.
+			/// </summary>
+			Tab,
+			/// <summary>
+			/// Tabs are replaced with the right arrow character (→).
+			/// </summary>
+			Arrow,
+			/// <summary>
+			/// Tabs are replaced with eight space characters.
+			/// </summary>
+			EightSpaces,
+			/// <summary>
+			/// Tabs are replaced with four space characters.
+			/// </summary>
+			FourSpaces,
+			/// <summary>
+			/// Tabs are replaced with two space characters.
+			/// </summary>
+			TwoSpaces,
+			/// <summary>
+			/// Tabs are replaced with one space character.
+			/// </summary>
+			OneSpace
 		}
 
 		/// <summary>
