@@ -457,6 +457,9 @@ namespace BPUtil
 						case TabVisualization.Arrow:
 							sb.Append('→');
 							break;
+						case TabVisualization.EightSpaces:
+							sb.Append("        ");
+							break;
 						case TabVisualization.FourSpaces:
 							sb.Append("    ");
 							break;
@@ -465,9 +468,6 @@ namespace BPUtil
 							break;
 						case TabVisualization.OneSpace:
 							sb.Append(' ');
-							break;
-						case TabVisualization.EightSpaces:
-							sb.Append("        ");
 							break;
 					}
 				}
