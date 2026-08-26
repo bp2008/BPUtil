@@ -65,17 +65,31 @@ namespace BPUtil
 					settingsObj = (SerializableObjectBase)Activator.CreateInstance(settingsField.FieldType);
 					settingsField.SetValue(null, settingsObj);
 				}
-				if (settingsObj.FileExists() && !settingsObj.Load())
+				if (settingsObj.FileExists())
 				{
-					c.RedLine("Failed to load settings file.");
-#if NETFRAMEWORK || NET6_PLUS_WIN
-					if (Environment.UserInteractive)
+					bool loaded = false;
+					Exception failReason = new Exception("Settings Load() method returned false.");
+					try
 					{
-						System.Windows.Forms.MessageBox.Show("Failed to load settings file.");
-						Process.Start(settingsObj.GetDefaultFilePath());
+						loaded = settingsObj.Load();
 					}
+					catch (Exception ex)
+					{
+						failReason = ex;
+					}
+					if (!loaded)
+					{
+						c.RedLine("Failed to load settings file.");
+#if NETFRAMEWORK || NET6_PLUS_WIN
+						if (Environment.UserInteractive)
+						{
+							System.Windows.Forms.MessageBox.Show("Failed to load settings file. " + failReason.FlattenMessages());
+							Process.Start(settingsObj.GetDefaultFilePath());
+						}
 #endif
-					throw new Exception("Failed to load settings file.");
+						Logger.Debug(failReason);
+						throw new Exception("Failed to load settings file.", failReason);
+					}
 				}
 				settingsObj.SaveIfNoExist();
 			}
