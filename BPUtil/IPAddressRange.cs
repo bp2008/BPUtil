@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 
 namespace BPUtil
@@ -20,12 +21,14 @@ namespace BPUtil
 		/// <summary>
 		/// Initializes a new instance of the <see cref="IPAddressRange"/> class with the specified range.
 		/// </summary>
-		/// <param name="range">The range of IP addresses, specified as a single IP address (e.g. "127.0.0.1"), an IP address range (e.g. "192.168.0.1 - 192.168.1.255"), or a subnet (e.g. "192.168.0.1/24").</param>
+		/// <param name="range">The range of IP addresses, specified as a single IP address (e.g. "127.0.0.1"), an IP address range (e.g. "192.168.0.1 - 192.168.1.255"), or a subnet (e.g. "192.168.0.1/24").  Any square brackets in the string will be removed before parsing (IPv6 addresses in URLs are wrapped in square brackets, so it is a common mistake to include them in IPv6 address strings).</param>
 		/// <exception cref="ArgumentNullException"><paramref name="range"/> is <c>null</c>.</exception>
 		public IPAddressRange(string range)
 		{
 			if (range == null)
 				throw new ArgumentNullException(nameof(range));
+
+			range = range.Replace("[", "").Replace("]", "");
 
 			if (range.Contains("/"))
 			{
@@ -215,7 +218,12 @@ namespace BPUtil
 				return StartAddress + " - " + EndAddress;
 		}
 		/// <summary>
-		/// Returns true if the given IP address is within one of the given ranges.
+		/// <para>Returns true if the given IP address is within one of the given ranges.  IPv4 and IPv6 entries are both
+		/// supported, each as a single address ("10.0.0.5", "2604:a00:50:124::1:5"), a range ("10.0.0.1 - 10.0.0.20"),
+		/// or a subnet in CIDR notation ("10.0.0.0/24", "2604:a00:50:124::/64").  Entries are trimmed, blank entries are
+		/// ignored, and a single IPv6 entry may be wrapped in the square brackets URLs use ("[2604:a00:50:124::1]").
+		/// A whitelist entry never matches a client of a different IP version.</para>
+		/// <para>This overload throws an exception if a malformed whitelist entry is encountered before a matching entry is found.</para>
 		/// </summary>
 		/// <param name="ipAddress">IP Address to test.</param>
 		/// <param name="whitelistedIpRanges">List of IP Range strings defining the whitelist.</param>
@@ -224,14 +232,53 @@ namespace BPUtil
 		{
 			if (whitelistedIpRanges != null)
 			{
-				foreach (string ipRangeStr in whitelistedIpRanges)
+				foreach (string rawEntry in whitelistedIpRanges)
 				{
-					IPAddressRange range = new IPAddressRange(ipRangeStr);
+					string entry = rawEntry == null ? "" : rawEntry.Trim();
+					if (entry.Length == 0)
+						continue;
+					IPAddressRange range = new IPAddressRange(entry);
 					if (range.IsInRange(ipAddress))
 						return true;
 				}
 			}
 			return false;
+		}
+		/// <summary>
+		/// <para>Returns true if the given IP address is within one of the given ranges.  IPv4 and IPv6 entries are both
+		/// supported, each as a single address ("10.0.0.5", "2604:a00:50:124::1:5"), a range ("10.0.0.1 - 10.0.0.20"),
+		/// or a subnet in CIDR notation ("10.0.0.0/24", "2604:a00:50:124::/64").  Entries are trimmed, blank entries are
+		/// ignored, and a single IPv6 entry may be wrapped in the square brackets URLs use ("[2604:a00:50:124::1]").
+		/// A whitelist entry never matches a client of a different IP version.</para>
+		/// <para>This overload reports all malformed whitelist entries via the <c>out</c> parameter <paramref name="malformedEntries"/>.</para>
+		/// </summary>
+		/// <param name="ipAddress">IP Address to test.</param>
+		/// <param name="whitelistedIpRanges">List of IP Range strings defining the whitelist.</param>
+		/// <param name="malformedEntries">(Output) Entries that could not be parsed as an address, range or subnet.</param>
+		public static bool WhitelistCheck(IPAddress ipAddress, string[] whitelistedIpRanges, out List<string> malformedEntries)
+		{
+			malformedEntries = new List<string>();
+			bool matched = false;
+			if (whitelistedIpRanges != null)
+			{
+				foreach (string rawEntry in whitelistedIpRanges)
+				{
+					string entry = rawEntry == null ? "" : rawEntry.Trim();
+					if (entry.Length == 0)
+						continue;
+					try
+					{
+						IPAddressRange range = new IPAddressRange(entry);
+						if (range.IsInRange(ipAddress))
+							matched = true; // Keep iterating so every malformed entry is discovered regardless of list order.
+					}
+					catch
+					{
+						malformedEntries.Add(entry);
+					}
+				}
+			}
+			return matched;
 		}
 	}
 }
