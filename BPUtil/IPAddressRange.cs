@@ -17,6 +17,10 @@ namespace BPUtil
 		/// The last address in the range.
 		/// </summary>
 		public readonly IPAddress EndAddress;
+		/// <summary>
+		/// Dictionary useful for removing square brackets from IPv6 addresses in URLs.  The key is the character to remove, and the value is the replacement string (empty string).
+		/// </summary>
+		private static Dictionary<char, string> dictRemoveSquareBrackets = new Dictionary<char, string>() { { '[', "" }, { ']', "" } };
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="IPAddressRange"/> class with the specified range.
@@ -28,7 +32,7 @@ namespace BPUtil
 			if (range == null)
 				throw new ArgumentNullException(nameof(range));
 
-			range = range.Replace("[", "").Replace("]", "");
+			StringUtil.ReplaceMultiple(range, dictRemoveSquareBrackets);
 
 			if (range.Contains("/"))
 			{

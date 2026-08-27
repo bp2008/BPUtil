@@ -738,38 +738,52 @@ namespace BPUtil
 		/// </summary>
 		/// <param name="source">The string to perform replacements on.</param>
 		/// <param name="replacements">A dictionary of replacement mappings.</param>
-		/// <returns></returns>
+		/// <returns>The resulting string after performing the replacements.  If no replacements are made, this returns the source string.</returns>
 		public static string ReplaceMultiple(string source, IDictionary<char, string> replacements)
 		{
 			StringBuilder sb = new StringBuilder();
 			string replacement;
+			bool replacementsMade = false;
 			foreach (char c in source)
 			{
 				if (replacements.TryGetValue(c, out replacement))
+				{
 					sb.Append(replacement);
+					replacementsMade = true;
+				}
 				else
 					sb.Append(c);
 			}
-			return sb.ToString();
+			if (replacementsMade)
+				return sb.ToString();
+			else
+				return source;
 		}
 		/// <summary>
 		/// Performs multiple character-to-character replacements on a string.
 		/// </summary>
 		/// <param name="source">The string to perform replacements on.</param>
 		/// <param name="replacements">A dictionary of replacement mappings.</param>
-		/// <returns></returns>
+		/// <returns>The resulting string after performing the replacements.  If no replacements are made, this returns the source string.</returns>
 		public static string ReplaceMultiple(string source, IDictionary<char, char> replacements)
 		{
 			StringBuilder sb = new StringBuilder();
 			char replacement;
+			bool replacementsMade = false;
 			foreach (char c in source)
 			{
 				if (replacements.TryGetValue(c, out replacement))
+				{
 					sb.Append(replacement);
+					replacementsMade = true;
+				}
 				else
 					sb.Append(c);
 			}
-			return sb.ToString();
+			if (replacementsMade)
+				return sb.ToString();
+			else
+				return source;
 		}
 		/// <summary>
 		/// Repairs Base64 padding by appending '=' characters to the end of the string until its length is divisible by 4.
