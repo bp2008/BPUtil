@@ -9,7 +9,8 @@ using System.Threading.Tasks;
 namespace BPUtil
 {
 	/// <summary>
-	/// Manages automatic caching of a read-only object that is expensive to create.
+	/// <para>Manages automatic caching of a read-only object that is expensive to create.</para>
+	/// <para>Everything this class does that depends on the passage of time goes through <see cref="GetTimestampMs"/> and <see cref="RunInBackground"/>, both of which a derived class may override to take control of the clock and of the asynchronous reload.</para>
 	/// </summary>
 	/// <typeparam name="T">Type this CachedObject will manage.</typeparam>
 	public class CachedObject<T>
@@ -40,13 +41,13 @@ namespace BPUtil
 			/// </summary>
 			public readonly T instance;
 			/// <summary>
-			/// Stopwatch time when this instance was created.
+			/// Value of <see cref="GetTimestampMs"/> when this instance was created.
 			/// </summary>
 			public readonly long createdAt;
-			public CachedInstance(T instance, Stopwatch updateTimer)
+			public CachedInstance(T instance, long createdAt)
 			{
 				this.instance = instance;
-				this.createdAt = updateTimer.ElapsedMilliseconds;
+				this.createdAt = createdAt;
 			}
 		}
 
@@ -79,7 +80,7 @@ namespace BPUtil
 			Interlocked.Increment(ref updateCounter);
 			try
 			{
-				CachedInstance ci = current = new CachedInstance(createNewObjectFunc(), updateTimer);
+				CachedInstance ci = current = new CachedInstance(createNewObjectFunc(), GetTimestampMs());
 				return ci.instance;
 			}
 			finally
@@ -88,10 +89,49 @@ namespace BPUtil
 			}
 		}
 
+		/// <summary>
+		/// <para>Reloads the cached object now if there is no cached instance yet or the cached instance is at least [age] old, then returns the current instance.  Unlike <see cref="GetInstance"/> this ignores minAge and maxAge, and unlike <see cref="Reload"/> it is throttled: callers that arrive while a reload is in progress wait for it and share its result instead of each reloading.</para>
+		/// <para>Intended for consumers that can tell the cached object is stale (e.g. a lookup in it just failed) and want it refreshed immediately, but need a bound on how often that can happen.</para>
+		/// </summary>
+		/// <param name="age">Minimum age of the cached instance for a reload to occur.  Pass TimeSpan.Zero to always reload.</param>
+		/// <returns>The current instance, freshly created if a reload occurred.</returns>
+		public T ReloadIfOlderThan(TimeSpan age)
+		{
+			long ageMs = (long)Math.Round(age.TotalMilliseconds);
+			if (NeedsUpdate(ageMs))
+			{
+				lock (myLock)
+				{
+					if (NeedsUpdate(ageMs))
+						return Reload();
+				}
+			}
+			return current.instance;
+		}
+
+		/// <summary>
+		/// <para>Returns the current time in milliseconds, measured from an arbitrary origin which must not change during the lifetime of this object.  Only the difference between two of these values is used, to measure the age of the cached instance.</para>
+		/// <para>Override this to supply a clock the caller controls, e.g. so that a test can age the cached instance without waiting.  This is called from any thread that uses this CachedObject, so an override must be thread-safe.</para>
+		/// </summary>
+		protected virtual long GetTimestampMs()
+		{
+			return updateTimer.ElapsedMilliseconds;
+		}
+
+		/// <summary>
+		/// <para>Runs [action] on a background thread.  This is used for the reload that is triggered when the cached instance reaches minAge, which must not delay the caller that triggered it.</para>
+		/// <para>Override this to control when that reload happens, e.g. so that a test can run it at a chosen moment instead of racing a thread.  An override must not run [action] on the calling thread before returning, or callers will be delayed by a reload they are not supposed to wait for, and it is responsible for reporting any exception [action] throws.</para>
+		/// </summary>
+		/// <param name="action">The action to run.</param>
+		protected virtual void RunInBackground(Action action)
+		{
+			SetTimeout.OnBackground(action, 0, ReportException);
+		}
+
 		private bool NeedsUpdate(long ageLimitMs)
 		{
 			CachedInstance ci = current;
-			return ci == null || updateTimer.ElapsedMilliseconds - ci.createdAt >= ageLimitMs;
+			return ci == null || GetTimestampMs() - ci.createdAt >= ageLimitMs;
 		}
 
 		private void RefreshIfNecessary()
@@ -108,7 +148,7 @@ namespace BPUtil
 			{
 				if (updateCounter == 0)
 				{
-					SetTimeout.OnBackground(() =>
+					RunInBackground(() =>
 					{
 						if (NeedsUpdate(minAgeMs))
 						{
@@ -121,7 +161,7 @@ namespace BPUtil
 								}
 							}
 						}
-					}, 0, ReportException);
+					});
 				}
 			}
 		}
