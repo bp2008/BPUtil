@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -121,6 +122,10 @@ namespace UnitTests
 		/// </summary>
 		private class EchoWebSocketServer : HttpServer
 		{
+			/// <summary>
+			/// Uses a self-signed certificate stored in the temp directory, because the default location (the test runner's directory) may not be writable.
+			/// </summary>
+			public EchoWebSocketServer() : base(new SelfSignedCertificateSelector(Path.GetTempPath(), "BPUtilUnitTests-SslCert.pfx")) { }
 			public override void handleGETRequest(HttpProcessor p)
 			{
 				if (!WebSocket.IsWebSocketRequest(p))
@@ -133,7 +138,12 @@ namespace UnitTests
 				ws = new WebSocket(p, frame =>
 				{
 					if (frame is WebSocketTextFrame textFrame)
-						ws.Send("echo:" + textFrame.Text);
+					{
+						if (textFrame.Text == "close-me")
+							ws.Close();
+						else
+							ws.Send("echo:" + textFrame.Text);
+					}
 				}, closeFrame => closed.Set());
 				ws.ReceiveTimeout = TestTimeoutMs;
 				ws.SendTimeout = TestTimeoutMs;
@@ -270,6 +280,56 @@ namespace UnitTests
 
 		[TestMethod]
 		[Timeout(TestTimeoutMs)]
+		public void TestServerClosesBeforeResponse()
+		{
+			// Formerly reported as WebSocketHttpResponseUnexpectedException: Invalid first HTTP response line: "".
+			ExpectEndOfStream("", "status line");
+		}
+
+		[TestMethod]
+		[Timeout(TestTimeoutMs)]
+		public void TestServerClosesDuringStatusLine()
+		{
+			ExpectEndOfStream("HTTP/1.1 101 Swi", "status line");
+		}
+
+		[TestMethod]
+		[Timeout(TestTimeoutMs)]
+		public void TestServerClosesDuringHeaders()
+		{
+			// Formerly reported as a missing "Connection" header.
+			ExpectEndOfStream("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n", "headers");
+		}
+		/// <summary>
+		/// Starts a server which reads the request, sends <paramref name="partialResponse"/>, then closes the connection.  Asserts that the client throws <see cref="EndOfStreamException"/> promptly.
+		/// </summary>
+		private static void ExpectEndOfStream(string partialResponse, string expectedMessagePart)
+		{
+			using (FakeServer server = new FakeServer(c =>
+			{
+				NetworkStream s = c.GetStream();
+				ReadRequestHeaders(s);
+				byte[] response = Encoding.ASCII.GetBytes(partialResponse);
+				s.Write(response, 0, response.Length);
+			}))
+			{
+				Stopwatch sw = Stopwatch.StartNew();
+				try
+				{
+					new WebSocketClient("http://127.0.0.1:" + server.Port + "/ws", false, 5000, 10000);
+					Assert.Fail("Expected exception.");
+				}
+				catch (EndOfStreamException ex)
+				{
+					StringAssert.Contains(ex.Message, "127.0.0.1:" + server.Port);
+					StringAssert.Contains(ex.Message, expectedMessagePart);
+					Assert.IsTrue(sw.ElapsedMilliseconds < 5000, "took " + sw.ElapsedMilliseconds + " ms");
+				}
+			}
+		}
+
+		[TestMethod]
+		[Timeout(TestTimeoutMs)]
 		[TestCategory("Network")]
 		public void TestConnectTimeout()
 		{
@@ -343,8 +403,30 @@ namespace UnitTests
 				Assert.AreEqual(23456, client.tcpClient.SendTimeout);
 				AssertEcho(client);
 
-				// Host name resolution path.
+				// Host name resolution path, and a close handshake initiated by the server.
 				client = new WebSocketClient("ws://localhost:" + port + "/ws", false, 5000, 5000);
+				AssertEcho(client, true);
+			}
+			finally
+			{
+				server.Stop();
+			}
+		}
+		[TestMethod]
+		[Timeout(TestTimeoutMs)]
+		public void TestTls13()
+		{
+			if (!IsTls13SupportedByOS())
+				Assert.Inconclusive("TLS 1.3 is not supported by this OS.");
+			int port = GetUnusedPort();
+			EchoWebSocketServer server = new EchoWebSocketServer();
+			try
+			{
+				server.SetBindings(new HttpServerBase.Binding(AllowedConnectionTypes.https, (ushort)port, IPAddress.Loopback));
+				WebSocketClient client = ConnectWithRetry(() => new WebSocketClient("wss://127.0.0.1:" + port + "/ws", true, 5000, 10000));
+				SslStream ssl = client.tcpStream as SslStream;
+				Assert.IsNotNull(ssl, "tcpStream is not an SslStream");
+				Assert.AreEqual(BPUtil.SimpleHttp.TLS.TlsNegotiate.Tls13, ssl.SslProtocol);
 				AssertEcho(client);
 			}
 			finally
@@ -352,6 +434,43 @@ namespace UnitTests
 				server.Stop();
 			}
 		}
+		private static bool IsTls13SupportedByOS()
+		{
+			// Windows 11 / Server 2022 (build 20348+) are the first Windows versions with TLS 1.3 enabled in SChannel.
+			// Environment.OSVersion is unreliable here because .NET Framework reports Windows 8 to apps without a compatibility manifest.
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				return true;
+			using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+				return int.TryParse(key?.GetValue("CurrentBuildNumber") as string, out int build) && build >= 20348;
+		}
+
+		[TestMethod]
+		[Timeout(TestTimeoutMs)]
+		public void TestStateErroredOnConnectionLoss()
+		{
+			// The server completes the handshake, then drops the TCP connection without a close frame.
+			using (FakeServer server = new FakeServer(c =>
+			{
+				NetworkStream s = c.GetStream();
+				string key = null;
+				string line;
+				while (!string.IsNullOrEmpty(line = ByteUtil.ReadPrintableASCIILine(s)))
+					if (line.StartsWith("Sec-WebSocket-Key: ", StringComparison.OrdinalIgnoreCase))
+						key = line.Substring("Sec-WebSocket-Key: ".Length);
+				byte[] response = Encoding.ASCII.GetBytes("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + WebSocket.CreateSecWebSocketAcceptValue(key) + "\r\n\r\n");
+				s.Write(response, 0, response.Length);
+				Thread.Sleep(250);
+			}))
+			{
+				WebSocketClient client = new WebSocketClient("ws://127.0.0.1:" + server.Port + "/ws", false, 5000, 5000);
+				Assert.AreEqual(WebSocketState.Open, client.State);
+				ManualResetEvent closed = new ManualResetEvent(false);
+				client.StartReading(frame => { }, closeFrame => closed.Set());
+				Assert.IsTrue(closed.WaitOne(10000), "onClose was not called.");
+				Assert.AreEqual(WebSocketState.Errored, client.State);
+			}
+		}
+
 		private static WebSocketClient ConnectWithRetry(Func<WebSocketClient> construct)
 		{
 			// The server starts its listener asynchronously.
@@ -368,19 +487,36 @@ namespace UnitTests
 				}
 			}
 		}
-		private static void AssertEcho(WebSocketClient client)
+		/// <summary>
+		/// Exchanges messages with the echo server, then closes gracefully and asserts the state transitions.
+		/// </summary>
+		/// <param name="client">A connected client which has not started reading yet.</param>
+		/// <param name="serverInitiatesClose">If true, the server is asked to initiate the close handshake; otherwise the client initiates it.</param>
+		private static void AssertEcho(WebSocketClient client, bool serverInitiatesClose = false)
 		{
+			Assert.AreEqual(WebSocketState.Open, client.State);
 			BlockingQueue<string> received = new BlockingQueue<string>();
+			ManualResetEvent closed = new ManualResetEvent(false);
 			client.StartReading(frame =>
 			{
 				if (frame is WebSocketTextFrame textFrame)
 					received.Enqueue(textFrame.Text);
-			}, closeFrame => { });
+			}, closeFrame => closed.Set());
 			client.Send("hello");
 			Assert.AreEqual("echo:hello", received.Dequeue(5000));
 			client.Send("world");
 			Assert.AreEqual("echo:world", received.Dequeue(5000));
-			client.Close();
+			Assert.AreEqual(WebSocketState.Open, client.State);
+			if (serverInitiatesClose)
+				client.Send("close-me");
+			else
+			{
+				client.Close();
+				WebSocketState afterClose = client.State;
+				Assert.IsTrue(afterClose == WebSocketState.CloseSent || afterClose == WebSocketState.Closed, "State after Close(): " + afterClose);
+			}
+			Assert.IsTrue(closed.WaitOne(5000), "onClose was not called.");
+			Assert.AreEqual(WebSocketState.Closed, client.State);
 		}
 		private class BlockingQueue<T>
 		{

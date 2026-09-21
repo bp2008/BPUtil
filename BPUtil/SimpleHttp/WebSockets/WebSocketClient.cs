@@ -67,7 +67,8 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// <param name="tcpKeepAlive">If true (default), TCP keepalive is enabled on the socket (first probe after 30 seconds idle, then every 5 seconds, on platforms that allow these timings to be configured), so that a half-open connection to a peer that has disappeared is eventually torn down by the operating system.</param>
 		/// <exception cref="WebSocketClientTimeoutException">The connect or handshake did not complete within the specified timeout.  This is a <see cref="TimeoutException"/> whose message names the phase, the host:port, and the timeout.  If the timeout was reported by a failed socket operation, that exception is the <see cref="Exception.InnerException"/>.</exception>
 		/// <exception cref="SocketException">The TCP connection could not be established (e.g. connection refused or host not found).</exception>
-		/// <exception cref="IOException">The connection failed during the TLS handshake or the HTTP upgrade (e.g. the server closed the connection).</exception>
+		/// <exception cref="EndOfStreamException">The server closed the connection before sending a complete HTTP upgrade response.  This is an <see cref="IOException"/>.</exception>
+		/// <exception cref="IOException">The connection failed during the TLS handshake or the HTTP upgrade (e.g. the server closed or reset the connection).</exception>
 		/// <exception cref="System.Security.Authentication.AuthenticationException">The TLS handshake failed, e.g. certificate validation failed.</exception>
 		/// <exception cref="WebSocketHttpResponseCodeUnexpectedException">The server responded with an HTTP status other than 101.</exception>
 		/// <exception cref="WebSocketHttpResponseUnexpectedException">The first line of the server's response was not a recognizable HTTP status line.</exception>
@@ -102,7 +103,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 					SslStream sslStream = new SslStream(this.tcpStream, false, certCallback, null);
 					this.tcpStream = sslStream;
 #pragma warning disable SYSLIB0039
-					sslStream.AuthenticateAsClient(uri.DnsSafeHost, null, System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
+					sslStream.AuthenticateAsClient(uri.DnsSafeHost, null, TLS.TlsNegotiate.Tls13 | System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls11 | System.Security.Authentication.SslProtocols.Tls, false);
 #pragma warning restore SYSLIB0039
 				}
 
@@ -135,9 +136,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 				// Handshake succeeded.  Apply the session timeouts (0 by default, which is how previous versions left the socket).
 				this.tcpClient.ReceiveTimeout = sessionReceiveTimeoutMs;
 				this.tcpClient.SendTimeout = sessionSendTimeoutMs;
+				SetOpen();
 			}
 			catch (Exception ex)
 			{
+				SetErrored();
 				if (deadline != null)
 					deadline.Dispose();
 				// Never leave a half-built connection open, and never continue using a socket after a timeout.
@@ -262,6 +265,31 @@ namespace BPUtil.SimpleHttp.WebSockets
 			try { this.tcpClient?.Close(); } catch { }
 		}
 
+		/// <summary>
+		/// Reads a line of the server's handshake response, following the same rules as <see cref="ByteUtil.ReadPrintableASCIILine"/> except that reaching the end of the stream before the end of the line throws <see cref="EndOfStreamException"/> instead of returning a truncated line.
+		/// </summary>
+		/// <returns>The line, or null if the line contains invalid characters or is too long.</returns>
+		/// <exception cref="EndOfStreamException">The server closed the connection before sending a complete line.</exception>
+		private string ReadResponseLine()
+		{
+			const int maxLength = 32768;
+			List<byte> data = new List<byte>();
+			while (true)
+			{
+				int next_char = tcpStream.ReadByte();
+				if (next_char == '\n') { break; }
+				if (next_char == '\r') { continue; }
+				if (next_char == -1)
+					throw new EndOfStreamException("The server at " + uri.DnsSafeHost + ":" + uri.Port + " closed the connection " + (ResponseHeaders == null ? "without sending a complete HTTP upgrade response status line" : "before sending all HTTP upgrade response headers") + ".");
+				if (next_char < 32 || next_char > 126)
+					return null;
+				if (data.Count >= maxLength)
+					return null;
+				data.Add((byte)next_char);
+			}
+			return Encoding.ASCII.GetString(data.ToArray());
+		}
+
 		private void CompleteWebSocketClientHandshake()
 		{
 			lock (startStopLock)
@@ -272,7 +300,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 			}
 
 			// Read HTTP response
-			string firstResponseLine = ByteUtil.ReadPrintableASCIILine(tcpStream);
+			string firstResponseLine = ReadResponseLine();
 			if (firstResponseLine == null)
 				throw new Exception("HTTP protocol error: Line was unreadable.");
 			if (firstResponseLine != "HTTP/1.1 101 Switching Protocols")
@@ -288,7 +316,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 			ResponseHeaders = new HttpHeaderCollection();
 			string line;
 			int headerLineCount = 0;
-			while ((line = ByteUtil.ReadPrintableASCIILine(tcpStream)) != "")
+			while ((line = ReadResponseLine()) != "")
 			{
 				if (line == null)
 					throw new Exception("HTTP protocol error: Line was unreadable.");

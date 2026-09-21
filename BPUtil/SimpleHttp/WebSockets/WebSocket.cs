@@ -40,7 +40,11 @@ namespace BPUtil.SimpleHttp.WebSockets
 		/// </summary>
 		/// <returns>The send time-out value, in milliseconds. The default is 0.</returns>
 		public int SendTimeout { get { return tcpClient.SendTimeout; } set { tcpClient.SendTimeout = value; } }
+		/// <summary>
+		/// The current state of the WebSocket.  <see cref="WebSocketState.Closed"/> and <see cref="WebSocketState.Errored"/> are final states.
+		/// </summary>
 		public WebSocketState State = WebSocketState.Connecting;
+		private readonly object stateLock = new object();
 
 		protected Thread thrWebSocketRead;
 		protected Action<WebSocketFrame> onMessageReceived = delegate { };
@@ -97,7 +101,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 				throw new HttpProcessor.HttpProcessorException("400 Bad Request", "An unsupported web socket version was requested (\"" + version + "\").", headers);
 			}
 			p.Response.WebSocketUpgradeSync(additionalResponseHeaders);
-			State = WebSocketState.Open;
+			SetOpen();
 		}
 
 		/// <summary>
@@ -181,6 +185,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 							expectingMoreMessages = false;
 							receivedCloseFrame = true;
 							closeFrame = new WebSocketCloseFrame(head, tcpStream);
+							UpdateCloseState();
 							//SimpleHttpLogger.LogVerbose("WebSocket connection closed with code: "
 							//	+ (ushort)closeFrame.CloseCode
 							//	+ " (" + closeFrame.CloseCode + ")"
@@ -277,6 +282,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 						bool isDisconnect = HttpProcessor.IsOrdinaryDisconnectException(ex);
 						if (isDisconnect)
 						{
+							SetErrored();
 							// Don't wait for a close frame.
 							isClosing = true;
 							expectingMoreMessages = false;
@@ -334,6 +340,8 @@ namespace BPUtil.SimpleHttp.WebSockets
 				catch { }
 				// Close the underlying connection.
 				try { this.tcpClient.Close(); } catch { }
+				// Unless both close frames were exchanged, the close was not graceful.
+				SetErrored();
 				// Notify the caller that the WebSocket is closed.
 				try { onClose(closeFrame); } catch { }
 			}
@@ -408,10 +416,51 @@ namespace BPUtil.SimpleHttp.WebSockets
 						sentCloseFrame = true;
 					}
 				}
+				UpdateCloseState();
 			}
 			catch (Exception ex)
 			{
 				SimpleHttpLogger.LogVerbose(ex);
+				SetErrored();
+			}
+		}
+		/// <summary>
+		/// Updates <see cref="State"/> to reflect which close frames have been sent and received.  Does nothing if the state is already final.
+		/// </summary>
+		private void UpdateCloseState()
+		{
+			lock (stateLock)
+			{
+				if (State == WebSocketState.Closed || State == WebSocketState.Errored)
+					return;
+				if (sentCloseFrame && receivedCloseFrame)
+					State = WebSocketState.Closed;
+				else if (sentCloseFrame)
+					State = WebSocketState.CloseSent;
+				else if (receivedCloseFrame)
+					State = WebSocketState.CloseReceived;
+			}
+		}
+		/// <summary>
+		/// Sets <see cref="State"/> to <see cref="WebSocketState.Errored"/> unless the state is already final.
+		/// </summary>
+		protected void SetErrored()
+		{
+			lock (stateLock)
+			{
+				if (State != WebSocketState.Closed)
+					State = WebSocketState.Errored;
+			}
+		}
+		/// <summary>
+		/// Sets <see cref="State"/> to <see cref="WebSocketState.Open"/> if the handshake just completed.
+		/// </summary>
+		protected void SetOpen()
+		{
+			lock (stateLock)
+			{
+				if (State == WebSocketState.Connecting)
+					State = WebSocketState.Open;
 			}
 		}
 		/// <summary>
@@ -567,7 +616,7 @@ namespace BPUtil.SimpleHttp.WebSockets
 			ByteUtil.WriteUtf8("Sec-WebSocket-Accept: " + CreateSecWebSocketAcceptValue(header_sec_websocket_key) + "\r\n", tcpStream);
 			ByteUtil.WriteUtf8("\r\n", tcpStream);
 
-			State = WebSocketState.Open;
+			SetOpen();
 		}
 		#endregion
 	}
