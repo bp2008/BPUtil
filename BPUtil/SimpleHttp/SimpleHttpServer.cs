@@ -327,7 +327,7 @@ namespace BPUtil.SimpleHttp
 					RecycleConnection();
 					try
 					{
-						Request = SimpleHttpRequest.FromStream(base_uri_this_server, tcpStream);
+						Request = SimpleHttpRequest.FromStream(base_uri_this_server, tcpStream, srv.ReadFormBodies);
 						if (Request == null)
 							return;
 						try
@@ -399,7 +399,7 @@ namespace BPUtil.SimpleHttp
 					RecycleConnection();
 					try
 					{
-						Request = await SimpleHttpRequest.FromStreamAsync(base_uri_this_server, (UnreadableStream)tcpStream, readTimeoutSeconds * 1000, cancellationToken).ConfigureAwait(false);
+						Request = await SimpleHttpRequest.FromStreamAsync(base_uri_this_server, (UnreadableStream)tcpStream, readTimeoutSeconds * 1000, cancellationToken, srv.ReadFormBodies).ConfigureAwait(false);
 						if (Request == null)
 							return;
 						try
@@ -539,6 +539,17 @@ namespace BPUtil.SimpleHttp
 							if (IPAddress.TryParse(headerValue, out IPAddress addr))
 								RemoteIPAddress = addr;
 						}
+					}
+				}
+				// This block must come after the X-Real-IP and X-Forwarded-For blocks so that it takes precedence.  Cloudflare appends to X-Forwarded-For, whose leftmost entry is client-controlled.
+				if (srv.CFConnectingIPHeader)
+				{
+					string headerValue = Request.Headers.Get("CF-Connecting-IP");
+					if (!string.IsNullOrWhiteSpace(headerValue))
+					{
+						headerValue = headerValue.Trim();
+						if (IPAddress.TryParse(headerValue, out IPAddress addr))
+							RemoteIPAddress = addr;
 					}
 				}
 
@@ -1473,6 +1484,16 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		public bool XForwardedForHeader = false;
 		/// <summary>
+		/// If true, the IP address of remote hosts will be learned from the HTTP header named "CF-Connecting-IP".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.  This header is set by Cloudflare and, unlike "X-Forwarded-For", contains exactly one address and is always overwritten by Cloudflare.
+		/// <para>If multiple client IP headers are enabled and present, "CF-Connecting-IP" takes precedence over "X-Real-IP" and "X-Forwarded-For".</para>
+		/// </summary>
+		public bool CFConnectingIPHeader = false;
+		/// <summary>
+		/// <para>If true (default), a request body with "Content-Type: application/x-www-form-urlencoded" (up to 2 MiB) is read into memory and parsed as form fields before the request is passed to the server, so the fields are available via <see cref="SimpleHttpRequest.GetPostParam"/>.</para>
+		/// <para>Set false for servers that read request bodies themselves (e.g. an API that ignores the declared content type), so that clients can not make the server buffer request bodies before the server's own size limits and rate limits apply.</para>
+		/// </summary>
+		public bool ReadFormBodies = true;
+		/// <summary>
 		/// If true, the protocol reported by <see cref="HttpProcessor.secure_https"/> will be obtained from the HTTP header named "X-Forwarded-Proto".  Also requires the method <see cref="IsTrustedProxyServer"/> to return true.
 		/// </summary>
 		public bool XForwardedProtoHeader = false;
@@ -1855,7 +1876,7 @@ namespace BPUtil.SimpleHttp
 		}
 
 		/// <summary>
-		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> and <see cref="XForwardedProtoHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
+		/// This method must return true for the <see cref="XForwardedForHeader"/> and <see cref="XRealIPHeader"/> and <see cref="CFConnectingIPHeader"/> and <see cref="XForwardedProtoHeader"/> flags to be honored.  This method should only return true if the provided remote IP address is trusted to provide the related headers.
 		/// </summary>
 		/// <param name="p">HttpProcessor</param>
 		/// <param name="remoteIpAddress">Remote IP address of the client (proxy-related HTTP headers have not been read yet).</param>

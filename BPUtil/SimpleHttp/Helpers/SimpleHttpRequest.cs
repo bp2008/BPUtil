@@ -133,15 +133,17 @@ namespace BPUtil.SimpleHttp
 		/// </summary>
 		/// <param name="baseUriThisServer">Base URI of this web server, to be included in the Request.Url if the client does not provide an absolute URI in the request.</param>
 		/// <param name="stream">Stream to read from.</param>
+		/// <param name="readPostForm">If true, a request body with "Content-Type: application/x-www-form-urlencoded" is read into memory and parsed as form fields before this method returns.  If false, the request body is left unread.</param>
 		/// <returns></returns>
 		/// <exception cref="EndOfStreamException">If the end of the stream is encountered before the request headers are fully read.</exception>
-		public static SimpleHttpRequest FromStream(Uri baseUriThisServer, Stream stream)
+		public static SimpleHttpRequest FromStream(Uri baseUriThisServer, Stream stream, bool readPostForm = true)
 		{
 			List<string> lines = ReadHttpHeaderSectionSync(stream);
 			if (lines == null)
 				return null; // End of stream before a request arrived.  Very common with "Connection: keep-alive" when another request does not arrive.
 			SimpleHttpRequest request = new SimpleHttpRequest(baseUriThisServer, lines, stream);
-			request.ReadPostForm();
+			if (readPostForm)
+				request.ReadPostForm();
 			return request;
 		}
 		/// <summary>
@@ -151,16 +153,18 @@ namespace BPUtil.SimpleHttp
 		/// <param name="stream">Stream to read from.</param>
 		/// <param name="timeoutMilliseconds">Timeout per read operation, in milliseconds.  This is an important part of implementing connection: keep-alive.</param>
 		/// <param name="cancellationToken">Cancellation Token</param>
+		/// <param name="readPostForm">If true, a request body with "Content-Type: application/x-www-form-urlencoded" is read into memory and parsed as form fields before this method returns.  If false, the request body is left unread.</param>
 		/// <returns></returns>
 		/// <exception cref="EndOfStreamException">If the end of the stream is encountered before the request headers are fully read.</exception>
 		/// <exception cref="OperationCanceledException">If the async operation is cancelled or a timeout occurs while reading the request.</exception>
-		public static async Task<SimpleHttpRequest> FromStreamAsync(Uri baseUriThisServer, UnreadableStream stream, int timeoutMilliseconds, CancellationToken cancellationToken = default)
+		public static async Task<SimpleHttpRequest> FromStreamAsync(Uri baseUriThisServer, UnreadableStream stream, int timeoutMilliseconds, CancellationToken cancellationToken = default, bool readPostForm = true)
 		{
 			List<string> lines = await ReadHttpHeaderSectionAsync(stream, timeoutMilliseconds, cancellationToken).ConfigureAwait(false);
 			if (lines == null)
 				return null; // End of stream before a request arrived.  Very common with "Connection: keep-alive" when another request does not arrive.
 			SimpleHttpRequest request = new SimpleHttpRequest(baseUriThisServer, lines, stream);
-			await request.ReadPostFormAsync(timeoutMilliseconds, cancellationToken).ConfigureAwait(false);
+			if (readPostForm)
+				await request.ReadPostFormAsync(timeoutMilliseconds, cancellationToken).ConfigureAwait(false);
 			return request;
 		}
 		#endregion
