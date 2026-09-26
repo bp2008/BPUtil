@@ -226,7 +226,7 @@ namespace BPUtil
 				if (minValue == maxValue)
 					return minValue;
 
-				long diff = maxValue - minValue;
+				long diff = (long)maxValue - minValue;
 
 				while (true)
 				{
@@ -269,7 +269,7 @@ namespace BPUtil
 						InitBuffer();
 
 					// Can we fit the requested number of bytes in the buffer?
-					if (IsRandomPoolEnabled && _buffer.Length <= buffer.Length)
+					if (IsRandomPoolEnabled && buffer.Length <= _buffer.Length)
 					{
 						int count = buffer.Length;
 
@@ -284,9 +284,9 @@ namespace BPUtil
 						// Draw bytes directly from the RNGCryptoProvider
 
 #if NET6_0_OR_GREATER
-						RandomNumberGenerator.Fill(_buffer);
+						RandomNumberGenerator.Fill(buffer);
 #else
-						_rng.GetBytes(_buffer);
+						_rng.GetBytes(buffer);
 #endif
 					}
 				}
