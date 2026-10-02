@@ -235,6 +235,11 @@ namespace BPUtil
 		/// <para>If an address family is specified, the <see cref="UseOwnDnsResolver"/> flag will be ignored and the custom DNS resolver will be used anyway.</para>
 		/// </summary>
 		public AddressFamily PreferredAddressFamily = AddressFamily.Unspecified;
+		/// <summary>
+		/// <para>If set, called with the host name (or IP literal) of every request URL to choose the IP address to connect to, instead of <see cref="DnsHelper"/>.  The request is then sent to that address with the original Host header (TLS still validates the certificate for the host name), exactly as with <see cref="PreferredAddressFamily"/>.  Throw to refuse the request: the exception becomes the response's <see cref="TdsWebResponse.ex"/> with StatusCode 0.</para>
+		/// <para>Use it for an SSRF guard that vets the resolved address and must connect to exactly the address it vetted.  It takes precedence over <see cref="PreferredAddressFamily"/> and <see cref="UseOwnDnsResolver"/>.  Redirects are resolved by the handler, not by this function, so combine it with <see cref="AllowAutoRedirect"/> = false.</para>
+		/// </summary>
+		public Func<string, IPAddress> HostAddressResolver = null;
 
 		protected HttpClient client;
 		protected HttpClientHandler httpClientHandler;
@@ -484,10 +489,13 @@ namespace BPUtil
 			try
 			{
 				uri = new Uri(url, UriKind.Absolute);
-				bool customDns = UseOwnDnsResolver || PreferredAddressFamily == AddressFamily.InterNetwork || PreferredAddressFamily == AddressFamily.InterNetworkV6;
+				Func<string, IPAddress> hostAddressResolver = HostAddressResolver;
+				bool customDns = hostAddressResolver != null || UseOwnDnsResolver || PreferredAddressFamily == AddressFamily.InterNetwork || PreferredAddressFamily == AddressFamily.InterNetworkV6;
 				if (customDns)
 				{
-					IPAddress ipAddr = await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost, preferredAddressFamily: PreferredAddressFamily).ConfigureAwait(false);
+					IPAddress ipAddr = hostAddressResolver != null
+						? hostAddressResolver(uri.DnsSafeHost)
+						: await DnsHelper.GetHostAddressAsync(uri.DnsSafeHost, preferredAddressFamily: PreferredAddressFamily).ConfigureAwait(false);
 					if (ipAddr.ToString() != uri.DnsSafeHost)
 					{
 						addHostHeader = uri.DnsSafeHost;
