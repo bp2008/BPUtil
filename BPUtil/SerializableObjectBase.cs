@@ -115,6 +115,7 @@ namespace BPUtil
 				{
 					if (tries >= 5)
 					{
+						SetFilePathExceptionData(ex, filePath);
 						Logger.Debug(ex);
 						throw;
 					}
@@ -122,6 +123,25 @@ namespace BPUtil
 						Thread.Sleep(1);
 				}
 			return false;
+		}
+		/// <summary>
+		/// Key in <see cref="Exception.Data"/> where <see cref="Load"/> stores the full path of the file that failed to load, before rethrowing the exception.
+		/// </summary>
+		public const string FilePathExceptionDataKey = "BPUtil.SerializableObjectBase.FilePath";
+		/// <summary>
+		/// Stores the full path of the given file in the exception's <see cref="Exception.Data"/> collection under the key <see cref="FilePathExceptionDataKey"/>.  Does not throw.
+		/// </summary>
+		/// <param name="ex">Exception to annotate.</param>
+		/// <param name="filePath">Path of the file which was being loaded.</param>
+		internal static void SetFilePathExceptionData(Exception ex, string filePath)
+		{
+			if (ex == null || string.IsNullOrWhiteSpace(filePath))
+				return;
+			try
+			{
+				ex.Data[FilePathExceptionDataKey] = Path.GetFullPath(filePath);
+			}
+			catch { }
 		}
 		/// <summary>
 		/// (Thread-)Safely checks if the settings file exists, and returns true if it does.

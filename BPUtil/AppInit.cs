@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -35,6 +36,24 @@ namespace BPUtil
 		/// <typeparam name="ServiceType">Type of Service class.</typeparam>
 		/// <param name="options">Optional options for service initialization.</param>
 		public static void WindowsService<ServiceType>(WindowsServiceInitOptions options = null)
+#if NET6_PLUS_LINUX
+			where ServiceType : new()
+#elif NETFRAMEWORK || NET6_PLUS_WIN
+			where ServiceType : ServiceBase, new()
+#endif
+		{
+			try
+			{
+				WindowsServiceInternal<ServiceType>(options);
+			}
+			catch (Exception ex) when (!Debugger.IsAttached && IsInteractiveWindowsSession())
+			{
+				// The exception is rethrown so the process still crashes and is logged in the Windows Event Viewer like before.
+				ReportStartupCrash(ex);
+				throw;
+			}
+		}
+		private static void WindowsServiceInternal<ServiceType>(WindowsServiceInitOptions options)
 #if NET6_PLUS_LINUX
 			where ServiceType : new()
 #elif NETFRAMEWORK || NET6_PLUS_WIN
@@ -79,16 +98,12 @@ namespace BPUtil
 					}
 					if (!loaded)
 					{
+						// When interactive, the exception thrown here is reported to the user by the WindowsService method, with an option to open the settings file.
 						c.RedLine("Failed to load settings file.");
-#if NETFRAMEWORK || NET6_PLUS_WIN
-						if (Environment.UserInteractive)
-						{
-							System.Windows.Forms.MessageBox.Show("Failed to load settings file. " + failReason.FlattenMessages());
-							Process.Start(settingsObj.GetDefaultFilePath());
-						}
-#endif
 						Logger.Debug(failReason);
-						throw new Exception("Failed to load settings file.", failReason);
+						Exception loadFailure = new Exception("Failed to load settings file.", failReason);
+						SerializableObjectBase.SetFilePathExceptionData(loadFailure, settingsObj.GetDefaultFilePath());
+						throw loadFailure;
 					}
 				}
 				settingsObj.SaveIfNoExist();
@@ -147,6 +162,183 @@ namespace BPUtil
 		}
 
 		private static EConsole c = EConsole.I;
+
+		/// <summary>
+		/// <para>Reports an exception that is about to crash the process during startup, if the process is running in an interactive Windows session (not as a service).  Does nothing otherwise, and does not throw.</para>
+		/// <para>The exception is written to the standard error stream (attaching to the parent process's console if necessary, so the output is visible when launched from a terminal) and shown in a dialog box.  If the exception was caused by a <see cref="SerializableObjectBase"/> failing to load (e.g. invalid JSON syntax in a settings file), the dialog offers to open the file in a text editor.</para>
+		/// <para><see cref="WindowsService{ServiceType}(WindowsServiceInitOptions)"/> calls this automatically.  To cover startup code which runs before <see cref="WindowsService{ServiceType}(WindowsServiceInitOptions)"/>, wrap that code in a try/catch which calls this and then rethrows (<c>throw;</c>).</para>
+		/// </summary>
+		/// <param name="ex">The exception which is crashing the process.</param>
+		public static void ReportStartupCrash(Exception ex)
+		{
+			if (ex == null || !IsInteractiveWindowsSession())
+				return;
+#if NETFRAMEWORK || NET6_PLUS_WIN
+			string filePath = FindFailedFilePath(ex);
+			try
+			{
+				WriteStartupCrashToStandardError(ex, filePath);
+			}
+			catch { }
+			try
+			{
+				ShowStartupCrashDialog(ex, filePath);
+			}
+			catch { }
+#endif
+		}
+
+		/// <summary>
+		/// Returns true if this is a Windows process running in an interactive user session where it is appropriate to show a dialog box.  Returns false for Windows services, Session 0 processes (e.g. scheduled tasks that run whether the user is logged on or not), and all non-Windows platforms.
+		/// </summary>
+		private static bool IsInteractiveWindowsSession()
+		{
+#if NETFRAMEWORK || NET6_PLUS_WIN
+			try
+			{
+				if (Platform.IsUnix() || !Environment.UserInteractive)
+					return false;
+				using (Process p = Process.GetCurrentProcess())
+					return p.SessionId != 0;
+			}
+			catch
+			{
+				return false;
+			}
+#else
+			return false;
+#endif
+		}
+#if NETFRAMEWORK || NET6_PLUS_WIN
+		/// <summary>
+		/// Searches the exception and its inner exceptions for the path of a file which <see cref="SerializableObjectBase"/> failed to load.  Returns null if not found.
+		/// </summary>
+		private static string FindFailedFilePath(Exception ex)
+		{
+			if (ex == null)
+				return null;
+			if (ex.Data[SerializableObjectBase.FilePathExceptionDataKey] is string path)
+				return path;
+			if (ex is AggregateException agg)
+			{
+				foreach (Exception inner in agg.InnerExceptions)
+				{
+					path = FindFailedFilePath(inner);
+					if (path != null)
+						return path;
+				}
+				return null;
+			}
+			return FindFailedFilePath(ex.InnerException);
+		}
+
+		private static void WriteStartupCrashToStandardError(Exception ex, string filePath)
+		{
+			StringBuilder sb = new StringBuilder();
+			sb.AppendLine();
+			sb.AppendLine(Globals.AssemblyName + " crashed during startup.");
+			if (filePath != null)
+				sb.AppendLine("Failed to load file: " + filePath);
+			sb.AppendLine(ex.ToHierarchicalString());
+
+			// A console app (or one with redirected output) already has a standard error handle.  A Windows Forms app does not, so we try to attach to the console of the terminal that launched it, if any.
+			IntPtr stdErr = GetStdHandle(STD_ERROR_HANDLE);
+			bool attached = false;
+			if (stdErr == IntPtr.Zero || stdErr == INVALID_HANDLE_VALUE)
+			{
+				if (!AttachConsole(ATTACH_PARENT_PROCESS))
+					return; // Not launched from a terminal.
+				attached = true;
+			}
+			try
+			{
+				Encoding encoding;
+				try
+				{
+					encoding = Console.OutputEncoding;
+					if (encoding.CodePage == Encoding.UTF8.CodePage)
+						encoding = ByteUtil.Utf8NoBOM;
+				}
+				catch
+				{
+					encoding = ByteUtil.Utf8NoBOM;
+				}
+				// Console.Error may have been cached before a console was attached, so open a new stream for the current standard error handle.
+				using (StreamWriter sw = new StreamWriter(Console.OpenStandardError(), encoding))
+					sw.Write(sb.ToString());
+			}
+			finally
+			{
+				// Detach so the runtime's own unhandled exception output doesn't get written to the terminal a second time.
+				if (attached)
+					FreeConsole();
+			}
+		}
+
+		private static void ShowStartupCrashDialog(Exception ex, string filePath)
+		{
+			try
+			{
+				System.Windows.Forms.Application.EnableVisualStyles();
+			}
+			catch { }
+
+			string title = Globals.AssemblyName + " Startup Error";
+			if (filePath != null && File.Exists(filePath))
+			{
+				System.Windows.Forms.DialogResult result = System.Windows.Forms.MessageBox.Show(
+					Globals.AssemblyName + " failed to load a settings file:" + Environment.NewLine
+					+ filePath + Environment.NewLine
+					+ Environment.NewLine
+					+ ex.FlattenMessages() + Environment.NewLine
+					+ Environment.NewLine
+					+ "Open the file in a text editor?",
+					title, System.Windows.Forms.MessageBoxButtons.YesNo, System.Windows.Forms.MessageBoxIcon.Error);
+				if (result == System.Windows.Forms.DialogResult.Yes)
+					OpenFileInTextEditor(filePath);
+			}
+			else
+			{
+				string details = ex.ToHierarchicalString();
+				if (details.Length > 4000)
+					details = details.Substring(0, 4000) + " …";
+				System.Windows.Forms.MessageBox.Show(
+					Globals.AssemblyName + " crashed during startup." + Environment.NewLine
+					+ Environment.NewLine
+					+ details,
+					title, System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+			}
+		}
+
+		/// <summary>
+		/// Opens the file using its associated program, falling back to Notepad if there is no association.
+		/// </summary>
+		private static void OpenFileInTextEditor(string filePath)
+		{
+			try
+			{
+				ProcessStartInfo psi = new ProcessStartInfo(filePath);
+				psi.UseShellExecute = true;
+				using (Process.Start(psi)) { }
+			}
+			catch
+			{
+				using (Process.Start("notepad.exe", "\"" + filePath + "\"")) { }
+			}
+		}
+
+		[DllImport("kernel32.dll", SetLastError = true)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool AttachConsole(uint dwProcessId);
+		[DllImport("kernel32.dll", SetLastError = true)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool FreeConsole();
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern IntPtr GetStdHandle(int nStdHandle);
+		private const uint ATTACH_PARENT_PROCESS = 0xFFFFFFFF;
+		private const int STD_ERROR_HANDLE = -12;
+		private static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
+#endif
 
 		/// <summary>
 		/// Scriptable interface for service management on Linux.  Requires systemd for service install and uninstall.
